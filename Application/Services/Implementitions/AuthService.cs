@@ -61,6 +61,53 @@ namespace Application.Services.Implementitions.Auth
 
         }
 
+        public async Task<IEnumerable<GetUser>> GetAllUsers(string? roleName)
+        {
+            if (string.IsNullOrEmpty(roleName))
+            {
+                var users = await userManagment.GetAllUsers();
+                var mappedUsers = mapper.Map<IEnumerable<GetUser>>(users);
+                foreach(var user in mappedUsers)
+                {
+                    var userRole = await roleManagment.GetUserRole(user.Email);
+                    user.role = userRole;
+                }
+                return mappedUsers;
+            }
+            else
+            {
+                var users = await userManagment.GetAllUsers();
+                var mappedUsers = mapper.Map<IEnumerable<GetUser>>(users);
+                var filteredUsers = new List<GetUser>();
+                foreach (var user in mappedUsers)
+                {
+                    var userRole = await roleManagment.GetUserRole(user.Email);
+                    if (userRole.ToLower() == roleName.ToLower())
+                    {
+                        user.role = userRole;
+                        filteredUsers.Add(user);
+                    }
+                }
+                return filteredUsers ;
+            }
+        }
+
+        public async Task<GetUser> GetProfile(string userId)
+        {
+            var user = await userManagment.GetUserById(userId);
+            var userRole = await roleManagment.GetUserRole(user.Email);
+            if (user == null)
+            {
+                return null;
+            }
+            var mappedUser = mapper.Map<GetUser>(user);
+            mappedUser.role = userRole;
+            return mappedUser;
+
+
+
+        }
+
         public async Task<LoginResponse> LoginUser(LoginUser user)
         {
             var validationResponse = await validationService.ValidateAsync<LoginUser>(user, LoginValidator);

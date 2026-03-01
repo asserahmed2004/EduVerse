@@ -85,10 +85,33 @@ namespace Api.Controllers
         public async Task<IActionResult> SendConfirmationEmail(string email)
         {
             var result = await authServices.SendConfirmationEmail(email);
-            if (result!=null)
+            if (result != null)
                 return Ok(result);
             return BadRequest(result);
         }
+        [HttpGet("GetAllUsers/{Role?}")]
+        [Authorize]
+        public async Task<IActionResult> GetAllUsers(string? Role)
+        {
+            var result = await authServices.GetAllUsers(Role);
+            if (result != null)
+                return Ok(result);
+            return BadRequest(result);
 
+        }
+        [HttpGet("GetProfile")]
+        [Authorize]
+        public async Task<IActionResult> GetProfile()
+        {
+            var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            if (userId != null)
+            {
+                var result = await authServices.GetProfile(userId);
+                if (result != null)
+                    return Ok(result);
+                return BadRequest(result);
+            }
+            return Unauthorized();
+        }
     }
 }

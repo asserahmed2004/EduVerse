@@ -17,6 +17,7 @@ namespace Application.Mapping
         {
             CreateMap<AppUser, RegisterUser>().ForMember(u => u.Password, opt => opt.MapFrom(r => r.PasswordHash)).ReverseMap();
             CreateMap<AppUser, LoginUser>().ForMember(u => u.Password, opt => opt.MapFrom(r => r.PasswordHash)).ReverseMap();
+            CreateMap<AppUser, GetUser>().ReverseMap();
             CreateMap<EmailConfirmation,ConfirmEmail>().ReverseMap();
         }
     }

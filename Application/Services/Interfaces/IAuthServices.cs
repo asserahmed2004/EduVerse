@@ -10,6 +10,8 @@ namespace Application.Services.Interfaces.Auth
 {
     public interface IAuthServices
     {
+        Task<GetUser> GetProfile(string userId);
+        Task<IEnumerable<GetUser>> GetAllUsers(string? roleName);
         Task<LoginResponse> RegisterUser(RegisterUser user);
         Task<LoginResponse> LoginUser(LoginUser user);
         Task<LoginResponse> ReviveToken(string refreshtoken);
