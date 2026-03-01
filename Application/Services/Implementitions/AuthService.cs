@@ -282,12 +282,22 @@ namespace Application.Services.Implementitions.Auth
             string confirmationCode;
             if (existingConfirmation != null)
             {
-                confirmationCode = existingConfirmation.ConfirmationCode;
+                var isRemoved = await emailConfirmation.RemoveConfirmation(email);
+                if (!isRemoved)
+                {
+                    return new ConfirmEmail
+                    {
+                        Email = email,
+                        ConfirmationCode = null,
+
+                    };
+                }
+
             }
-            else
-            {
-                confirmationCode = new Random().Next(100000, 999999).ToString();
-            }
+            
+            
+            confirmationCode = new Random().Next(100000, 999999).ToString();
+            
             var confirmation = new EmailConfirmation
             {
                 Email = email,
