@@ -18,10 +18,12 @@ namespace InfraStructure.Data
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<EmailConfirmation>().HasKey(ec => ec.Email);
         }
 
        
         public DbSet<RefreshToken> RefreshTokens { get; set; }
+        public DbSet<EmailConfirmation> EmailConfirmations { get; set; }
         
         
         }

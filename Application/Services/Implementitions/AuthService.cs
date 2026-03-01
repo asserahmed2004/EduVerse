@@ -12,13 +12,15 @@ using Application.DTOs.Auth;
 using Application.DTOs.Responses;
 using Application.Validations;
 using Domain.Entities;
+using System.Net.Mail;
+using System.Net;
 
 namespace Application.Services.Implementitions.Auth
 {
     public class AuthService (IRoleManagment roleManagment 
         , ITokenManagment tokenManagment , IUserManagment userManagment
         
-        ,IMapper mapper,IValidator<RegisterUser> RegisterValidator , 
+        ,IMapper mapper,IValidator<RegisterUser> RegisterValidator ,IConfirmation emailConfirmation,
         IValidator<LoginUser> LoginValidator, IValidationService validationService): IAuthServices
     {
         public async Task<ServiceResponse> AddRole(string roleName)
@@ -127,8 +129,30 @@ namespace Application.Services.Implementitions.Auth
                 };
             }
             var mappedUser = mapper.Map<AppUser>(user);
-            
+            var confirmationResult = await emailConfirmation.GetConfirmationByEmail(user.Email);
+            if (confirmationResult == null)
+            {
+                return new LoginResponse
+                {
+                    succeed = false,
+                    message = "confirmation is not correct"
+                };
+            }
+            if (confirmationResult.ConfirmationCode != user.ConfirmationCode)
+            {
+                return new LoginResponse
+                {
+                    succeed = false,
+                    message = "confirmation code is not correct"
+                };
+            }
+            var mappedconfirmation = mapper.Map<EmailConfirmation>(confirmationResult);
+
+
+
             var isRegistered = await userManagment.RegisterUser(mappedUser);
+            if(isRegistered)
+                await emailConfirmation.RemoveConfirmation(user.Email);
             if (!isRegistered)
             {
                 return new LoginResponse(false, "Registration failed");
@@ -201,6 +225,59 @@ namespace Application.Services.Implementitions.Auth
                     message = "Failed to update refresh token"
                 };
             return new LoginResponse { message = "Token revived successfully", succeed = true, token = token, refreshToken = newRefreshToken };
+
+
+        }
+
+        public async Task<ConfirmEmail> SendConfirmationEmail(string email)
+        {
+            var existingConfirmation = await emailConfirmation.GetConfirmationByEmail(email);
+            string confirmationCode;
+            if (existingConfirmation != null)
+            {
+                confirmationCode = existingConfirmation.ConfirmationCode;
+            }
+            else
+            {
+                confirmationCode = new Random().Next(100000, 999999).ToString();
+            }
+            var confirmation = new EmailConfirmation
+            {
+                Email = email,
+                ConfirmationCode = confirmationCode,
+                
+            };
+            var result = await emailConfirmation.AddConfirmationCode(confirmation);
+            if(!result)
+            {
+                return new ConfirmEmail
+                {
+                    Email = email,
+                    ConfirmationCode = null,
+                    
+                };
+            }
+            var smtpClient = new SmtpClient("smtp.gmail.com")
+            {
+                Port = 587,
+                Credentials = new NetworkCredential("EduVerse1311@gmail.com", "xikj ywxu qcpu dlnb"),
+                EnableSsl = true,
+            };
+
+            var mailMessage = new MailMessage
+            {
+                From = new MailAddress("EduVerse1311@gmail.com"),
+                Subject = "Confirmation Code",
+                Body = $"<h1>{confirmation.ConfirmationCode}</h1>",
+                IsBodyHtml = true,
+            };
+            mailMessage.To.Add(confirmation.Email);
+
+            smtpClient.Send(mailMessage);
+
+
+
+            return mapper.Map<ConfirmEmail>(confirmation);
 
 
         }

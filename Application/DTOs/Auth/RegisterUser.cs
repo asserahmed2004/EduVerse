@@ -14,8 +14,8 @@ namespace Application.DTOs.Auth
         public string Password { get; set; }
         public string confirmPassword { get; set; }
         public string phoneNumber { get; set; } 
-        public string address { get; set; }
         public string role { get; set; }
+        public string ConfirmationCode { get; set; }
 
 
     }

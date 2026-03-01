@@ -3,6 +3,7 @@ using Domain.Interfaces;
 using EntityFramework.Exceptions.SqlServer;
 using InfraStructure.Data;
 using InfraStructure.Repositories;
+using InfraStructure.Repositries;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Identity;
@@ -35,6 +36,7 @@ namespace InfraStructure.DependencyInjection
             services.AddScoped<IUserManagment, UserManagement>();
             services.AddScoped<ITokenManagment, TokenManagement>();
             services.AddScoped<IRoleManagment, RoleMangment>();
+            services.AddScoped<IConfirmation,ConfirmationManagment>();
 
 
             services.AddDefaultIdentity<AppUser>(options =>

@@ -81,6 +81,14 @@ namespace Api.Controllers
                 return Ok(result);
             return BadRequest(result);
         }
+        [HttpPost("SendConfirmationEmail/{email}")]
+        public async Task<IActionResult> SendConfirmationEmail(string email)
+        {
+            var result = await authServices.SendConfirmationEmail(email);
+            if (result!=null)
+                return Ok(result);
+            return BadRequest(result);
+        }
 
     }
 }
