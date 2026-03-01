@@ -50,7 +50,12 @@ namespace InfraStructure.Repositories
                 rng.GetBytes(randomNumber);
 
             }
-            return Convert.ToBase64String(randomNumber);
+            var token = Convert.ToBase64String(randomNumber);
+            if(token.Contains('/'))
+            {
+                token = token.Replace("/", "a");
+            }
+            return token;
         }
 
         public async Task<List<Claim>> GetUserClaimsFromToken(string token)
