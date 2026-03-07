@@ -19,7 +19,7 @@ namespace Application.Services.Interfaces.Auth
         Task<ServiceResponse> RemoveRole(string roleName);
         Task<ServiceResponse> AddUserToRole(string UserId, string roleName);
         Task<ConfirmEmail> SendConfirmationEmail(string email);
-
+        
     }
 
 }

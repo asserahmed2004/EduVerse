@@ -1,5 +1,7 @@
 ﻿using Application.Mapping;
+using Application.Services.Implementitions;
 using Application.Services.Implementitions.Auth;
+using Application.Services.Interfaces;
 using Application.Services.Interfaces.Auth;
 using Application.Validations;
 using Application.Validations.Auth;
@@ -22,6 +24,7 @@ namespace Application.Dependencyinjection
             services.AddValidatorsFromAssemblyContaining<RegisterValidation>();
             services.AddValidatorsFromAssemblyContaining<LoginValidation>();
             services.AddScoped<IValidationService, ValidationService>();
+            services.AddScoped<ICloudService, CloudService>();
 
             services.AddFluentValidationAutoValidation();
            services.AddScoped<IAuthServices, AuthService>();

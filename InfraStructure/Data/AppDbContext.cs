@@ -19,6 +19,7 @@ namespace InfraStructure.Data
         {
             base.OnModelCreating(modelBuilder);
             modelBuilder.Entity<EmailConfirmation>().HasKey(ec => ec.Email);
+            
         }
 
        

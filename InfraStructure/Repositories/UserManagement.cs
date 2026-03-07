@@ -67,6 +67,14 @@ namespace InfraStructure.Repositories
             return result.Succeeded;
 
         }
+        public async Task<bool> UpdateUser(AppUser user)
+        {
+            if (user == null)
+                return false;
+            var result = await userManager.UpdateAsync(user);
+
+            return result.Succeeded;
+        }
 
         public async Task<int> RemoveUser(string email)
         {

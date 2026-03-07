@@ -7,15 +7,16 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.HttpResults;
 using System.Security.Claims;
 using Application.Services.Interfaces.Auth;
+using Application.Services.Interfaces;
 
 namespace Api.Controllers
 {
     [Route("[controller]")]
     [ApiController]
-    public class AuthController(IAuthServices authServices) : ControllerBase
+    public class AuthController(IAuthServices authServices, ICloudService cloudService) : ControllerBase
     {
         [HttpPost("Register")]
-        public async Task<IActionResult> Register(RegisterUser registerUser)
+        public async Task<IActionResult> Register([FromForm]RegisterUser registerUser)
         {
             var result = await authServices.RegisterUser(registerUser);
             return result.succeed ? Ok(result) : BadRequest(result);
@@ -113,5 +114,6 @@ namespace Api.Controllers
             }
             return Unauthorized();
         }
+       
     }
 }

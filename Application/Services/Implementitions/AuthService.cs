@@ -14,6 +14,8 @@ using Application.Validations;
 using Domain.Entities;
 using System.Net.Mail;
 using System.Net;
+using Application.Services.Interfaces;
+using Application.DTOs.Cloud;
 
 namespace Application.Services.Implementitions.Auth
 {
@@ -21,7 +23,7 @@ namespace Application.Services.Implementitions.Auth
         , ITokenManagment tokenManagment , IUserManagment userManagment
         
         ,IMapper mapper,IValidator<RegisterUser> RegisterValidator ,IConfirmation emailConfirmation,
-        IValidator<LoginUser> LoginValidator, IValidationService validationService): IAuthServices
+        IValidator<LoginUser> LoginValidator, IValidationService validationService , ICloudService cloudService): IAuthServices
     {
         public async Task<ServiceResponse> AddRole(string roleName)
         {
@@ -175,7 +177,10 @@ namespace Application.Services.Implementitions.Auth
                     message = "Not Valid",
                 };
             }
+            
             var mappedUser = mapper.Map<AppUser>(user);
+            DateOnly date = DateOnly.Parse(user.Birth);
+            mappedUser.Birthdate = date;
             var confirmationResult = await emailConfirmation.GetConfirmationByEmail(user.Email);
             if (confirmationResult == null)
             {
@@ -195,8 +200,30 @@ namespace Application.Services.Implementitions.Auth
             }
             var mappedconfirmation = mapper.Map<EmailConfirmation>(confirmationResult);
 
-
-
+            mappedUser.EmailConfirmed = true;
+            var file = new AddCloudFile { };
+            var details = new FileDetails
+            {
+                FileName = $"{user.Email}_ProfilrPicture{Path.GetExtension(user.ProfilePicture.FileName)}",
+                
+                Folder = "ProfilePicture"
+            };
+            file.Details = details;
+            file.File=user.ProfilePicture;
+            if (user.ProfilePicture != null)
+            {
+                var uploadResult = await cloudService.UploadFileAsync(file);
+                if (!uploadResult.success)
+                {
+                    return new LoginResponse
+                    {
+                        succeed = false,
+                        message = "Failed to upload profile image"
+                    };
+                }
+                
+            }
+            mappedUser.ProfilePicture = $"{details.FileName}";
             var isRegistered = await userManagment.RegisterUser(mappedUser);
             if(isRegistered)
                 await emailConfirmation.RemoveConfirmation(user.Email);

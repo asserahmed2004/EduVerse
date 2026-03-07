@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <PackageReference Include="AutoMapper" Version="16.0.0" />
+    <PackageReference Include="Azure.Storage.Blobs" Version="12.27.0" />
     <PackageReference Include="FluentValidation" Version="11.11.0" />
     <PackageReference Include="FluentValidation.AspNetCore" Version="11.3.1" />
     <PackageReference Include="Microsoft.Identity.Client" Version="4.61.3" />
