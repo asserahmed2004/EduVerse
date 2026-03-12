@@ -56,15 +56,16 @@ namespace InfraStructure.Repositories
             return result;
         }
 
-        public async Task<bool> RegisterUser(AppUser user)
+        public async Task<string> RegisterUser(AppUser user)
         {
             var Exist = await GetUserByEmail(user.Email);
             if (Exist != null)
-                return false;
+                return String.Empty;
             var result = await userManager.CreateAsync(user, user.PasswordHash);
-            var error = result.Errors;
+            var error = result.Errors.ToString();
+            
 
-            return result.Succeeded;
+            return result.Succeeded?"Registered":error;
 
         }
         public async Task<bool> UpdateUser(AppUser user)

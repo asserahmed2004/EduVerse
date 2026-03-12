@@ -225,11 +225,11 @@ namespace Application.Services.Implementitions.Auth
             }
             mappedUser.ProfilePicture = $"{details.FileName}";
             var isRegistered = await userManagment.RegisterUser(mappedUser);
-            if(isRegistered)
+            if(isRegistered== "Registered")
                 await emailConfirmation.RemoveConfirmation(user.Email);
-            if (!isRegistered)
+            if (isRegistered != "Registered")
             {
-                return new LoginResponse(false, "Registration failed");
+                return new LoginResponse(false, $"Registration failed{isRegistered}");
             }
             
             var _user = await userManagment.GetUserByEmail(user.Email);
@@ -241,6 +241,7 @@ namespace Application.Services.Implementitions.Auth
                 return new LoginResponse(false, message: "Role assignment failed");
             }
             var login= await LoginUser(new LoginUser { Email = user.Email, Password = user.Password });
+            
             return login;
 
 

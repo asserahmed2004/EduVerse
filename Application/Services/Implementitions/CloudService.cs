@@ -56,9 +56,16 @@ namespace Application.Services.Implementitions
         public async Task<ServiceResponse> UploadFileAsync(AddCloudFile cloudFile)
         {
             var blobClient = container.GetBlobClient($"{cloudFile.Details.Folder}/{cloudFile.Details.FileName}");
-            await using(Stream stream = cloudFile.File.OpenReadStream())
+            try
             {
-                await blobClient.UploadAsync(stream);
+                await using (Stream stream = cloudFile.File.OpenReadStream())
+                {
+                    await blobClient.UploadAsync(stream);
+                }
+            }
+            catch (Exception ex)
+            {
+                return new ServiceResponse { success = false, message = $"File upload failed: {ex.Message}" };
             }
             return new ServiceResponse { success = true, message = "File uploaded successfully" };
 
