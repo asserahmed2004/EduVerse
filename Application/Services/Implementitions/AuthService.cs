@@ -355,6 +355,7 @@ namespace Application.Services.Implementitions.Auth
                 Subject = "Confirmation Code",
                 Body = $"<h1>{confirmation.ConfirmationCode}</h1>",
                 IsBodyHtml = true,
+                
             };
             mailMessage.To.Add(confirmation.Email);
 
