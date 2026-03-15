@@ -25,6 +25,7 @@ namespace Application.Dependencyinjection
             services.AddValidatorsFromAssemblyContaining<LoginValidation>();
             services.AddScoped<IValidationService, ValidationService>();
             services.AddScoped<ICloudService, CloudService>();
+            services.AddScoped<ICategoryService, CategoryService>();
 
             services.AddFluentValidationAutoValidation();
            services.AddScoped<IAuthServices, AuthService>();

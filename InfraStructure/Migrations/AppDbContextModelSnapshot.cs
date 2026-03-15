@@ -120,7 +120,7 @@ namespace InfraStructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Assignments");
+                    b.ToTable("Assignments", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.AssignmentSubmission", b =>
@@ -137,7 +137,7 @@ namespace InfraStructure.Migrations
 
                     b.HasKey("StudentId", "AssignmentId");
 
-                    b.ToTable("AssignmentSubmissions");
+                    b.ToTable("AssignmentSubmissions", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.Category", b =>
@@ -156,7 +156,7 @@ namespace InfraStructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Categories");
+                    b.ToTable("Categories", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.Certificate", b =>
@@ -176,7 +176,7 @@ namespace InfraStructure.Migrations
 
                     b.HasKey("CourseId", "StudentId");
 
-                    b.ToTable("Certificates");
+                    b.ToTable("Certificates", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.Course", b =>
@@ -209,7 +209,7 @@ namespace InfraStructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Courses");
+                    b.ToTable("Courses", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.CourseCategory", b =>
@@ -222,7 +222,7 @@ namespace InfraStructure.Migrations
 
                     b.HasKey("CourseId", "CategoryId");
 
-                    b.ToTable("CourseCategories");
+                    b.ToTable("CourseCategories", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.EmailConfirmation", b =>
@@ -236,7 +236,7 @@ namespace InfraStructure.Migrations
 
                     b.HasKey("Email");
 
-                    b.ToTable("EmailConfirmations");
+                    b.ToTable("EmailConfirmations", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.Enrollment", b =>
@@ -255,7 +255,7 @@ namespace InfraStructure.Migrations
 
                     b.HasKey("CourseId", "StudentId");
 
-                    b.ToTable("Enrollments");
+                    b.ToTable("Enrollments", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.Payment", b =>
@@ -274,7 +274,7 @@ namespace InfraStructure.Migrations
 
                     b.HasKey("CourseId", "StudentId");
 
-                    b.ToTable("Payments");
+                    b.ToTable("Payments", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.Rating", b =>
@@ -290,7 +290,7 @@ namespace InfraStructure.Migrations
 
                     b.HasKey("CourseId", "StudentId");
 
-                    b.ToTable("Ratings");
+                    b.ToTable("Ratings", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.RefreshToken", b =>
@@ -309,7 +309,7 @@ namespace InfraStructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("RefreshTokens");
+                    b.ToTable("RefreshTokens", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.Session", b =>
@@ -340,7 +340,7 @@ namespace InfraStructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Sessions");
+                    b.ToTable("Sessions", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>

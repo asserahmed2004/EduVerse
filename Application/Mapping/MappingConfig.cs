@@ -1,4 +1,5 @@
 ﻿using Application.DTOs.Auth;
+using Application.DTOs.Category;
 using AutoMapper;
 using Domain.Entities;
 using System;
@@ -19,6 +20,9 @@ namespace Application.Mapping
             CreateMap<AppUser, LoginUser>().ForMember(u => u.Password, opt => opt.MapFrom(r => r.PasswordHash)).ReverseMap();
             CreateMap<AppUser, GetUser>().ReverseMap();
             CreateMap<EmailConfirmation,ConfirmEmail>().ReverseMap();
+            CreateMap<GetCategory, Category>().ReverseMap();
+            CreateMap<CreateCategory, Category>().ReverseMap();
+            CreateMap<UpdateCategory, Category>().ReverseMap();
         }
     }
 }

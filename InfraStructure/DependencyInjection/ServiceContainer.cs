@@ -37,6 +37,7 @@ namespace InfraStructure.DependencyInjection
             services.AddScoped<ITokenManagment, TokenManagement>();
             services.AddScoped<IRoleManagment, RoleMangment>();
             services.AddScoped<IConfirmation,ConfirmationManagment>();
+            services.AddScoped<IGeneric<Category>, GenericRepository<Category>>();
 
 
             services.AddDefaultIdentity<AppUser>(options =>
