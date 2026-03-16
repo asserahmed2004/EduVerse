@@ -38,6 +38,8 @@ namespace InfraStructure.DependencyInjection
             services.AddScoped<IRoleManagment, RoleMangment>();
             services.AddScoped<IConfirmation,ConfirmationManagment>();
             services.AddScoped<IGeneric<Category>, GenericRepository<Category>>();
+            services.AddScoped<IGeneric<Course>, GenericRepository<Course>>();
+            services.AddScoped<IGeneric<CourseCategory>, GenericRepository<CourseCategory>>();
 
 
             services.AddDefaultIdentity<AppUser>(options =>

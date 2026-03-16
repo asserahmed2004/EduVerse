@@ -10,8 +10,8 @@ namespace Domain.Interfaces
     {
         Task<TEntity> GetByIdAsync(Guid id);
         Task<IEnumerable<TEntity>> GetAllAsync();
-        Task<int> AddAsync(TEntity entity);
-        Task<int> UpdateAsync(TEntity entity);
+        Task<TEntity> AddAsync(TEntity entity);
+        Task<TEntity> UpdateAsync(TEntity entity);
         Task<int> DeleteAsync(TEntity entity);
         Task<int> DeleteAsync(Guid id);
     }

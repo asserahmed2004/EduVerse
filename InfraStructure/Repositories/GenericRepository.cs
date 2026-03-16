@@ -13,10 +13,11 @@ namespace InfraStructure.Repositries
 {
     class GenericRepository<TEntity>(AppDbContext context) : IGeneric<TEntity> where TEntity : class
     {
-        public async Task<int> AddAsync(TEntity entity)
+        public async Task<TEntity> AddAsync(TEntity entity)
         {
-            context.Set<TEntity>().Add(entity);
-            return await context.SaveChangesAsync();
+            var result=context.Set<TEntity>().Add(entity);
+             await context.SaveChangesAsync();
+            return result.Entity;
         }
 
         public async Task<int> DeleteAsync(Guid id)
@@ -50,10 +51,11 @@ namespace InfraStructure.Repositries
             return await context.SaveChangesAsync();
         }
 
-        public async Task<int> UpdateAsync(TEntity entity)
+        public async Task<TEntity> UpdateAsync(TEntity entity)
         {
-            context.Set<TEntity>().Update(entity);
-            return await context.SaveChangesAsync();
+            var result =context.Set<TEntity>().Update(entity);
+            await context.SaveChangesAsync();
+            return result.Entity;
         }
     }
 }

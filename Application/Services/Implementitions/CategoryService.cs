@@ -22,7 +22,7 @@ namespace Application.Services.Implementitions
             }
             var newCategory = mapper.Map<Category>(category);
             var result = await Repo.AddAsync(newCategory);
-            if (result > 0)
+            if (result !=null)
             {
                 return new ServiceResponse(true, "Category created successfully.");
             }
@@ -91,7 +91,7 @@ namespace Application.Services.Implementitions
             }
             var mappedCategory = mapper.Map<Category>(category);
             var result = await Repo.UpdateAsync(mappedCategory);
-            if (result > 0)
+            if (result != null)
             {
                 return new ServiceResponse(true, "Category updated successfully.");
             }
