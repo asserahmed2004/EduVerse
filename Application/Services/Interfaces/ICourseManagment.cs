@@ -16,6 +16,7 @@ namespace Application.Services.Interfaces
         Task<List<GetCourse>> GetAllCourses();
         Task<GetCourse> GetCourseById(Guid id);
         Task<GetCourse> GetCourseByName(string name);
+        Task<ServiceResponse> IncrementDuration(Guid id, int duration);
 
     }
 }

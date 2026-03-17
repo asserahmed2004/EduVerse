@@ -23,7 +23,7 @@ namespace Application.Services.Implementitions
             if (Course == null)
                 return new ServiceResponse { success = false, message = "Course data is null" };
             var mapping = mapper.Map<Course>(Course);
-
+            mapping.Duration = 0;
             mapping.ImageUrl = $"{mapping.Id}-Thumbnail{Path.GetExtension(Course.Image.FileName)}";
             mapping.OrgId = "00000000-0000-0000-0000-000000000001";
             var details =new FileDetails { FileName = mapping.ImageUrl, Folder = "courses" };
@@ -103,6 +103,7 @@ namespace Application.Services.Implementitions
 
         public async Task<GetCourse> GetCourseById(Guid id)
         {
+            
             var course = await CoursesManagment.GetByIdAsync(id);
             if (course == null)
                 return null;
@@ -143,6 +144,20 @@ namespace Application.Services.Implementitions
             }
             mappedCourse.Categories = categories;
             return mappedCourse;
+        }
+
+        public async Task<ServiceResponse> IncrementDuration(Guid id, int duration)
+        {
+            if (id == Guid.Empty || duration <= 0)
+                return new ServiceResponse { success = false, message = "Invalid Course ID or duration" };
+            var course= await CoursesManagment.GetByIdAsync(id);
+            if (course == null)
+                return new ServiceResponse { success = false, message = "Course not found" };
+            course.Duration += duration;
+            var result = await CoursesManagment.UpdateAsync(course);
+            if (result == null)
+                return new ServiceResponse { success = false, message = "Failed to update Course duration" };
+            return new ServiceResponse { success = true, message = "Course duration updated successfully" };
         }
 
         public async Task<ServiceResponse> UpdateCourse(UpdateCourse Course)
