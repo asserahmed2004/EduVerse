@@ -1,4 +1,5 @@
-﻿using Application.DTOs.Cloud;
+﻿using Application.DTOs.Category;
+using Application.DTOs.Cloud;
 using Application.DTOs.Course;
 using Application.DTOs.Responses;
 using Application.Services.Interfaces;
@@ -54,27 +55,142 @@ namespace Application.Services.Implementitions
 
         public async Task<ServiceResponse> DeleteCourse(Guid id)
         {
-            throw new NotImplementedException();
+            if (id == Guid.Empty)
+                return new ServiceResponse { success = false, message = "Invalid Course ID" };
+            var course = await CoursesManagment.GetByIdAsync(id);
+            if (course == null)
+                return new ServiceResponse { success = false, message = "Course not found" };
+            var result = await CoursesManagment.DeleteAsync(course);
+            if (result == 0)
+                return new ServiceResponse { success = false, message = "Failed to delete Course" };
+            var fileDetails = new FileDetails { FileName = course.ImageUrl, Folder = "courses" };
+            var cloudResult = await cloud.DeleteFileAsync(fileDetails);
+            if (!cloudResult.success)
+                return new ServiceResponse { success = false, message = "Failed to delete course image from cloud" };
+            var categoryLinks = await CoursesCatManagment.GetAllAsync();
+            var courseCategories = categoryLinks.Where(cc => cc.CourseId == id).ToList();
+            foreach (var courseCategory in courseCategories)
+            {
+                await CoursesCatManagment.DeleteAsync(courseCategory);
+            }
+            return new ServiceResponse { success = true, message = "Course deleted successfully" };
         }
 
         public async Task<List<GetCourse>> GetAllCourses()
         {
-            throw new NotImplementedException();
+            var courses = await CoursesManagment.GetAllAsync();
+            if (courses == null || !courses.Any())
+                return new List<GetCourse>();
+            var mappedCourses = mapper.Map<List<GetCourse>>(courses);
+            var categoryLinks = await CoursesCatManagment.GetAllAsync();
+            foreach (var course in mappedCourses)
+            {
+                
+                var courseCategories = categoryLinks.Where(cc => cc.CourseId == course.Id).ToList();
+                var categories = new List<GetCategory>();
+                foreach (var courseCategory in courseCategories)
+                {
+                    var category = await CategoryManagment.GetByIdAsync(courseCategory.CategoryId);
+                    if (category != null)
+                    {
+                        categories.Add(mapper.Map<GetCategory>(category));
+                    }
+                }
+                course.Categories = categories;
+            }
+            return mappedCourses;
         }
 
         public async Task<GetCourse> GetCourseById(Guid id)
         {
-            throw new NotImplementedException();
+            var course = await CoursesManagment.GetByIdAsync(id);
+            if (course == null)
+                return null;
+            var mappedCourse = mapper.Map<GetCourse>(course);
+            var categoryLinks = await CoursesCatManagment.GetAllAsync();
+            var courseCategories = categoryLinks.Where(cc => cc.CourseId == id).ToList();
+            var categories = new List<GetCategory>();
+            foreach (var courseCategory in courseCategories)
+            {
+                var category = await CategoryManagment.GetByIdAsync(courseCategory.CategoryId);
+                if (category != null)
+                {
+                    categories.Add(mapper.Map<GetCategory>(category));
+                }
+            }
+            mappedCourse.Categories = categories;
+            return mappedCourse;
+
         }
 
         public async Task<GetCourse> GetCourseByName(string name)
         {
-            throw new NotImplementedException();
+            var courses = await CoursesManagment.GetAllAsync();
+            var course = courses.FirstOrDefault(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (course == null )
+                return null;
+            var mappedCourse = mapper.Map<GetCourse>(course);
+            var categoryLinks = await CoursesCatManagment.GetAllAsync();
+            var courseCategories = categoryLinks.Where(cc => cc.CourseId == course.Id).ToList();
+            var categories = new List<GetCategory>();
+            foreach (var courseCategory in courseCategories)
+            {
+                var category = await CategoryManagment.GetByIdAsync(courseCategory.CategoryId);
+                if (category != null)
+                {
+                    categories.Add(mapper.Map<GetCategory>(category));
+                }
+            }
+            mappedCourse.Categories = categories;
+            return mappedCourse;
         }
 
         public async Task<ServiceResponse> UpdateCourse(UpdateCourse Course)
         {
-            throw new NotImplementedException();
+            if (Course == null || Course.Id == Guid.Empty)
+                return new ServiceResponse { success = false, message = "Invalid Course data" };
+            var existingCourse = await CoursesManagment.GetByIdAsync(Course.Id);
+            if (existingCourse == null)
+                return new ServiceResponse { success = false, message = "Course not found" };
+            existingCourse.Name = Course.Name;
+            existingCourse.Description = Course.Description;
+            existingCourse.Title = Course.Title;
+            existingCourse.Price = Course.Price;
+
+            if (Course.Image != null)
+            {
+                var fileDetails = new FileDetails { FileName = existingCourse.ImageUrl, Folder = "courses" };
+                var cloudDeleteResult = await cloud.DeleteFileAsync(fileDetails);
+                if (!cloudDeleteResult.success)
+                    return new ServiceResponse { success = false, message = "Failed to delete old course image from cloud" };
+                existingCourse.ImageUrl = $"{existingCourse.Id}-Thumbnail{Path.GetExtension(Course.Image.FileName)}";
+                var addCloudFile = new AddCloudFile { Details = fileDetails, File = Course.Image };
+                var cloudUploadResult = await cloud.UploadFileAsync(addCloudFile);
+                if (!cloudUploadResult.success)
+                    return new ServiceResponse { success = false, message = "Failed to upload new course image to cloud" };
+            }
+            var categoryLinks = await CoursesCatManagment.GetAllAsync();
+            var existingCourseCategories = categoryLinks.Where(cc => cc.CourseId == Course.Id).ToList();
+            foreach (var courseCategory in existingCourseCategories)
+            {
+                await CoursesCatManagment.DeleteAsync(courseCategory);
+            }
+            var categoryIds = Course.Categories.Split(',').ToList();
+            foreach (var category in categoryIds)
+            {
+                Guid categoryId;
+                if (!Guid.TryParse(category, out categoryId))
+                    continue;
+                var test = await CategoryManagment.GetByIdAsync(categoryId);
+                if (test == null)
+                    continue;
+                var courseCategory = new CourseCategory { CourseId = Course.Id, CategoryId = test.Id };
+                await CoursesCatManagment.AddAsync(courseCategory);
+            }
+            var updateResult = await CoursesManagment.UpdateAsync(existingCourse);
+            if (updateResult == null)
+                return new ServiceResponse { success = false, message = "Failed to update Course" };
+            return new ServiceResponse { success = true, message = "Course updated successfully" };
         }
     }
 }
