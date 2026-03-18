@@ -1,7 +1,9 @@
 ﻿using Application.DTOs.Course;
+using Application.DTOs.Rating;
 using Application.Services.Interfaces;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace API.Controllers
 {
@@ -28,13 +30,32 @@ namespace API.Controllers
         [HttpGet("GetAll")]
         public async Task<IActionResult> GetAllCourses()
         {
-            var result = await courseService.GetAllCourses();
+            string userId;
+            if (User.Identity.IsAuthenticated)
+            {
+                userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            }
+            else
+            {
+                userId = null;
+            }
+
+            var result = await courseService.GetAllCourses(userId);
             return Ok(result);
         }
         [HttpGet("GetById/{id}")]
         public async Task<IActionResult> GetCourseById(Guid id)
         {
-            var result = await courseService.GetCourseById(id);
+            string userId;
+            if (User.Identity.IsAuthenticated)
+            {
+                userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            }
+            else
+            {
+                userId = null;
+            }
+            var result = await courseService.GetCourseById(id,userId);
             if (result == null)
                 return NotFound(new { success = false, message = "Course not found" });
             return Ok(result);
@@ -42,7 +63,16 @@ namespace API.Controllers
         [HttpGet("GetByName/{name}")]
         public async Task<IActionResult> GetCourseByName(string name)
         {
-            var result = await courseService.GetCourseByName(name);
+            string userId;
+            if (User.Identity.IsAuthenticated)
+            {
+                userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            }
+            else
+            {
+                userId = null;
+            }
+            var result = await courseService.GetCourseByName(name,userId);
             if (result == null)
                 return NotFound(new { success = false, message = "Course not found" });
             return Ok(result);
@@ -55,5 +85,23 @@ namespace API.Controllers
                 return BadRequest(result);
             return Ok(result);
         }
+        [HttpPost("AddRating")]
+        public async Task<IActionResult> AddRating( CreateRating rating)
+        {
+            string userId;
+            if (User.Identity.IsAuthenticated)
+            {
+                userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            }
+            else
+            {
+                return Unauthorized(new { success = false, message = "You must be logged in to add a rating" });
+            }
+            var result = await courseService.AddRating(rating, userId);
+            if (!result.success)
+                return BadRequest(result);
+            return Ok(result);
+        }
+
     }
 }

@@ -1,6 +1,7 @@
 ﻿using Application.DTOs.Category;
 using Application.DTOs.Cloud;
 using Application.DTOs.Course;
+using Application.DTOs.Rating;
 using Application.DTOs.Responses;
 using Application.Services.Interfaces;
 using AutoMapper;
@@ -16,8 +17,26 @@ namespace Application.Services.Implementitions
 {
     public  class CourseService(IGeneric<Course> CoursesManagment ,
         IGeneric<CourseCategory> CoursesCatManagment,IGeneric<Category> CategoryManagment,
-        IMapper mapper ,ICloudService cloud ) : ICourseService
+        IMapper mapper ,ICloudService cloud,IGeneric<Rating> RatingManagment ) : ICourseService
     {
+        public async Task<ServiceResponse> AddRating(CreateRating rating, string userid)
+        {
+            if(rating == null || rating.CourseId == Guid.Empty || string.IsNullOrEmpty(userid) || rating.RatingValue < 0 || rating.RatingValue > 5)
+                return new ServiceResponse { success = false, message = "Invalid rating data" };
+            var mappedRating = mapper.Map<Rating>(rating);
+            mappedRating.StudentId = userid;
+            var existingRating = await RatingManagment.GetAllAsync();
+            var userCourseRating = existingRating.FirstOrDefault(r => r.CourseId == rating.CourseId && r.StudentId == userid);
+            if (userCourseRating != null)
+                await RatingManagment.DeleteAsync(userCourseRating);
+            var result = await RatingManagment.AddAsync(mappedRating);
+            if (result == null)
+                return new ServiceResponse { success = false, message = "Failed to add rating" };
+            return new ServiceResponse { success = true, message = "Rating added successfully" };
+        }
+
+        
+
         public  async Task<ServiceResponse> CreateCourse(CreateCourse Course)
         {
             if (Course == null)
@@ -76,7 +95,7 @@ namespace Application.Services.Implementitions
             return new ServiceResponse { success = true, message = "Course deleted successfully" };
         }
 
-        public async Task<List<GetCourse>> GetAllCourses()
+        public async Task<List<GetCourse>> GetAllCourses(string? userid)
         {
             var courses = await CoursesManagment.GetAllAsync();
             if (courses == null || !courses.Any())
@@ -98,10 +117,26 @@ namespace Application.Services.Implementitions
                 }
                 course.Categories = categories;
             }
+            if (!string.IsNullOrEmpty(userid))
+            {
+                var ratings = await RatingManagment.GetAllAsync();
+                foreach (var course in mappedCourses)
+                {
+                    var courseRatings = ratings.Where(r => r.CourseId == course.Id).ToList();
+                    if (courseRatings.Any())
+                    {
+                        course.Rating = (float)courseRatings.Average(r => r.RatingValue);
+                    }
+                    else
+                    {
+                        course.Rating = 0;
+                    }
+                }
+            }
             return mappedCourses;
         }
 
-        public async Task<GetCourse> GetCourseById(Guid id)
+        public async Task<GetCourse> GetCourseById(Guid id, string? userid)
         {
             
             var course = await CoursesManagment.GetByIdAsync(id);
@@ -120,11 +155,24 @@ namespace Application.Services.Implementitions
                 }
             }
             mappedCourse.Categories = categories;
+            if (!string.IsNullOrEmpty(userid))
+            {
+                var ratings = await RatingManagment.GetAllAsync();
+                var courseRatings = ratings.Where(r => r.CourseId == course.Id).ToList();
+                if (courseRatings.Any())
+                {
+                    mappedCourse.Rating = (float)courseRatings.Average(r => r.RatingValue);
+                }
+                else
+                {
+                    mappedCourse.Rating = 0;
+                }
+            }
             return mappedCourse;
 
         }
 
-        public async Task<GetCourse> GetCourseByName(string name)
+        public async Task<GetCourse> GetCourseByName(string name, string? userid)
         {
             var courses = await CoursesManagment.GetAllAsync();
             var course = courses.FirstOrDefault(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
@@ -143,6 +191,19 @@ namespace Application.Services.Implementitions
                 }
             }
             mappedCourse.Categories = categories;
+            if (!string.IsNullOrEmpty(userid))
+            {
+                var ratings = await RatingManagment.GetAllAsync();
+                var courseRatings = ratings.Where(r => r.CourseId == course.Id).ToList();
+                if (courseRatings.Any())
+                {
+                    mappedCourse.Rating = (float)courseRatings.Average(r => r.RatingValue);
+                }
+                else
+                {
+                    mappedCourse.Rating = 0;
+                }
+            }
             return mappedCourse;
         }
 
@@ -207,5 +268,9 @@ namespace Application.Services.Implementitions
                 return new ServiceResponse { success = false, message = "Failed to update Course" };
             return new ServiceResponse { success = true, message = "Course updated successfully" };
         }
+
+        
+
+        
     }
 }

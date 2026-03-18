@@ -40,6 +40,7 @@ namespace InfraStructure.DependencyInjection
             services.AddScoped<IGeneric<Category>, GenericRepository<Category>>();
             services.AddScoped<IGeneric<Course>, GenericRepository<Course>>();
             services.AddScoped<IGeneric<CourseCategory>, GenericRepository<CourseCategory>>();
+            services.AddScoped<IGeneric<Rating>, GenericRepository<Rating>>();
 
 
             services.AddDefaultIdentity<AppUser>(options =>

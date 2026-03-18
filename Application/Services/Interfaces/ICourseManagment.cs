@@ -1,5 +1,7 @@
 ﻿using Application.DTOs.Course;
+using Application.DTOs.Rating;
 using Application.DTOs.Responses;
+using Domain.Entities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,10 +15,13 @@ namespace Application.Services.Interfaces
         Task<ServiceResponse> CreateCourse(CreateCourse Course);
         Task<ServiceResponse> UpdateCourse(UpdateCourse Course);
         Task<ServiceResponse> DeleteCourse(Guid id);
-        Task<List<GetCourse>> GetAllCourses();
-        Task<GetCourse> GetCourseById(Guid id);
-        Task<GetCourse> GetCourseByName(string name);
+        Task<List<GetCourse>> GetAllCourses(string? userid);
+        Task<GetCourse> GetCourseById(Guid id, string? userid);
+        Task<GetCourse> GetCourseByName(string name, string userid);
         Task<ServiceResponse> IncrementDuration(Guid id, int duration);
+        Task<ServiceResponse> AddRating(CreateRating rating, string userid);
+        
+
 
     }
 }

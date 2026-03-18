@@ -1,6 +1,7 @@
 ﻿using Application.DTOs.Auth;
 using Application.DTOs.Category;
 using Application.DTOs.Course;
+using Application.DTOs.Rating;
 using AutoMapper;
 using Domain.Entities;
 using System;
@@ -27,6 +28,7 @@ namespace Application.Mapping
             CreateMap<Course, GetCourse>().ReverseMap();
             CreateMap<Course, CreateCourse>().ReverseMap();
             CreateMap<Course, UpdateCourse>().ReverseMap();
+            CreateMap<Rating, CreateRating>().ReverseMap();
         }
     }
 }
