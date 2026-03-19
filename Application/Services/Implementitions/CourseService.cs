@@ -101,7 +101,10 @@ namespace Application.Services.Implementitions
             if (courses == null || !courses.Any())
                 return new List<GetCourse>();
             var mappedCourses = mapper.Map<List<GetCourse>>(courses);
+
             var categoryLinks = await CoursesCatManagment.GetAllAsync();
+            var ratings = await RatingManagment.GetAllAsync();
+            
             foreach (var course in mappedCourses)
             {
                 
@@ -117,28 +120,29 @@ namespace Application.Services.Implementitions
                 }
                 course.Categories = categories;
             }
-            if (!string.IsNullOrEmpty(userid))
-            {
-                var ratings = await RatingManagment.GetAllAsync();
+          
                 foreach (var course in mappedCourses)
                 {
                     var courseRatings = ratings.Where(r => r.CourseId == course.Id).ToList();
-                    if (courseRatings.Any())
-                    {
-                        course.Rating = (float)courseRatings.Average(r => r.RatingValue);
-                    }
-                    else
-                    {
-                        course.Rating = 0;
-                    }
+                if (courseRatings.Any())
+                    course.Rating = (float)courseRatings.Average(r => r.RatingValue);
+                else
+                    course.Rating = 0;
+
+                if (!string.IsNullOrEmpty(userid))
+                {
+                    course.UserRating = courseRatings.FirstOrDefault(r => r.StudentId == userid)?.RatingValue ?? 0;
                 }
-            }
+                    
+                    
+                }
+            
             return mappedCourses;
         }
 
         public async Task<GetCourse> GetCourseById(Guid id, string? userid)
         {
-            
+            var ratings = await RatingManagment.GetAllAsync();
             var course = await CoursesManagment.GetByIdAsync(id);
             if (course == null)
                 return null;
@@ -155,18 +159,19 @@ namespace Application.Services.Implementitions
                 }
             }
             mappedCourse.Categories = categories;
+
+            var courseRatings = ratings.Where(r => r.CourseId == course.Id).ToList();
+            if (courseRatings.Any())
+            {
+                mappedCourse.Rating = (float)courseRatings.Average(r => r.RatingValue);
+            }
+            else
+            {
+                mappedCourse.Rating = 0;
+            }
             if (!string.IsNullOrEmpty(userid))
             {
-                var ratings = await RatingManagment.GetAllAsync();
-                var courseRatings = ratings.Where(r => r.CourseId == course.Id).ToList();
-                if (courseRatings.Any())
-                {
-                    mappedCourse.Rating = (float)courseRatings.Average(r => r.RatingValue);
-                }
-                else
-                {
-                    mappedCourse.Rating = 0;
-                }
+                mappedCourse.UserRating = courseRatings.FirstOrDefault(r => r.StudentId == userid)?.RatingValue ?? 0;
             }
             return mappedCourse;
 
@@ -191,19 +196,23 @@ namespace Application.Services.Implementitions
                 }
             }
             mappedCourse.Categories = categories;
+            var ratings = await RatingManagment.GetAllAsync();
+            var courseRatings = ratings.Where(r => r.CourseId == course.Id).ToList();
+            if (courseRatings.Any())
+            {
+                mappedCourse.Rating = (float)courseRatings.Average(r => r.RatingValue);
+            }
+            else
+            {
+                mappedCourse.Rating = 0;
+            }
+        
             if (!string.IsNullOrEmpty(userid))
             {
-                var ratings = await RatingManagment.GetAllAsync();
-                var courseRatings = ratings.Where(r => r.CourseId == course.Id).ToList();
-                if (courseRatings.Any())
-                {
-                    mappedCourse.Rating = (float)courseRatings.Average(r => r.RatingValue);
-                }
-                else
-                {
-                    mappedCourse.Rating = 0;
-                }
+                mappedCourse.UserRating = courseRatings.FirstOrDefault(r => r.StudentId == userid)?.RatingValue ?? 0;
             }
+
+
             return mappedCourse;
         }
 

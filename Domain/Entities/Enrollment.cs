@@ -10,5 +10,7 @@
         public string StudentId { get; set; }
         public DateTime EnrollmentDate { get; set; }
         public double Progression { get; set; }
+        public DateTime? GraduationDate { get; set; }
+        public string? FileUrl { get; set; }
     }
 }

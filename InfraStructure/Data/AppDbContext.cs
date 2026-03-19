@@ -23,8 +23,7 @@ namespace InfraStructure.Data
                 .HasKey(cc => new { cc.CourseId, cc.CategoryId });
             modelBuilder.Entity<AssignmentSubmission>()
                 .HasKey(asub => new { asub.StudentId, asub.AssignmentId });
-            modelBuilder.Entity<Certificate>()
-                .HasKey(c => new { c.CourseId, c.StudentId });
+            
             modelBuilder.Entity<Enrollment>()
                 .HasKey(e => new { e.CourseId, e.StudentId });
             modelBuilder.Entity<Payment>()
@@ -42,7 +41,7 @@ namespace InfraStructure.Data
 
         public DbSet<Category> Categories { get; set; }
 
-        public DbSet<Certificate> Certificates { get; set; }
+        
 
         public DbSet<Course> Courses { get; set; }
 
