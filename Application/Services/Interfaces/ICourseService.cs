@@ -18,7 +18,7 @@ namespace Application.Services.Interfaces
         Task<List<GetCourse>> GetAllCourses(string? userid);
         Task<GetCourse> GetCourseById(Guid id, string? userid);
         Task<GetCourse> GetCourseByName(string name, string userid);
-        Task<ServiceResponse> IncrementDuration(Guid id, int duration);
+        Task<ServiceResponse> UpdateDuration(Guid id, int duration);
         Task<ServiceResponse> AddRating(CreateRating rating, string userid);
         
 

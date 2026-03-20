@@ -5,12 +5,12 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Application.DTOs.Certificates
+namespace Application.DTOs.Enrollments
 {
     public class CreateCertificate
     {
         public Guid CourseId { get; set; }
-        public string? UserId { get; set; }
-        IFormFile? CertificateFile { get; set; }
+        public string Email { get; set; }
+        public IFormFile? CertificateFile { get; set; }
     }
 }

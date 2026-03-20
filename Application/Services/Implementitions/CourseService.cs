@@ -216,7 +216,7 @@ namespace Application.Services.Implementitions
             return mappedCourse;
         }
 
-        public async Task<ServiceResponse> IncrementDuration(Guid id, int duration)
+        public async Task<ServiceResponse> UpdateDuration(Guid id, int duration)
         {
             if (id == Guid.Empty || duration <= 0)
                 return new ServiceResponse { success = false, message = "Invalid Course ID or duration" };
