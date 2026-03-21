@@ -1,7 +1,10 @@
-﻿using Application.DTOs.Auth;
+﻿using Application.DTOs.Assignment;
+using Application.DTOs.Auth;
 using Application.DTOs.Category;
 using Application.DTOs.Course;
 using Application.DTOs.Rating;
+using Application.DTOs.Sessions;
+using Application.DTOs.Submission;
 using AutoMapper;
 using Domain.Entities;
 using System;
@@ -29,6 +32,15 @@ namespace Application.Mapping
             CreateMap<Course, CreateCourse>().ReverseMap();
             CreateMap<Course, UpdateCourse>().ReverseMap();
             CreateMap<Rating, CreateRating>().ReverseMap();
+            CreateMap<GetSession, Session>().ReverseMap();
+            CreateMap<CreateSession, Session>().ReverseMap();
+            CreateMap<UpdateSession, Session>().ReverseMap();
+            CreateMap<GetAssignment, Assignment>().ReverseMap();
+            CreateMap<CreateAssignment, Assignment>().ReverseMap();
+            CreateMap<UpdateAssignment, Assignment>().ReverseMap();
+            CreateMap<GetAssignmentSubmission, AssignmentSubmission>().ReverseMap();
+            CreateMap<CreateAssignmentSubmission, AssignmentSubmission>().ReverseMap();
+            CreateMap<UpdateAssignmentSubmission, AssignmentSubmission>().ReverseMap();
         }
     }
 }

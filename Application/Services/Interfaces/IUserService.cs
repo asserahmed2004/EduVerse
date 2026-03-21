@@ -4,6 +4,7 @@ using Application.DTOs.Cloud;
 using Application.DTOs.Course;
 using Application.DTOs.Enrollments;
 using Application.DTOs.Responses;
+using Application.DTOs.Submission;
 using Domain.Entities;
 using System;
 using System.Collections.Generic;
@@ -24,6 +25,13 @@ namespace Application.Services.Interfaces
         Task<IEnumerable<string>> GetUserCertificates(string userId);
         Task<Enrollment>GetEnrollmentData(Guid courseId,string userId);
         Task<ServiceResponse> UpdateProgress(Guid courseId, string userId, double progression);
+        Task<ServiceResponse> SubmitAssignment(CreateAssignmentSubmission submission);
+        Task<ServiceResponse> UpdateAssignmentSubmission(UpdateAssignmentSubmission submission);
+        Task<IEnumerable<GetAssignmentSubmission>> GetUserSubmissions(string Email);
+        Task<IEnumerable<GetAssignmentSubmission>> GetAssignmentSubmissions(Guid Id);
+        
+        Task<GetAssignmentSubmission> GetSubmission(Guid Id,string Email);
+
 
 
 

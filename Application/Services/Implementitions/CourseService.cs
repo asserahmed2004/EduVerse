@@ -1,8 +1,10 @@
-﻿using Application.DTOs.Category;
+﻿using Application.DTOs.Assignment;
+using Application.DTOs.Category;
 using Application.DTOs.Cloud;
 using Application.DTOs.Course;
 using Application.DTOs.Rating;
 using Application.DTOs.Responses;
+using Application.DTOs.Sessions;
 using Application.Services.Interfaces;
 using AutoMapper;
 using Domain.Entities;
@@ -17,7 +19,7 @@ namespace Application.Services.Implementitions
 {
     public  class CourseService(IGeneric<Course> CoursesManagment ,
         IGeneric<CourseCategory> CoursesCatManagment,IGeneric<Category> CategoryManagment,
-        IMapper mapper ,ICloudService cloud,IGeneric<Rating> RatingManagment ) : ICourseService
+        IMapper mapper ,ICloudService cloud,IGeneric<Rating> RatingManagment ,IGeneric<Session> SessionManagment,IGeneric<Assignment> AssignmentManagment) : ICourseService
     {
         public async Task<ServiceResponse> AddRating(CreateRating rating, string userid)
         {
@@ -278,8 +280,64 @@ namespace Application.Services.Implementitions
             return new ServiceResponse { success = true, message = "Course updated successfully" };
         }
 
-        
+        public Task<ServiceResponse> AddSession(CreateSession session)
+        {
+            throw new NotImplementedException();
+        }
 
-        
+        public Task<ServiceResponse> UpdateSession(UpdateSession session)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<ServiceResponse> DeleteSession(Guid id)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<List<GetSession>> GetCourseAllSessions(Guid courdeid)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<GetSession> GetSessionById(Guid id)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<GetSession> GetSessionByNumber(Guid courseid, int sessionnumber)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<ServiceResponse> AddAssignment(CreateAssignment assignment)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<ServiceResponse> UpdateAssignment(UpdateAssignment assignment)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<ServiceResponse> DeleteAssignment(Guid id)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<List<GetAssignment>> GetCourseAllAssignments(Guid courdeid)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<GetAssignment> GetAssignmentById(Guid id)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<GetAssignment> GetAssignmentBySession(Guid sessionid)
+        {
+            throw new NotImplementedException();
+        }
     }
 }

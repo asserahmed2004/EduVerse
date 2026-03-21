@@ -4,6 +4,7 @@ using Application.DTOs.Cloud;
 using Application.DTOs.Course;
 using Application.DTOs.Enrollments;
 using Application.DTOs.Responses;
+using Application.DTOs.Submission;
 using Application.Services.Interfaces;
 using AutoMapper;
 using Domain.Entities;
@@ -100,6 +101,11 @@ namespace Application.Services.Implementitions
 
         }
 
+        public Task<IEnumerable<GetAssignmentSubmission>> GetAssignmentSubmissions(Guid Id)
+        {
+            throw new NotImplementedException();
+        }
+
         public async Task<string> GetCertificateFile(Guid courseId, string Email)
         {
             var user = await userManagment.GetUserByEmail(Email);
@@ -139,6 +145,11 @@ namespace Application.Services.Implementitions
             return enrollment;
         }
 
+        public Task<GetAssignmentSubmission> GetSubmission(Guid Id, string Email)
+        {
+            throw new NotImplementedException();
+        }
+
         public async Task<IEnumerable<string>> GetUserCertificates(string Email)
         {
             var user = await userManagment.GetUserByEmail(Email);
@@ -147,6 +158,21 @@ namespace Application.Services.Implementitions
             var enrollments = (await Enrollment.GetAllAsync()).Where(e => e.StudentId == userId && !string.IsNullOrEmpty(e.FileUrl)).ToList();
             var certificateUrls = enrollments.Select(e => e.FileUrl).ToList();
             return certificateUrls;
+        }
+
+        public Task<IEnumerable<GetAssignmentSubmission>> GetUserSubmissions(string Email)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<ServiceResponse> SubmitAssignment(CreateAssignmentSubmission submission)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<ServiceResponse> UpdateAssignmentSubmission(UpdateAssignmentSubmission submission)
+        {
+            throw new NotImplementedException();
         }
 
         public async Task<ServiceResponse> UpdateProgress(Guid courseId, string Email, double progression)

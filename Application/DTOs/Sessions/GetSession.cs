@@ -1,9 +1,12 @@
-﻿namespace Domain.Entities
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace Application.DTOs.Sessions
 {
-
-    using System;
-
-    public class Session
+    public class GetSession
     {
         public Guid Id { get; set; }
         public Guid CourseId { get; set; }

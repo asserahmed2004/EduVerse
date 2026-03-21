@@ -1,17 +1,16 @@
-﻿namespace Domain.Entities
+﻿using Microsoft.AspNetCore.Http;
+
+namespace Application.DTOs.Sessions
 {
-
-    using System;
-
-    public class Session
+    public class CreateSession
     {
-        public Guid Id { get; set; }
         public Guid CourseId { get; set; }
         public string Title { get; set; }
-        public string FileUrl { get; set; }
+        public IFormFile File { get; set; }
         public string TrainerId { get; set; }
         public DateTime Date { get; set; }
         public double Duration { get; set; }
         public int SessionNumber { get; set; }
+
     }
 }
