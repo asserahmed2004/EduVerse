@@ -18,7 +18,7 @@ using System.Threading.Tasks;
 namespace Application.Services.Implementitions
 {
     public  class UserService(IGeneric<Enrollment> Enrollment,ICloudService cloud
-        ,IGeneric<Course> Courses , IUserManagment userManagment,
+        ,IGeneric<Course> Courses , IUserManagment userManagment,IGeneric<AssignmentSubmission> AssignmentSubmission,
         IMapper mapper) : IUserService
     {
         public async Task<ServiceResponse> AddCertificate(CreateCertificate certificate)
@@ -57,7 +57,7 @@ namespace Application.Services.Implementitions
                 CourseId = certificate.CourseId,
                 StudentId = userId,
                  FileUrl= fileDetails.FileName,
-                GraduationDate = DateTime.UtcNow,
+                GraduationDate = DateTime.Now,
                 Progression=existingEnrollment.Progression,
                 EnrollmentDate= existingEnrollment.EnrollmentDate
 
@@ -85,7 +85,7 @@ namespace Application.Services.Implementitions
             {
                 CourseId = courseId,
                 StudentId = userId,
-                EnrollmentDate = DateTime.UtcNow,
+                EnrollmentDate = DateTime.Now,
                 Progression = 0
             };
             var result = await Enrollment.AddAsync(enrollment);
@@ -101,11 +101,7 @@ namespace Application.Services.Implementitions
 
         }
 
-        public Task<IEnumerable<GetAssignmentSubmission>> GetAssignmentSubmissions(Guid Id)
-        {
-            throw new NotImplementedException();
-        }
-
+        
         public async Task<string> GetCertificateFile(Guid courseId, string Email)
         {
             var user = await userManagment.GetUserByEmail(Email);
@@ -145,11 +141,7 @@ namespace Application.Services.Implementitions
             return enrollment;
         }
 
-        public Task<GetAssignmentSubmission> GetSubmission(Guid Id, string Email)
-        {
-            throw new NotImplementedException();
-        }
-
+        
         public async Task<IEnumerable<string>> GetUserCertificates(string Email)
         {
             var user = await userManagment.GetUserByEmail(Email);
@@ -160,20 +152,7 @@ namespace Application.Services.Implementitions
             return certificateUrls;
         }
 
-        public Task<IEnumerable<GetAssignmentSubmission>> GetUserSubmissions(string Email)
-        {
-            throw new NotImplementedException();
-        }
-
-        public Task<ServiceResponse> SubmitAssignment(CreateAssignmentSubmission submission)
-        {
-            throw new NotImplementedException();
-        }
-
-        public Task<ServiceResponse> UpdateAssignmentSubmission(UpdateAssignmentSubmission submission)
-        {
-            throw new NotImplementedException();
-        }
+       
 
         public async Task<ServiceResponse> UpdateProgress(Guid courseId, string Email, double progression)
         {
@@ -203,5 +182,135 @@ namespace Application.Services.Implementitions
 
             }
         }
+        public async Task<IEnumerable<GetAssignmentSubmission>> GetAssignmentSubmissions(Guid Id)
+        {
+            if (Id == Guid.Empty)
+            {
+                return null;
+            }
+            var submissions = (await AssignmentSubmission.GetAllAsync()).Where(s => s.AssignmentId == Id).ToList();
+            if (submissions == null || submissions.Count == 0)
+            {
+                return null;
+            }
+            var mappedSubmissions = mapper.Map<IEnumerable<GetAssignmentSubmission>>(submissions);
+            return mappedSubmissions;
+        }
+
+        public async Task<IEnumerable<GetAssignmentSubmission>> GetUserSubmissions(string Email)
+        {
+            if (string.IsNullOrEmpty(Email))
+            {
+                return null;
+            }
+            var user = await userManagment.GetUserByEmail(Email);
+            var userId = user.Id.ToString();
+            var submissions = (await AssignmentSubmission.GetAllAsync()).Where(s => s.StudentId == userId).ToList();
+            if (submissions == null || submissions.Count == 0)
+            {
+                return null;
+            }
+            var mappedSubmissions = mapper.Map<IEnumerable<GetAssignmentSubmission>>(submissions);
+            return mappedSubmissions;
+        }
+
+        public async Task<ServiceResponse> SubmitAssignment(CreateAssignmentSubmission submission)
+        {
+            if (submission == null)
+            {
+                return new ServiceResponse(false, "Invalid submission data.");
+
+            }
+            var existingSubmission = (await AssignmentSubmission.GetAllAsync()).FirstOrDefault(s => s.AssignmentId == submission.AssignmentId && s.StudentId == submission.StudentId);
+            if (existingSubmission != null)
+            {
+                var mapped = mapper.Map<AssignmentSubmission>(submission);
+                if (submission.File != null)
+                {
+                    var fileDetails = new FileDetails
+                    {
+                        FileName = $"{submission.StudentId}_{submission.AssignmentId}_Submission.pdf",
+                        Folder = "submissions"
+                    };
+                    var file = new AddCloudFile
+                    {
+                        File = submission.File,
+                        Details = fileDetails
+                    };
+                    var deletefile=new FileDetails
+                    {
+                        FileName = existingSubmission.FileUrl,
+                        Folder = "submissions"
+                    };
+                    var deleteResult = await cloud.DeleteFileAsync(deletefile);
+                    var uploadResult = await cloud.UploadFileAsync(file);
+                    if (!uploadResult.success)
+                    {
+                        return new ServiceResponse(false, "File upload failed.");
+                    }
+                    mapped.FileUrl = fileDetails.FileName;
+                    existingSubmission.FileUrl = fileDetails.FileName;
+                }
+                var updateResult = await AssignmentSubmission.UpdateAsync(mapped);
+                if (updateResult != null)
+                {
+                    return new ServiceResponse(true, "Assignment submission updated successfully.");
+                }
+                else
+                {
+                    return new ServiceResponse(false, "Failed to update assignment submission.");
+                }
+
+
+            }
+            else
+            {
+                var mapped = mapper.Map<AssignmentSubmission>(submission);
+                var fileDetails = new FileDetails
+                {
+                    FileName = $"{submission.StudentId}_{submission.AssignmentId}_Submission.pdf",
+                    Folder = "submissions"
+                };
+                var file = new AddCloudFile
+                {
+                    File = submission.File,
+                    Details = fileDetails
+                };
+                var uploadResult = await cloud.UploadFileAsync(file);
+                if (!uploadResult.success)
+                {
+                    return new ServiceResponse(false, "File upload failed.");
+                }
+                mapped.FileUrl = fileDetails.FileName;
+                var result = await AssignmentSubmission.AddAsync(mapped);
+                if (result != null)
+                {
+                    return new ServiceResponse(true, "Assignment submitted successfully.");
+                }
+                else
+                {
+                    return new ServiceResponse(false, "Failed to submit assignment.");
+                }
+            }
+        }
+
+       
+        public async Task<GetAssignmentSubmission> GetSubmission(Guid Id, string Email)
+        {
+            if (Id == Guid.Empty || string.IsNullOrEmpty(Email))
+            {
+                return null;
+            }
+            var user = await userManagment.GetUserByEmail(Email);
+            var userId = user.Id.ToString();
+            var submission = (await AssignmentSubmission.GetAllAsync()).FirstOrDefault(s => s.AssignmentId== Id && s.StudentId == userId);
+            if (submission == null)
+            {
+                return null;
+            }
+            var mappedSubmission = mapper.Map<GetAssignmentSubmission>(submission);
+            return mappedSubmission;
+        }
+
     }
 }

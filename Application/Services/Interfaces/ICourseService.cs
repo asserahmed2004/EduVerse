@@ -20,13 +20,13 @@ namespace Application.Services.Interfaces
         Task<List<GetCourse>> GetAllCourses(string? userid);
         Task<GetCourse> GetCourseById(Guid id, string? userid);
         Task<GetCourse> GetCourseByName(string name, string userid);
-        Task<ServiceResponse> UpdateDuration(Guid id, int duration);
+       
         Task<ServiceResponse> AddRating(CreateRating rating, string userid);
         Task<ServiceResponse> AddSession(CreateSession session);
         Task<ServiceResponse> UpdateSession(UpdateSession session);
         Task<ServiceResponse> DeleteSession(Guid id);
         Task<List<GetSession>> GetCourseAllSessions(Guid courdeid);
-        Task<GetSession> GetSessionById(Guid id);
+        Task<GetSession> GetSessionById(Guid id);   
         Task<GetSession> GetSessionByNumber(Guid courseid, int sessionnumber);
         Task<ServiceResponse> AddAssignment(CreateAssignment assignment);
         Task<ServiceResponse> UpdateAssignment(UpdateAssignment assignment);

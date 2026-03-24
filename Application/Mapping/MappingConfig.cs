@@ -41,6 +41,7 @@ namespace Application.Mapping
             CreateMap<GetAssignmentSubmission, AssignmentSubmission>().ReverseMap();
             CreateMap<CreateAssignmentSubmission, AssignmentSubmission>().ReverseMap();
             CreateMap<UpdateAssignmentSubmission, AssignmentSubmission>().ReverseMap();
+            CreateMap<CreateSession,CreateSessionRequest>().ReverseMap();
         }
     }
 }

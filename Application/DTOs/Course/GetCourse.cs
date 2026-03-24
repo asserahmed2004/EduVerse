@@ -14,7 +14,7 @@ namespace Application.DTOs.Course
         public string Description { get; set; }
         public string Title { get; set; }
         public double Price { get; set; }
-        public int Duration { get; set; }
+        public double Duration { get; set; }
         public float Rating { get; set; }
         public float UserRating { get; set; }
         public string ImageUrl { get; set; }

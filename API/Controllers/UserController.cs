@@ -2,6 +2,7 @@
 using Application.DTOs.Course;
 using Application.DTOs.Enrollments;
 using Application.DTOs.Responses;
+using Application.DTOs.Submission;
 using Application.Services.Interfaces;
 using Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
@@ -99,6 +100,55 @@ namespace API.Controllers
             }
             return Ok(result.message);
         }
+        [HttpPost("submitassignment")]
+        public async Task<IActionResult> submitassignment([FromForm] CreateAssignmentSubmission submission)
+        {
+            var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            submission.StudentId = userId;
+            var result = await userService.SubmitAssignment(submission);
+            if (!result.success)
+            {
+                return BadRequest(result.message);
+            }
+            return Ok(result.message);
+        }
+        
+        [HttpGet("usersubmissions/{Email?}")]
+        public async Task<IActionResult> usersubmissions(string? Email)
+        {
+            if (string.IsNullOrEmpty(Email))
+            {
+                Email = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
+            }
+            var submissions = await userService.GetUserSubmissions(Email);
+            return Ok(submissions);
+        }
+        [HttpGet("assignmentsubmissions/{Id}")]
+        public async Task<IActionResult> assignmentsubmissions(Guid Id)
+        {
+            var submissions = await userService.GetAssignmentSubmissions(Id);
+            return Ok(submissions);
+        }
+        [HttpGet("submission/{Id}/{Email?}")]
+        public async Task<IActionResult> submission(Guid Id, string? Email)
+        {
+            if (string.IsNullOrEmpty(Email))
+            {
+                Email = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
+            }
+            var submission = await userService.GetSubmission(Id, Email);
+            if (submission == null)
+            {
+                return NotFound("Submission not found.");
+            }
+            return Ok(submission);
+        }
+        //Task<ServiceResponse> SubmitAssignment(CreateAssignmentSubmission submission);
+        //Task<ServiceResponse> UpdateAssignmentSubmission(UpdateAssignmentSubmission submission);
+        //Task<IEnumerable<GetAssignmentSubmission>> GetUserSubmissions(string Email);
+        //Task<IEnumerable<GetAssignmentSubmission>> GetAssignmentSubmissions(Guid Id);
+
+        //Task<GetAssignmentSubmission> GetSubmission(Guid Id, string Email);
 
 
 
@@ -108,7 +158,7 @@ namespace API.Controllers
 
 
 
-       
+
 
     }
 }

@@ -1,6 +1,10 @@
-﻿using Application.DTOs.Course;
+﻿using Application.DTOs.Assignment;
+using Application.DTOs.Course;
 using Application.DTOs.Rating;
+using Application.DTOs.Responses;
+using Application.DTOs.Sessions;
 using Application.Services.Interfaces;
+using AutoMapper;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -9,7 +13,7 @@ namespace API.Controllers
 {
     [Route("[controller]")]
     [ApiController]
-    public class CourseController(ICourseService courseService) : ControllerBase
+    public class CourseController(ICourseService courseService,IMapper mapper) : ControllerBase
     {
         [HttpPost("Create")]
         public async Task<IActionResult> CreateCourse([FromForm] CreateCourse Course)
@@ -102,6 +106,106 @@ namespace API.Controllers
                 return BadRequest(result);
             return Ok(result);
         }
+        [HttpPost("AddSession")]
+        public async Task<IActionResult> AddSession([FromForm]CreateSessionRequest session)
+        {
+            var sessionEntity = mapper.Map<CreateSession>(session);
+            sessionEntity.CourseId = Guid.Parse(session.Course);
+
+            var result = await courseService.AddSession(sessionEntity);
+            if (!result.success)
+                return BadRequest(result);
+            return Ok(result);
+        }
+        [HttpGet("GetAllSessions/{courseId}")]
+        public async Task<IActionResult> GetCourseAllSessions(Guid courseId)
+        {
+            var result = await courseService.GetCourseAllSessions(courseId);
+            
+            return Ok(result);
+        }
+        [HttpGet("GetSessionById/{id}")]
+        public async Task<IActionResult> GetSessionById(Guid id)
+        {
+            var result = await courseService.GetSessionById(id);
+            if (result == null)
+                return NotFound(new { success = false, message = "Session not found" });
+            return Ok(result);
+        }
+        [HttpGet("GetSessionByNumber/{courseId}/{sessionNumber}")]
+        public async Task<IActionResult> GetSessionByNumber(Guid courseId, int sessionNumber)
+        {
+            var result = await courseService.GetSessionByNumber(courseId, sessionNumber);
+            if (result == null)
+                return NotFound(new { success = false, message = "Session not found" });
+            return Ok(result);
+        }
+        [HttpPut("UpdateSession")]
+        public async Task<IActionResult> UpdateSession([FromForm] UpdateSession session)
+        {
+            var result = await courseService.UpdateSession(session);
+            if (!result.success)
+                return BadRequest(result);
+            return Ok(result);
+        }
+        [HttpDelete("DeleteSession/{id}")]
+        public async Task<IActionResult> DeleteSession(Guid id)
+        {
+            var result = await courseService.DeleteSession(id);
+            if (!result.success)
+                return BadRequest(result);
+            return Ok(result);
+        }
+        [HttpPost("AddAssignment")]
+        public async Task<IActionResult> AddAssignment([FromForm] CreateAssignment assignment)
+        {
+            
+            var result = await courseService.AddAssignment(assignment);
+            if (!result.success)
+                return BadRequest(result);
+            return Ok(result);
+        }
+        [HttpGet("GetAllAssignments/{courseId}")]
+        public async Task<IActionResult> GetCourseAllAssignments(Guid courseId)
+        {
+            var result = await courseService.GetCourseAllAssignments(courseId);
+            return Ok(result);
+        }
+        [HttpGet("GetAssignmentById/{id}")]
+        public async Task<IActionResult> GetAssignmentById(Guid id)
+        {
+            var result = await courseService.GetAssignmentById(id);
+            if (result == null)
+                return NotFound(new { success = false, message = "Assignment not found" });
+            return Ok(result);
+        }
+        [HttpGet("GetAssignmentBySession/{sessionId}")]
+        public async Task<IActionResult> GetAssignmentBySession(Guid sessionId)
+        {
+            var result = await courseService.GetAssignmentBySession(sessionId);
+            if (result == null)
+                return NotFound(new { success = false, message = "Assignment not found" });
+            return Ok(result);
+        }
+        [HttpPut("UpdateAssignment")]
+        public async Task<IActionResult> UpdateAssignment([FromForm] UpdateAssignment assignment)
+        {
+            var result = await courseService.UpdateAssignment(assignment);
+            if (!result.success)
+                return BadRequest(result);
+            return Ok(result);
+        }
+        [HttpDelete("DeleteAssignment/{id}")]
+        public async Task<IActionResult> DeleteAssignment(Guid id)
+        {
+            var result = await courseService.DeleteAssignment(id);
+            if (!result.success)
+                return BadRequest(result);
+            return Ok(result);
+        }
+
+
+        
 
     }
 }

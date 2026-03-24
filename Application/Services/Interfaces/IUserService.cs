@@ -26,7 +26,7 @@ namespace Application.Services.Interfaces
         Task<Enrollment>GetEnrollmentData(Guid courseId,string userId);
         Task<ServiceResponse> UpdateProgress(Guid courseId, string userId, double progression);
         Task<ServiceResponse> SubmitAssignment(CreateAssignmentSubmission submission);
-        Task<ServiceResponse> UpdateAssignmentSubmission(UpdateAssignmentSubmission submission);
+        
         Task<IEnumerable<GetAssignmentSubmission>> GetUserSubmissions(string Email);
         Task<IEnumerable<GetAssignmentSubmission>> GetAssignmentSubmissions(Guid Id);
         

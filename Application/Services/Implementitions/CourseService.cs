@@ -9,6 +9,9 @@ using Application.Services.Interfaces;
 using AutoMapper;
 using Domain.Entities;
 using Domain.Interfaces;
+using MediaToolkit;
+using MediaToolkit.Model;
+using Microsoft.AspNetCore.Http;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -218,7 +221,7 @@ namespace Application.Services.Implementitions
             return mappedCourse;
         }
 
-        public async Task<ServiceResponse> UpdateDuration(Guid id, int duration)
+        private async Task<ServiceResponse> UpdateDuration(Guid id, double duration)
         {
             if (id == Guid.Empty || duration <= 0)
                 return new ServiceResponse { success = false, message = "Invalid Course ID or duration" };
@@ -280,64 +283,266 @@ namespace Application.Services.Implementitions
             return new ServiceResponse { success = true, message = "Course updated successfully" };
         }
 
-        public Task<ServiceResponse> AddSession(CreateSession session)
+        public async Task<ServiceResponse> AddSession(CreateSession session)
         {
-            throw new NotImplementedException();
+            if (session == null)
+                return new ServiceResponse { success = false, message = "Invalid session data" };
+            var mappedSession = mapper.Map<Session>(session);
+            mappedSession.Date= DateTime .Today;
+            var duration = GetVideoDuration(session.File);
+            mappedSession.Duration = duration.TotalMinutes;
+            await UpdateDuration(mappedSession.CourseId, duration.TotalMinutes);
+            var fileDetails = new FileDetails { FileName = $"{mappedSession.Id}-SessionMaterial{Path.GetExtension(session.File.FileName)}", Folder = "sessions" };
+            var addCloudFile = new AddCloudFile { Details = fileDetails, File = session.File };
+            var uploadResult = await cloud.UploadFileAsync(addCloudFile);
+            if (!uploadResult.success)
+                return new ServiceResponse { success = false, message = "Failed to upload session material to cloud" };
+            mappedSession.FileUrl = fileDetails.FileName;
+            var result = await SessionManagment.AddAsync(mappedSession);
+            if (result == null)
+                return new ServiceResponse { success = false, message = "Failed to add session" };
+            return new ServiceResponse { success = true, message = "Session added successfully" };
+
         }
 
-        public Task<ServiceResponse> UpdateSession(UpdateSession session)
+        public async Task<ServiceResponse> UpdateSession(UpdateSession session)
         {
-            throw new NotImplementedException();
+            if (session == null || session.Id == Guid.Empty)
+                return new ServiceResponse { success = false, message = "Invalid session data" };
+            var existingSession = await SessionManagment.GetByIdAsync(session.Id);
+            if (existingSession == null)
+                return new ServiceResponse { success = false, message = "Session not found" };
+            
+            if(session.File != null)
+            {
+                var duration = GetVideoDuration(session.File);
+                var durationDifference = (double)duration.TotalMinutes - existingSession.Duration;
+                await UpdateDuration(existingSession.CourseId, (int)durationDifference);
+                existingSession.Duration = duration.TotalMinutes;
+                var fileDetails = new FileDetails { FileName = existingSession.FileUrl, Folder = "sessions" };
+                var cloudDeleteResult = await cloud.DeleteFileAsync(fileDetails);
+                if (!cloudDeleteResult.success)
+                    return new ServiceResponse { success = false, message = "Failed to delete old session material from cloud" };
+                var newFileDetails = new FileDetails { FileName = $"{existingSession.Id}-SessionMaterial{Path.GetExtension(session.File.FileName)}", Folder = "sessions" };
+                var addCloudFile = new AddCloudFile { Details = newFileDetails, File = session.File };
+                var cloudUploadResult = await cloud.UploadFileAsync(addCloudFile);
+                if (!cloudUploadResult.success)
+                    return new ServiceResponse { success = false, message = "Failed to upload new session material to cloud" };
+                existingSession.FileUrl = newFileDetails.FileName;
+            }
+            existingSession.Title = session.Title;
+            existingSession.TrainerId = session.TrainerId;
+            existingSession.FileUrl = $"{existingSession.Id}-SessionMaterial{Path.GetExtension(session.File.FileName)}";
+            existingSession.SessionNumber = session.SessionNumber;
+
+            var updateResult = await SessionManagment.UpdateAsync(existingSession);
+            if (updateResult == null)
+                return new ServiceResponse { success = false, message = "Failed to update session" };
+
+            return new ServiceResponse { success = true, message = "Session updated successfully" };
+
+        }
+        private TimeSpan GetVideoDuration(IFormFile videoFile)
+        {
+            // Ensure the file is a video and has content
+            if (videoFile == null || videoFile.Length == 0)
+            {
+                return TimeSpan.Zero;
+            }
+
+            // Save the IFormFile to a temporary file path
+            var tempFilePath = Path.GetTempFileName();
+            using (var stream = new FileStream(tempFilePath, FileMode.Create))
+            {
+                videoFile.CopyTo(stream);
+            }
+
+            try
+            {
+                var inputFile = new MediaFile { Filename = tempFilePath };
+                using (var engine = new Engine())
+                {
+                    engine.GetMetadata(inputFile);
+                }
+
+                // The duration is available in the metadata
+                return inputFile.Metadata.Duration;
+            }
+            catch (Exception ex)
+            {
+                
+                return TimeSpan.Zero;
+            }
+            finally
+            {
+                // Clean up the temporary file
+                if (File.Exists(tempFilePath))
+                {
+                    File.Delete(tempFilePath);
+                }
+            }
         }
 
-        public Task<ServiceResponse> DeleteSession(Guid id)
+        public async Task<ServiceResponse> DeleteSession(Guid id)
         {
-            throw new NotImplementedException();
+            if (id == Guid.Empty)
+                return new ServiceResponse { success = false, message = "Invalid session ID" };
+            var existingSession = await SessionManagment.GetByIdAsync(id);
+            if (existingSession == null)
+                return new ServiceResponse { success = false, message = "Session not found" };
+            var result = await SessionManagment.DeleteAsync(existingSession);
+            if (result == 0)
+                return new ServiceResponse { success = false, message = "Failed to delete session" };
+            var fileDetails = new FileDetails { FileName = existingSession.FileUrl, Folder = "sessions" };
+            var cloudResult = await cloud.DeleteFileAsync(fileDetails);
+            if (!cloudResult.success)
+                return new ServiceResponse { success = false, message = "Failed to delete session material from cloud" };
+            return new ServiceResponse { success = true, message = "Session deleted successfully" };
+
         }
 
-        public Task<List<GetSession>> GetCourseAllSessions(Guid courdeid)
+        public async Task<List<GetSession>> GetCourseAllSessions(Guid courdeid)
         {
-            throw new NotImplementedException();
+            if (courdeid == Guid.Empty)
+                return new List<GetSession>();
+            var sessions = await SessionManagment.GetAllAsync();
+            if (sessions == null || !sessions.Any())
+                return new List<GetSession>();
+
+            var courseSessions = sessions.Where(s => s.CourseId == courdeid).OrderBy(n=>n.SessionNumber).ToList();
+            var mappedSessions = mapper.Map<List<GetSession>>(courseSessions);
+            return mappedSessions;
         }
 
-        public Task<GetSession> GetSessionById(Guid id)
+        public async Task<GetSession> GetSessionById(Guid id)
         {
-            throw new NotImplementedException();
+            if (id == Guid.Empty)
+                return null;
+            var session = await SessionManagment.GetAllAsync();
+
+            if (session == null||!session.Any())
+                return null;
+            var targetSession = session.FirstOrDefault(s => s.Id == id);
+            if (targetSession == null)
+                return null;
+            var mappedSession = mapper.Map<GetSession>(targetSession);
+            return mappedSession;
         }
 
-        public Task<GetSession> GetSessionByNumber(Guid courseid, int sessionnumber)
+        public async Task<GetSession> GetSessionByNumber(Guid courseid, int sessionnumber)
         {
-            throw new NotImplementedException();
+            if (courseid == Guid.Empty || sessionnumber <= 0)
+                return null;
+            var sessions = await SessionManagment.GetAllAsync();
+            if (sessions == null || !sessions.Any())
+                return null;
+            var targetSession = sessions.FirstOrDefault(s => s.CourseId == courseid && s.SessionNumber == sessionnumber);
+            if (targetSession == null)
+                return null;
+            var mappedSession = mapper.Map<GetSession>(targetSession);
+            return mappedSession;
         }
 
-        public Task<ServiceResponse> AddAssignment(CreateAssignment assignment)
+        public async Task<ServiceResponse> AddAssignment(CreateAssignment assignment)
         {
-            throw new NotImplementedException();
+            if (assignment == null)
+                return new ServiceResponse { success = false, message = "Invalid assignment data" };
+            var mappedAssignment = mapper.Map<Assignment>(assignment);
+            var fileDetails = new FileDetails { FileName = $"{mappedAssignment.Id}-AssignmentMaterial{Path.GetExtension(assignment.File.FileName)}", Folder = "assignments" };
+            var addCloudFile = new AddCloudFile { Details = fileDetails, File = assignment.File };
+            var uploadResult = await cloud.UploadFileAsync(addCloudFile);
+            if (!uploadResult.success)
+                return new ServiceResponse { success = false, message = "Failed to upload assignment material to cloud" };
+            mappedAssignment.Content = fileDetails.FileName;
+            var result = await AssignmentManagment.AddAsync(mappedAssignment);
+            if (result == null)
+                return new ServiceResponse { success = false, message = "Failed to add assignment" };
+            return new ServiceResponse { success = true, message = "Assignment added successfully" };
+
         }
 
-        public Task<ServiceResponse> UpdateAssignment(UpdateAssignment assignment)
+        public async Task<ServiceResponse> UpdateAssignment(UpdateAssignment assignment)
         {
-            throw new NotImplementedException();
+            if (assignment == null || assignment.Id == Guid.Empty)
+                return new ServiceResponse { success = false, message = "Invalid assignment data" };
+            var existingAssignment = await AssignmentManagment.GetByIdAsync(assignment.Id);
+            if (existingAssignment == null)
+                return new ServiceResponse { success = false, message = "Assignment not found" };
+            if (assignment.File != null)
+            {
+                var fileDetails = new FileDetails { FileName = existingAssignment.Content, Folder = "assignments" };
+                var cloudDeleteResult = await cloud.DeleteFileAsync(fileDetails);
+                if (!cloudDeleteResult.success)
+                    return new ServiceResponse { success = false, message = "Failed to delete old assignment material from cloud" };
+                var newFileDetails = new FileDetails { FileName = $"{existingAssignment.Id}-AssignmentMaterial{Path.GetExtension(assignment.File.FileName)}", Folder = "assignments" };
+                var addCloudFile = new AddCloudFile { Details = newFileDetails, File = assignment.File };
+                var cloudUploadResult = await cloud.UploadFileAsync(addCloudFile);
+                if (!cloudUploadResult.success)
+                    return new ServiceResponse { success = false, message = "Failed to upload new assignment material to cloud" };
+                existingAssignment.Content = newFileDetails.FileName;
+            }
+            existingAssignment.Subject = assignment.Subject;
+            existingAssignment.Description = assignment.Description;
+            var updateResult = await AssignmentManagment.UpdateAsync(existingAssignment);
+            if (updateResult == null)
+                return new ServiceResponse { success = false, message = "Failed to update assignment" };
+            return new ServiceResponse { success = true, message = "Assignment updated successfully" };
+
         }
 
-        public Task<ServiceResponse> DeleteAssignment(Guid id)
+        public async Task<ServiceResponse> DeleteAssignment(Guid id)
         {
-            throw new NotImplementedException();
+            if (id == Guid.Empty)
+                return new ServiceResponse { success = false, message = "Invalid assignment ID" };
+            var existingAssignment = await AssignmentManagment.GetByIdAsync(id);
+            if (existingAssignment == null)
+                return new ServiceResponse { success = false, message = "Assignment not found" };
+            var result = await AssignmentManagment.DeleteAsync(existingAssignment);
+            if (result == 0)
+                return new ServiceResponse { success = false, message = "Failed to delete assignment" };
+            var fileDetails = new FileDetails { FileName = existingAssignment.Content, Folder = "assignments" };
+            var cloudResult = await cloud.DeleteFileAsync(fileDetails);
+            if (!cloudResult.success)
+                return new ServiceResponse { success = false, message = "Failed to delete assignment material from cloud" };
+            return new ServiceResponse { success = true, message = "Assignment deleted successfully" };
         }
 
-        public Task<List<GetAssignment>> GetCourseAllAssignments(Guid courdeid)
+        public async Task<List<GetAssignment>> GetCourseAllAssignments(Guid courdeid)
         {
-            throw new NotImplementedException();
+            var assignments = await AssignmentManagment.GetAllAsync();
+            if (assignments == null || !assignments.Any())
+                return new List<GetAssignment>();
+            var sessions = GetCourseAllSessions(courdeid);
+            var courseAssignments = assignments.Where(a => sessions.Result.Any(s => s.Id == a.SessionId)).ToList();
+            var mappedAssignments = mapper.Map<List<GetAssignment>>(courseAssignments);
+            return mappedAssignments;
+
+
         }
 
-        public Task<GetAssignment> GetAssignmentById(Guid id)
+        public async Task<GetAssignment> GetAssignmentById(Guid id)
         {
-            throw new NotImplementedException();
+            if (id == Guid.Empty)
+                return null;
+            var assignment = await AssignmentManagment.GetByIdAsync(id);
+            if (assignment == null)
+                return null;
+            var mappedAssignment = mapper.Map<GetAssignment>(assignment);
+            return mappedAssignment;
         }
 
-        public Task<GetAssignment> GetAssignmentBySession(Guid sessionid)
+        public async Task<GetAssignment> GetAssignmentBySession(Guid sessionid)
         {
-            throw new NotImplementedException();
+            if (sessionid == Guid.Empty)
+                return null;
+            var assignments = await AssignmentManagment.GetAllAsync();
+            if (assignments == null || !assignments.Any())
+                return null;
+            var targetAssignment = assignments.FirstOrDefault(a => a.SessionId == sessionid);
+            if (targetAssignment == null)
+                return null;
+            var mappedAssignment = mapper.Map<GetAssignment>(targetAssignment);
+            return mappedAssignment;
         }
     }
 }

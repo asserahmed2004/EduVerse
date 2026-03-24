@@ -5,7 +5,7 @@
 
     public class Session
     {
-        public Guid Id { get; set; }
+        public Guid Id { get; set; }=Guid.NewGuid();
         public Guid CourseId { get; set; }
         public string Title { get; set; }
         public string FileUrl { get; set; }
