@@ -31,6 +31,10 @@ namespace Application.Dependencyinjection
 
             services.AddFluentValidationAutoValidation();
            services.AddScoped<IAuthServices, AuthService>();
+            services.AddHttpClient("Paymob", options =>
+            {
+                options.BaseAddress = new Uri("https://accept.paymob.com/api");
+            });
 
 
 

@@ -18,9 +18,11 @@ namespace Application.Services.Interfaces
         Task<ServiceResponse> UpdateCourse(UpdateCourse Course);
         Task<ServiceResponse> DeleteCourse(Guid id);
         Task<List<GetCourse>> GetAllCourses(string? userid);
+        Task <List<GetCourse>> Search(string name, string? userid);
         Task<GetCourse> GetCourseById(Guid id, string? userid);
         Task<GetCourse> GetCourseByName(string name, string userid);
-       
+        Task<List<GetCourse>> GetCourseByCategory(Guid  categoryId, string userid);
+
         Task<ServiceResponse> AddRating(CreateRating rating, string userid);
         Task<ServiceResponse> AddSession(CreateSession session);
         Task<ServiceResponse> UpdateSession(UpdateSession session);

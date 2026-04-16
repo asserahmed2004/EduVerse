@@ -12,15 +12,23 @@ using Domain.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace Application.Services.Implementitions
 {
-    public  class UserService(IGeneric<Enrollment> Enrollment,ICloudService cloud
-        ,IGeneric<Course> Courses , IUserManagment userManagment,IGeneric<AssignmentSubmission> AssignmentSubmission,
-        IMapper mapper) : IUserService
+    public class UserService(IGeneric<Enrollment> Enrollment, ICloudService cloud
+        , IGeneric<Course> Courses, IUserManagment userManagment, IGeneric<AssignmentSubmission> AssignmentSubmission,
+        IMapper mapper, IHttpClientFactory httpClientFactory) : IUserService
     {
+        private readonly string PaymobApi = "ZXlKaGJHY2lPaUpJVXpVeE1pSXNJblI1Y0NJNklrcFhWQ0o5LmV5SmpiR0Z6Y3lJNklrMWxjbU5vWVc1MElpd2ljSEp2Wm1sc1pWOXdheUk2TVRFME16UTBNeXdpYm1GdFpTSTZJbWx1YVhScFlXd2lmUS5rSm9SRWNtUG8xVHhjR3lKMFg2NXViM0VXYnZ3SEJMVnRSQ1FCMEthZHlCajRJRHRLMWZyU3A3NFE2Z3o2MjhENnVZOWszUnhKYWVfSnNKalhvTUV3QQ==";
+        private readonly string PaymobSecret = "egy_sk_test_9a566c37c5a5706e567093e1bb650191de352802284e30fd7f6b0bd1c18d7a7e";
+        private readonly string PaymobPublic = "egy_pk_test_3toKrv5jW8B0FcHVRTZYI12gK33a5Yvn";
+        private readonly HttpClient httpClient = new HttpClient();
         public async Task<ServiceResponse> AddCertificate(CreateCertificate certificate)
         {
             if (certificate == null || string.IsNullOrEmpty(certificate.Email) || certificate.CourseId == Guid.Empty)
@@ -31,17 +39,17 @@ namespace Application.Services.Implementitions
             var userId = user.Id.ToString();
             var existingEnrollments = await Enrollment.GetAllAsync();
             var existingEnrollment = existingEnrollments.FirstOrDefault(e => e.CourseId == certificate.CourseId && e.StudentId == userId);
-            if (existingEnrollment==null)
+            if (existingEnrollment == null)
             {
                 return new ServiceResponse(false, "User is not enrolled in the course.");
             }
-            var fileDetails=new FileDetails
+            var fileDetails = new FileDetails
             {
                 FileName = $"{userId}_{certificate.CourseId}_Certificate.pdf",
                 Folder = "certificates",
 
             };
-            var file=new AddCloudFile
+            var file = new AddCloudFile
             {
                 File = certificate.CertificateFile,
                 Details = fileDetails
@@ -56,15 +64,15 @@ namespace Application.Services.Implementitions
             {
                 CourseId = certificate.CourseId,
                 StudentId = userId,
-                 FileUrl= fileDetails.FileName,
+                FileUrl = fileDetails.FileName,
                 GraduationDate = DateTime.Now,
-                Progression=existingEnrollment.Progression,
-                EnrollmentDate= existingEnrollment.EnrollmentDate
+                Progression = existingEnrollment.Progression,
+                EnrollmentDate = existingEnrollment.EnrollmentDate
 
 
             };
             var updateResult = await Enrollment.UpdateAsync(newenrollment);
-            if (updateResult!=null)
+            if (updateResult != null)
             {
                 return new ServiceResponse(true, "Certificate added successfully.");
             }
@@ -77,7 +85,7 @@ namespace Application.Services.Implementitions
 
         public async Task<ServiceResponse> Enroll(Guid courseId, string userId)
         {
-            if(courseId == Guid.Empty || string.IsNullOrEmpty(userId))
+            if (courseId == Guid.Empty || string.IsNullOrEmpty(userId))
             {
                 return new ServiceResponse(false, "Invalid course ID or user ID.");
             }
@@ -89,7 +97,7 @@ namespace Application.Services.Implementitions
                 Progression = 0
             };
             var result = await Enrollment.AddAsync(enrollment);
-            if (result!=null)
+            if (result != null)
             {
                 return new ServiceResponse(true, "Enrollment successful.");
             }
@@ -101,7 +109,7 @@ namespace Application.Services.Implementitions
 
         }
 
-        
+
         public async Task<string> GetCertificateFile(Guid courseId, string Email)
         {
             var user = await userManagment.GetUserByEmail(Email);
@@ -120,7 +128,7 @@ namespace Application.Services.Implementitions
             var enrollments = (await Enrollment.GetAllAsync()).Where(e => e.StudentId == userId).ToList();
             var courseIds = enrollments.Select(e => e.CourseId).ToList();
             var courses = (await Courses.GetAllAsync()).Where(c => courseIds.Contains(c.Id)).ToList();
-            var enrolledCourses =mapper.Map<IEnumerable<GetCourse>>(courses);
+            var enrolledCourses = mapper.Map<IEnumerable<GetCourse>>(courses);
             return enrolledCourses;
         }
 
@@ -141,7 +149,7 @@ namespace Application.Services.Implementitions
             return enrollment;
         }
 
-        
+
         public async Task<IEnumerable<string>> GetUserCertificates(string Email)
         {
             var user = await userManagment.GetUserByEmail(Email);
@@ -152,7 +160,7 @@ namespace Application.Services.Implementitions
             return certificateUrls;
         }
 
-       
+
 
         public async Task<ServiceResponse> UpdateProgress(Guid courseId, string Email, double progression)
         {
@@ -237,7 +245,7 @@ namespace Application.Services.Implementitions
                         File = submission.File,
                         Details = fileDetails
                     };
-                    var deletefile=new FileDetails
+                    var deletefile = new FileDetails
                     {
                         FileName = existingSubmission.FileUrl,
                         Folder = "submissions"
@@ -294,7 +302,7 @@ namespace Application.Services.Implementitions
             }
         }
 
-       
+
         public async Task<GetAssignmentSubmission> GetSubmission(Guid Id, string Email)
         {
             if (Id == Guid.Empty || string.IsNullOrEmpty(Email))
@@ -303,7 +311,7 @@ namespace Application.Services.Implementitions
             }
             var user = await userManagment.GetUserByEmail(Email);
             var userId = user.Id.ToString();
-            var submission = (await AssignmentSubmission.GetAllAsync()).FirstOrDefault(s => s.AssignmentId== Id && s.StudentId == userId);
+            var submission = (await AssignmentSubmission.GetAllAsync()).FirstOrDefault(s => s.AssignmentId == Id && s.StudentId == userId);
             if (submission == null)
             {
                 return null;
@@ -311,6 +319,103 @@ namespace Application.Services.Implementitions
             var mappedSubmission = mapper.Map<GetAssignmentSubmission>(submission);
             return mappedSubmission;
         }
+        public async Task<string> Payment(string userId, Guid Course,string Method)
+        {
+            var course = await Courses.GetByIdAsync(Course);
+            var User = await userManagment.GetUserById(userId);
+            if (course == null || User == null)
+            {
+                return null;
+            }
+            int specialreference = new Random().Next(100000, 999999);
+            
 
+            // Prepare billing data
+            var billingData = new
+            {
+                apartment = "N/A",
+                first_name = User.FullName,
+                last_name = "N/A",
+                street = "N/A",
+                building = "N/A",
+                phone_number = User.PhoneNumber,
+                country = "N/A",
+                email = User.Email,
+                floor = "N/A",
+                state = "N/A",
+                city = "N/A"
+            };
+
+            // Get wallet integration ID
+            var integrationId = int.Parse(DetermineIntegrationId(Method));
+
+            // Prepare intention request payload
+            var payload = new
+            {
+                amount = course.Price,
+                currency = "EGP",
+                payment_methods = new[] { integrationId },
+                billing_data = billingData,
+                items = new[]
+                {
+                    new
+                    {
+                        name = $"Enrollment #{course.Id}-{User.Id}",
+                        amount = course.Price,
+                        description = $"Course Enrollment Payment for course #{course.Name}",
+                        quantity = 1
+                    }
+                },
+                customer = new
+                {
+                    first_name = billingData.first_name,
+                    last_name = billingData.last_name,
+                    email = billingData.email,
+                    
+                },
+                extras = new
+                {
+                    
+                    customerId = User.Id
+                },
+                special_reference = specialreference,
+                expiration = 3600, // 1 hour expiration
+                merchant_order_id = specialreference.ToString()
+            };
+            var requestMessage = new HttpRequestMessage(System.Net.Http.HttpMethod.Post, "https://accept.paymob.com/v1/intention/");
+            requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Token", PaymobSecret);
+            requestMessage.Content = JsonContent.Create(payload);
+            var response = await httpClient.SendAsync(requestMessage);
+            
+            var responseContent = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new Exception($"Paymob Intention API call failed with status {response.StatusCode}: {responseContent}");
+            }
+
+            // Parse the response to get client_secret
+            var resultJson = JsonDocument.Parse(responseContent);
+            var clientSecret = resultJson.RootElement.GetProperty("client_secret").GetString();
+            string redirectUrl = $"https://accept.paymob.com/unifiedcheckout/?publicKey={PaymobPublic}&clientSecret={clientSecret}";
+            return redirectUrl;
+
+        }
+        private async Task<string> GetPaymobToken()
+        {
+            throw new NotImplementedException();
+
+        }
+        private string DetermineIntegrationId(string Method)
+        {
+            // This is a placeholder implementation. You should replace this with your actual logic to determine the integration ID based on the course name.
+            return Method.ToLower() switch
+            {
+                "wallet" => "5597636",
+                "card" => "5587071",
+                _ => "invalid"
+            };
+        }
     }
 }
+ 

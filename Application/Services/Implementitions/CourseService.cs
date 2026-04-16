@@ -144,6 +144,75 @@ namespace Application.Services.Implementitions
             
             return mappedCourses;
         }
+        public async Task<List<GetCourse>> GetCourseByCategory(Guid categoryId, string? userid)
+        {
+            var categoryLinks = await CoursesCatManagment.GetAllAsync();
+            var courseIds = categoryLinks.Where(cl => cl.CategoryId == categoryId).Select(cl => cl.CourseId).ToList();
+            var courses = await CoursesManagment.GetAllAsync();
+            var filteredCourses = courses.Where(c => courseIds.Contains(c.Id)).ToList();
+            if (filteredCourses == null || !filteredCourses.Any())
+                return new List<GetCourse>();
+            var mappedCourses = mapper.Map<List<GetCourse>>(filteredCourses);
+            var ratings = await RatingManagment.GetAllAsync();
+            foreach (var course in mappedCourses)
+            {
+                var courseRatings = ratings.Where(r => r.CourseId == course.Id).ToList();
+                if (courseRatings.Any())
+                    course.Rating = (float)courseRatings.Average(r => r.RatingValue);
+                else
+                    course.Rating = 0;
+                if (!string.IsNullOrEmpty(userid))
+                {
+                    course.UserRating = courseRatings.FirstOrDefault(r => r.StudentId == userid)?.RatingValue ?? 0;
+                }
+            }
+            return mappedCourses;
+        }
+        public async Task<List<GetCourse>> Search(string name,string? userid)
+        {
+            var courses = await CoursesManagment.GetAllAsync();
+            var filteredCourses = courses.Where(c => c.Name.Contains(name, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (courses == null || !courses.Any())
+                return new List<GetCourse>();
+            var mappedCourses = mapper.Map<List<GetCourse>>(filteredCourses);
+
+            var categoryLinks = await CoursesCatManagment.GetAllAsync();
+            var ratings = await RatingManagment.GetAllAsync();
+
+            foreach (var course in mappedCourses)
+            {
+
+                var courseCategories = categoryLinks.Where(cc => cc.CourseId == course.Id).ToList();
+                var categories = new List<GetCategory>();
+                foreach (var courseCategory in courseCategories)
+                {
+                    var category = await CategoryManagment.GetByIdAsync(courseCategory.CategoryId);
+                    if (category != null)
+                    {
+                        categories.Add(mapper.Map<GetCategory>(category));
+                    }
+                }
+                course.Categories = categories;
+            }
+
+            foreach (var course in mappedCourses)
+            {
+                var courseRatings = ratings.Where(r => r.CourseId == course.Id).ToList();
+                if (courseRatings.Any())
+                    course.Rating = (float)courseRatings.Average(r => r.RatingValue);
+                else
+                    course.Rating = 0;
+
+                if (!string.IsNullOrEmpty(userid))
+                {
+                    course.UserRating = courseRatings.FirstOrDefault(r => r.StudentId == userid)?.RatingValue ?? 0;
+                }
+
+
+            }
+
+            return mappedCourses;
+        }
 
         public async Task<GetCourse> GetCourseById(Guid id, string? userid)
         {
@@ -185,7 +254,7 @@ namespace Application.Services.Implementitions
         public async Task<GetCourse> GetCourseByName(string name, string? userid)
         {
             var courses = await CoursesManagment.GetAllAsync();
-            var course = courses.FirstOrDefault(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            var course = courses.FirstOrDefault(c => c.Name==name);
             if (course == null )
                 return null;
             var mappedCourse = mapper.Map<GetCourse>(course);

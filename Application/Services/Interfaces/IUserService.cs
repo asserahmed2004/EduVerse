@@ -19,6 +19,8 @@ namespace Application.Services.Interfaces
         Task<ServiceResponse>Enroll(Guid courseId,string userId);
         Task<ServiceResponse> AddCertificate(CreateCertificate certificate);
         
+
+        
         Task<IEnumerable<GetCourse>> GetEnrolledCourses(string userId);
         Task<IEnumerable<GetUser>> GetEnrolledUsers(Guid courseId);
         Task<string> GetCertificateFile(Guid courseId, string userId);
@@ -31,6 +33,7 @@ namespace Application.Services.Interfaces
         Task<IEnumerable<GetAssignmentSubmission>> GetAssignmentSubmissions(Guid Id);
         
         Task<GetAssignmentSubmission> GetSubmission(Guid Id,string Email);
+        Task <string> Payment(string userId, Guid Course,string Method);
 
 
 

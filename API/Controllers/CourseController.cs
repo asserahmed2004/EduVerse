@@ -47,6 +47,36 @@ namespace API.Controllers
             var result = await courseService.GetAllCourses(userId);
             return Ok(result);
         }
+        [HttpGet("GetByCategory/{category}")]
+        public async Task<IActionResult> GetCoursesByCategory(Guid category)
+        {
+            string userId;
+            if (User.Identity.IsAuthenticated)
+            {
+                userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            }
+            else
+            {
+                userId = null;
+            }
+            var result = await courseService.GetCourseByCategory(category, userId);
+            return Ok(result);
+        }
+        [HttpGet("search/{query}")]
+        public async Task<IActionResult> SearchCourses(string query)
+        {
+            string userId;
+            if (User.Identity.IsAuthenticated)
+            {
+                userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            }
+            else
+            {
+                userId = null;
+            }
+            var result = await courseService.Search(query, userId);
+            return Ok(result);
+        }
         [HttpGet("GetById/{id}")]
         public async Task<IActionResult> GetCourseById(Guid id)
         {

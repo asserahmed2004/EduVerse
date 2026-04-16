@@ -143,6 +143,17 @@ namespace API.Controllers
             }
             return Ok(submission);
         }
+        [HttpPost("payment/{CourseId}/{Method}")]
+        public async Task<IActionResult> payment(Guid CourseId, string Method)
+        {
+            var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            var result = await userService.Payment(userId, CourseId, Method);
+            if (String.IsNullOrEmpty(result))
+            {
+                return BadRequest();
+            }
+            return Ok(result);
+        }
         //Task<ServiceResponse> SubmitAssignment(CreateAssignmentSubmission submission);
         //Task<ServiceResponse> UpdateAssignmentSubmission(UpdateAssignmentSubmission submission);
         //Task<IEnumerable<GetAssignmentSubmission>> GetUserSubmissions(string Email);
