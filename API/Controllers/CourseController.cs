@@ -34,6 +34,9 @@ namespace API.Controllers
         [Authorize(Roles = AppRoles.AdminOrInstructor)]
         public async Task<IActionResult> DeleteCourse(Guid id)
         {
+            if (!await CanManageCourse(id))
+                return Forbid();
+
             var result = await courseService.DeleteCourse(id);
             if (!result.success)
                 return BadRequest(result);
@@ -123,6 +126,9 @@ namespace API.Controllers
         [Authorize(Roles = AppRoles.AdminOrInstructor)]
         public async Task<IActionResult> UpdateCourse([FromForm] UpdateCourse Course)
         {
+            if (!await CanManageCourse(Course.Id))
+                return Forbid();
+
             var result = await courseService.UpdateCourse(Course);
             if (!result.success)
                 return BadRequest(result);
@@ -152,6 +158,9 @@ namespace API.Controllers
         {
             var sessionEntity = mapper.Map<CreateSession>(session);
             sessionEntity.CourseId = Guid.Parse(session.Course);
+
+            if (!await CanManageCourse(sessionEntity.CourseId))
+                return Forbid();
 
             var result = await courseService.AddSession(sessionEntity);
             if (!result.success)
@@ -185,6 +194,9 @@ namespace API.Controllers
         [Authorize(Roles = AppRoles.AdminOrInstructor)]
         public async Task<IActionResult> UpdateSession([FromForm] UpdateSession session)
         {
+            if (!await CanManageSession(session.Id))
+                return Forbid();
+
             var result = await courseService.UpdateSession(session);
             if (!result.success)
                 return BadRequest(result);
@@ -194,6 +206,9 @@ namespace API.Controllers
         [Authorize(Roles = AppRoles.AdminOrInstructor)]
         public async Task<IActionResult> DeleteSession(Guid id)
         {
+            if (!await CanManageSession(id))
+                return Forbid();
+
             var result = await courseService.DeleteSession(id);
             if (!result.success)
                 return BadRequest(result);
@@ -203,6 +218,8 @@ namespace API.Controllers
         [Authorize(Roles = AppRoles.AdminOrInstructor)]
         public async Task<IActionResult> AddAssignment([FromForm] CreateAssignment assignment)
         {
+            if (!await CanManageSession(assignment.SessionId))
+                return Forbid();
             
             var result = await courseService.AddAssignment(assignment);
             if (!result.success)
@@ -235,6 +252,9 @@ namespace API.Controllers
         [Authorize(Roles = AppRoles.AdminOrInstructor)]
         public async Task<IActionResult> UpdateAssignment([FromForm] UpdateAssignment assignment)
         {
+            if (!await CanManageAssignment(assignment.Id))
+                return Forbid();
+
             var result = await courseService.UpdateAssignment(assignment);
             if (!result.success)
                 return BadRequest(result);
@@ -244,14 +264,41 @@ namespace API.Controllers
         [Authorize(Roles = AppRoles.AdminOrInstructor)]
         public async Task<IActionResult> DeleteAssignment(Guid id)
         {
+            if (!await CanManageAssignment(id))
+                return Forbid();
+
             var result = await courseService.DeleteAssignment(id);
             if (!result.success)
                 return BadRequest(result);
             return Ok(result);
         }
 
+        private async Task<bool> CanManageCourse(Guid courseId)
+        {
+            if (User.IsInRole(AppRoles.Admin))
+                return true;
 
-        
+            var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            return !string.IsNullOrEmpty(userId) && await courseService.CanManageCourse(courseId, userId);
+        }
+
+        private async Task<bool> CanManageSession(Guid sessionId)
+        {
+            if (User.IsInRole(AppRoles.Admin))
+                return true;
+
+            var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            return !string.IsNullOrEmpty(userId) && await courseService.CanManageSession(sessionId, userId);
+        }
+
+        private async Task<bool> CanManageAssignment(Guid assignmentId)
+        {
+            if (User.IsInRole(AppRoles.Admin))
+                return true;
+
+            var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            return !string.IsNullOrEmpty(userId) && await courseService.CanManageAssignment(assignmentId, userId);
+        }
 
     }
 }

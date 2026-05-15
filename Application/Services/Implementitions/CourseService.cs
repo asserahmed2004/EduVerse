@@ -102,6 +102,45 @@ namespace Application.Services.Implementitions
             return new ServiceResponse { success = true, message = "Course deleted successfully" };
         }
 
+        public async Task<bool> CanManageCourse(Guid courseId, string userId)
+        {
+            if (courseId == Guid.Empty || string.IsNullOrEmpty(userId))
+            {
+                return false;
+            }
+
+            var course = await CoursesManagment.GetByIdAsync(courseId);
+            return course != null && course.OrgId == userId;
+        }
+
+        public async Task<bool> CanManageSession(Guid sessionId, string userId)
+        {
+            if (sessionId == Guid.Empty || string.IsNullOrEmpty(userId))
+            {
+                return false;
+            }
+
+            var session = await SessionManagment.GetByIdAsync(sessionId);
+            return session != null && await CanManageCourse(session.CourseId, userId);
+        }
+
+        public async Task<bool> CanManageAssignment(Guid assignmentId, string userId)
+        {
+            if (assignmentId == Guid.Empty || string.IsNullOrEmpty(userId))
+            {
+                return false;
+            }
+
+            var assignment = await AssignmentManagment.GetByIdAsync(assignmentId);
+            if (assignment == null)
+            {
+                return false;
+            }
+
+            var session = await SessionManagment.GetByIdAsync(assignment.SessionId);
+            return session != null && await CanManageCourse(session.CourseId, userId);
+        }
+
         public async Task<List<GetCourse>> GetAllCourses(string? userid)
         {
             var courses = await CoursesManagment.GetAllAsync();

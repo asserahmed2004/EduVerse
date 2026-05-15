@@ -2,6 +2,7 @@
 using Application.DTOs.Auth;
 using Application.DTOs.Category;
 using Application.DTOs.Course;
+using Application.DTOs.Payment;
 using Application.DTOs.Rating;
 using Application.DTOs.Sessions;
 using Application.DTOs.Submission;
@@ -41,6 +42,7 @@ namespace Application.Mapping
             CreateMap<GetAssignmentSubmission, AssignmentSubmission>().ReverseMap();
             CreateMap<CreateAssignmentSubmission, AssignmentSubmission>().ReverseMap();
             CreateMap<UpdateAssignmentSubmission, AssignmentSubmission>().ReverseMap();
+            CreateMap<GetPayment, Payment>().ReverseMap();
             CreateMap<CreateSession,CreateSessionRequest>().ReverseMap();
         }
     }

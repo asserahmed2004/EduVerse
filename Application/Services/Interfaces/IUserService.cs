@@ -3,6 +3,7 @@
 using Application.DTOs.Cloud;
 using Application.DTOs.Course;
 using Application.DTOs.Enrollments;
+using Application.DTOs.Payment;
 using Application.DTOs.Responses;
 using Application.DTOs.Submission;
 using Domain.Entities;
@@ -10,6 +11,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace Application.Services.Interfaces
@@ -34,6 +36,10 @@ namespace Application.Services.Interfaces
         
         Task<GetAssignmentSubmission> GetSubmission(Guid Id,string Email);
         Task <string> Payment(string userId, Guid Course,string Method);
+        Task<IEnumerable<GetPayment>> GetUserPayments(string userId);
+        Task<IEnumerable<GetPayment>> GetCoursePayments(Guid courseId);
+        Task<GetPayment> GetPayment(Guid courseId, string userId);
+        Task<ServiceResponse> UpdatePaymentFromCallback(JsonElement callbackData);
 
 
 

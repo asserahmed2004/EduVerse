@@ -1,11 +1,7 @@
-﻿namespace Domain.Entities
+namespace Application.DTOs.Payment
 {
-
-    using System;
-
-    public class Payment
+    public class GetPayment
     {
-       
         public Guid CourseId { get; set; }
         public string StudentId { get; set; }
         public DateTime SubmittingDate { get; set; }
@@ -16,9 +12,7 @@
         public string? SpecialReference { get; set; }
         public string? MerchantOrderId { get; set; }
         public string? ProviderIntentionId { get; set; }
-        public string? ProviderClientSecret { get; set; }
         public string? RedirectUrl { get; set; }
         public int? ProviderStatusCode { get; set; }
-        public string? ProviderResponse { get; set; }
     }
 }

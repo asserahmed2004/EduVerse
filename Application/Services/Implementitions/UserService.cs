@@ -3,6 +3,7 @@
 using Application.DTOs.Cloud;
 using Application.DTOs.Course;
 using Application.DTOs.Enrollments;
+using Application.DTOs.Payment;
 using Application.DTOs.Responses;
 using Application.DTOs.Submission;
 using Application.Services.Interfaces;
@@ -23,7 +24,7 @@ namespace Application.Services.Implementitions
 {
     public class UserService(IGeneric<Enrollment> Enrollment, ICloudService cloud
         , IGeneric<Course> Courses, IUserManagment userManagment, IGeneric<AssignmentSubmission> AssignmentSubmission,
-        IMapper mapper, IHttpClientFactory httpClientFactory) : IUserService
+        IGeneric<Payment> Payments, IMapper mapper, IHttpClientFactory httpClientFactory) : IUserService
     {
         private readonly string PaymobApi = "ZXlKaGJHY2lPaUpJVXpVeE1pSXNJblI1Y0NJNklrcFhWQ0o5LmV5SmpiR0Z6Y3lJNklrMWxjbU5vWVc1MElpd2ljSEp2Wm1sc1pWOXdheUk2TVRFME16UTBNeXdpYm1GdFpTSTZJbWx1YVhScFlXd2lmUS5rSm9SRWNtUG8xVHhjR3lKMFg2NXViM0VXYnZ3SEJMVnRSQ1FCMEthZHlCajRJRHRLMWZyU3A3NFE2Z3o2MjhENnVZOWszUnhKYWVfSnNKalhvTUV3QQ==";
         private readonly string PaymobSecret = "egy_sk_test_9a566c37c5a5706e567093e1bb650191de352802284e30fd7f6b0bd1c18d7a7e";
@@ -205,6 +206,49 @@ namespace Application.Services.Implementitions
             return mappedSubmissions;
         }
 
+        public async Task<IEnumerable<GetPayment>> GetUserPayments(string userId)
+        {
+            if (string.IsNullOrEmpty(userId))
+            {
+                return [];
+            }
+
+            var payments = (await Payments.GetAllAsync())
+                .Where(p => p.StudentId == userId)
+                .OrderByDescending(p => p.SubmittingDate)
+                .ToList();
+
+            return mapper.Map<IEnumerable<GetPayment>>(payments);
+        }
+
+        public async Task<IEnumerable<GetPayment>> GetCoursePayments(Guid courseId)
+        {
+            if (courseId == Guid.Empty)
+            {
+                return [];
+            }
+
+            var payments = (await Payments.GetAllAsync())
+                .Where(p => p.CourseId == courseId)
+                .OrderByDescending(p => p.SubmittingDate)
+                .ToList();
+
+            return mapper.Map<IEnumerable<GetPayment>>(payments);
+        }
+
+        public async Task<GetPayment> GetPayment(Guid courseId, string userId)
+        {
+            if (courseId == Guid.Empty || string.IsNullOrEmpty(userId))
+            {
+                return null;
+            }
+
+            var payment = (await Payments.GetAllAsync())
+                .FirstOrDefault(p => p.CourseId == courseId && p.StudentId == userId);
+
+            return payment == null ? null : mapper.Map<GetPayment>(payment);
+        }
+
         public async Task<IEnumerable<GetAssignmentSubmission>> GetUserSubmissions(string Email)
         {
             if (string.IsNullOrEmpty(Email))
@@ -327,7 +371,13 @@ namespace Application.Services.Implementitions
             {
                 return null;
             }
+            var integrationId = DetermineIntegrationId(Method);
+            if (integrationId == null)
+            {
+                return null;
+            }
             int specialreference = new Random().Next(100000, 999999);
+            var merchantOrderId = specialreference.ToString();
             
 
             // Prepare billing data
@@ -346,15 +396,12 @@ namespace Application.Services.Implementitions
                 city = "N/A"
             };
 
-            // Get wallet integration ID
-            var integrationId = int.Parse(DetermineIntegrationId(Method));
-
             // Prepare intention request payload
             var payload = new
             {
                 amount = course.Price,
                 currency = "EGP",
-                payment_methods = new[] { integrationId },
+                payment_methods = new[] { integrationId.Value },
                 billing_data = billingData,
                 items = new[]
                 {
@@ -380,7 +427,7 @@ namespace Application.Services.Implementitions
                 },
                 special_reference = specialreference,
                 expiration = 3600, // 1 hour expiration
-                merchant_order_id = specialreference.ToString()
+                merchant_order_id = merchantOrderId
             };
             var requestMessage = new HttpRequestMessage(System.Net.Http.HttpMethod.Post, "https://accept.paymob.com/v1/intention/");
             requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Token", PaymobSecret);
@@ -388,32 +435,197 @@ namespace Application.Services.Implementitions
             var response = await httpClient.SendAsync(requestMessage);
             
             var responseContent = await response.Content.ReadAsStringAsync();
+            var payment = new Payment
+            {
+                CourseId = course.Id,
+                StudentId = User.Id,
+                SubmittingDate = DateTime.Now,
+                TotalPrice = course.Price,
+                PaymentMethod = Method,
+                PaymentStatus = response.IsSuccessStatusCode ? "Pending" : "Failed",
+                PaymentProvider = "Paymob",
+                SpecialReference = specialreference.ToString(),
+                MerchantOrderId = merchantOrderId,
+                ProviderStatusCode = (int)response.StatusCode,
+                ProviderResponse = responseContent
+            };
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new Exception($"Paymob Intention API call failed with status {response.StatusCode}: {responseContent}");
+                await SavePaymentAsync(payment);
+                return null;
             }
 
             // Parse the response to get client_secret
             var resultJson = JsonDocument.Parse(responseContent);
             var clientSecret = resultJson.RootElement.GetProperty("client_secret").GetString();
             string redirectUrl = $"https://accept.paymob.com/unifiedcheckout/?publicKey={PaymobPublic}&clientSecret={clientSecret}";
+            payment.ProviderClientSecret = clientSecret;
+            payment.ProviderIntentionId = GetJsonPropertyAsString(resultJson.RootElement, "id");
+            payment.RedirectUrl = redirectUrl;
+            await SavePaymentAsync(payment);
             return redirectUrl;
 
         }
+
+        public async Task<ServiceResponse> UpdatePaymentFromCallback(JsonElement callbackData)
+        {
+            var merchantOrderId = FindJsonPropertyAsString(callbackData, "merchant_order_id");
+            var specialReference = FindJsonPropertyAsString(callbackData, "special_reference");
+            var intentionId = FindJsonPropertyAsString(callbackData, "intention_id")
+                ?? FindJsonPropertyAsString(callbackData, "payment_intention_id")
+                ?? FindJsonPropertyAsString(callbackData, "id");
+
+            var payments = await Payments.GetAllAsync();
+            var payment = payments.FirstOrDefault(p =>
+                (!string.IsNullOrEmpty(merchantOrderId) && p.MerchantOrderId == merchantOrderId) ||
+                (!string.IsNullOrEmpty(specialReference) && p.SpecialReference == specialReference) ||
+                (!string.IsNullOrEmpty(intentionId) && p.ProviderIntentionId == intentionId));
+
+            if (payment == null)
+            {
+                return new ServiceResponse(false, "Payment callback does not match any saved payment.");
+            }
+
+            var success = FindJsonPropertyAsBool(callbackData, "success");
+            var pending = FindJsonPropertyAsBool(callbackData, "pending");
+            var errorOccured = FindJsonPropertyAsBool(callbackData, "error_occured");
+
+            payment.PaymentStatus = success == true
+                ? "Paid"
+                : pending == true
+                    ? "Pending"
+                    : errorOccured == true
+                        ? "Failed"
+                        : "Failed";
+
+            payment.ProviderResponse = callbackData.GetRawText();
+
+            var providerStatusCode = FindJsonPropertyAsInt(callbackData, "status_code");
+            if (providerStatusCode != null)
+            {
+                payment.ProviderStatusCode = providerStatusCode;
+            }
+
+            var providerIntentionId = FindJsonPropertyAsString(callbackData, "intention_id")
+                ?? FindJsonPropertyAsString(callbackData, "payment_intention_id");
+            if (!string.IsNullOrEmpty(providerIntentionId))
+            {
+                payment.ProviderIntentionId = providerIntentionId;
+            }
+
+            await Payments.UpdateAsync(payment);
+            return new ServiceResponse(true, $"Payment status updated to {payment.PaymentStatus}.");
+        }
+
+        private async Task SavePaymentAsync(Payment payment)
+        {
+            var existingPayment = (await Payments.GetAllAsync())
+                .FirstOrDefault(p => p.CourseId == payment.CourseId && p.StudentId == payment.StudentId);
+
+            if (existingPayment == null)
+            {
+                await Payments.AddAsync(payment);
+                return;
+            }
+
+            await Payments.UpdateAsync(payment);
+        }
+        private static string? GetJsonPropertyAsString(JsonElement element, string propertyName)
+        {
+            if (!element.TryGetProperty(propertyName, out var property))
+            {
+                return null;
+            }
+
+            return property.ValueKind switch
+            {
+                JsonValueKind.String => property.GetString(),
+                JsonValueKind.Number => property.GetRawText(),
+                JsonValueKind.True => "true",
+                JsonValueKind.False => "false",
+                _ => property.GetRawText()
+            };
+        }
+
+        private static string? FindJsonPropertyAsString(JsonElement element, string propertyName)
+        {
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var property in element.EnumerateObject())
+                {
+                    if (property.NameEquals(propertyName))
+                    {
+                        return JsonElementToString(property.Value);
+                    }
+
+                    var nestedValue = FindJsonPropertyAsString(property.Value, propertyName);
+                    if (!string.IsNullOrEmpty(nestedValue))
+                    {
+                        return nestedValue;
+                    }
+                }
+            }
+
+            if (element.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in element.EnumerateArray())
+                {
+                    var nestedValue = FindJsonPropertyAsString(item, propertyName);
+                    if (!string.IsNullOrEmpty(nestedValue))
+                    {
+                        return nestedValue;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private static string? JsonElementToString(JsonElement element)
+        {
+            return element.ValueKind switch
+            {
+                JsonValueKind.String => element.GetString(),
+                JsonValueKind.Number => element.GetRawText(),
+                JsonValueKind.True => "true",
+                JsonValueKind.False => "false",
+                JsonValueKind.Null => null,
+                JsonValueKind.Undefined => null,
+                _ => element.GetRawText()
+            };
+        }
+
+        private static bool? FindJsonPropertyAsBool(JsonElement element, string propertyName)
+        {
+            var value = FindJsonPropertyAsString(element, propertyName);
+            return bool.TryParse(value, out var parsedValue) ? parsedValue : null;
+        }
+
+        private static int? FindJsonPropertyAsInt(JsonElement element, string propertyName)
+        {
+            var value = FindJsonPropertyAsString(element, propertyName);
+            return int.TryParse(value, out var parsedValue) ? parsedValue : null;
+        }
+
         private async Task<string> GetPaymobToken()
         {
             throw new NotImplementedException();
 
         }
-        private string DetermineIntegrationId(string Method)
+        private int? DetermineIntegrationId(string Method)
         {
-            // This is a placeholder implementation. You should replace this with your actual logic to determine the integration ID based on the course name.
-            return Method.ToLower() switch
+            if (string.IsNullOrWhiteSpace(Method))
             {
-                "wallet" => "5597636",
-                "card" => "5587071",
-                _ => "invalid"
+                return null;
+            }
+
+            // This is a placeholder implementation. You should replace this with your actual logic to determine the integration ID based on the course name.
+            return Method.ToLowerInvariant() switch
+            {
+                "wallet" => 5597636,
+                "card" => 5587071,
+                _ => null
             };
         }
     }
