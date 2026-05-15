@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.HttpResults;
 using System.Security.Claims;
+using API.Authorization;
 using Application.Services.Interfaces.Auth;
 using Application.Services.Interfaces;
 
@@ -56,7 +57,7 @@ namespace Api.Controllers
             return Unauthorized();
         }
         [HttpPost("AddRole/{Role}")]
-        [Authorize]
+        [Authorize(Roles = AppRoles.Admin)]
         public async Task<IActionResult> AddRole(string Role)
         {
             var result = await authServices.AddRole(Role);
@@ -65,7 +66,7 @@ namespace Api.Controllers
             return BadRequest(result);
         }
         [HttpDelete("RemoveRole/{Role}")]
-        [Authorize]
+        [Authorize(Roles = AppRoles.Admin)]
         public async Task<IActionResult> RemoveRole(string Role)
         {
             var result = await authServices.RemoveRole(Role);
@@ -74,7 +75,7 @@ namespace Api.Controllers
             return BadRequest(result);
         }
         [HttpPost("AddUserToRole/{UserId}/{Role}")]
-        [Authorize]
+        [Authorize(Roles = AppRoles.Admin)]
         public async Task<IActionResult> AddUserToRole(string UserId, string Role)
         {
             var result = await authServices.AddUserToRole(UserId, Role);
@@ -91,7 +92,7 @@ namespace Api.Controllers
             return BadRequest(result);
         }
         [HttpGet("GetAllUsers/{Role?}")]
-        [Authorize]
+        [Authorize(Roles = AppRoles.Admin)]
         public async Task<IActionResult> GetAllUsers(string? Role)
         {
             var result = await authServices.GetAllUsers(Role);

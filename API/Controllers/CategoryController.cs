@@ -1,6 +1,8 @@
 ﻿using Application.DTOs.Category;
 using Application.Services.Implementitions;
 using Application.Services.Interfaces;
+using API.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -38,6 +40,7 @@ namespace API.Controllers
             return Ok(category);
         }
         [HttpPost("Create")]
+        [Authorize(Roles = AppRoles.Admin)]
         public async Task<IActionResult> CreateCategory(CreateCategory category)
         {
             var result = await service.CreateCategory(category);
@@ -52,6 +55,7 @@ namespace API.Controllers
 
         }
         [HttpPut("Update")]
+        [Authorize(Roles = AppRoles.Admin)]
         public async Task<IActionResult> UpdateCategory(UpdateCategory category)
         {
             var result = await service.UpdateCategory(category);
@@ -65,6 +69,7 @@ namespace API.Controllers
             }
         }
         [HttpDelete("Delete/{id}")]
+        [Authorize(Roles = AppRoles.Admin)]
         public async Task<IActionResult> DeleteCategory(Guid id)
         {
             var result = await service.DeleteCategory(id);

@@ -1,4 +1,6 @@
 ﻿using Application.Services.Interfaces;
+using API.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -9,6 +11,7 @@ namespace API.Controllers
     public class CloudController(ICloudService cloudService) : ControllerBase
     {
         [HttpPost("Add/{Folder}")]
+        [Authorize(Roles = AppRoles.AdminOrInstructor)]
         public async Task<IActionResult> AddPhoto(IFormFile file, string Folder)
         {
             var cloudFile = new Application.DTOs.Cloud.AddCloudFile
@@ -37,6 +40,7 @@ namespace API.Controllers
             return NotFound();
         }
         [HttpDelete("Delete/{Folder}/{FileName}")]
+        [Authorize(Roles = AppRoles.AdminOrInstructor)]
         public async Task<IActionResult> DeletePhoto(string FileName, string Folder)
         {
             var details = new Application.DTOs.Cloud.FileDetails

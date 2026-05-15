@@ -4,6 +4,7 @@ using Application.DTOs.Enrollments;
 using Application.DTOs.Responses;
 using Application.DTOs.Submission;
 using Application.Services.Interfaces;
+using API.Authorization;
 using Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -17,7 +18,7 @@ namespace API.Controllers
     public class UserController(IUserService userService) : ControllerBase
     {
         [HttpPost("enroll/{courseId}")]
-        [Authorize]
+        [Authorize(Roles = AppRoles.Student)]
         public async Task<IActionResult> Enroll(Guid courseId)
         {
             var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
@@ -29,6 +30,7 @@ namespace API.Controllers
             return Ok(result.message);
         }
         [HttpPost("addcertificate")]
+        [Authorize(Roles = AppRoles.AdminOrInstructor)]
         public async Task<IActionResult> AddCertificate([FromForm]CreateCertificate certificate)
         {
             var result = await userService.AddCertificate(certificate);
@@ -55,12 +57,14 @@ namespace API.Controllers
 
         }
         [HttpGet("enrolledusers/{courseId}")]
+        [Authorize(Roles = AppRoles.AdminOrInstructor)]
         public async Task<IActionResult> enrolledusers(Guid courseId)
         {
             var users = await userService.GetEnrolledUsers(courseId);
             return Ok(users);
         }
         [HttpGet("certificatefile/{courseId}/{Email}")]
+        [Authorize(Roles = AppRoles.All)]
         public async Task<IActionResult> certificatefile(Guid courseId, string Email)
         {
             var fileUrl = await userService.GetCertificateFile(courseId, Email);
@@ -71,12 +75,14 @@ namespace API.Controllers
             return Ok(fileUrl);
         }
         [HttpGet("usercertificates/{Email}")]
+        [Authorize(Roles = AppRoles.All)]
         public async Task<IActionResult> usercertificates(string Email)
         {
             var certificates = await userService.GetUserCertificates(Email);
             return Ok(certificates);
         }
         [HttpGet("enrollmentdata/{courseId}/{Email?}")]
+        [Authorize(Roles = AppRoles.All)]
         public async Task<IActionResult> enrollmentdata(Guid courseId, string? Email)
         {
             if (string.IsNullOrEmpty(Email))
@@ -91,6 +97,7 @@ namespace API.Controllers
             return Ok(enrollment);
         }
         [HttpPut("updateprogress")]
+        [Authorize(Roles = AppRoles.Student)]
         public async Task<IActionResult> updateprogress([FromBody]Progression progression)
         {
             var result = await userService.UpdateProgress(progression.CourseId, progression.Email, progression.ProgressionValue);
@@ -101,6 +108,7 @@ namespace API.Controllers
             return Ok(result.message);
         }
         [HttpPost("submitassignment")]
+        [Authorize(Roles = AppRoles.Student)]
         public async Task<IActionResult> submitassignment([FromForm] CreateAssignmentSubmission submission)
         {
             var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
@@ -114,6 +122,7 @@ namespace API.Controllers
         }
         
         [HttpGet("usersubmissions/{Email?}")]
+        [Authorize(Roles = AppRoles.All)]
         public async Task<IActionResult> usersubmissions(string? Email)
         {
             if (string.IsNullOrEmpty(Email))
@@ -124,12 +133,14 @@ namespace API.Controllers
             return Ok(submissions);
         }
         [HttpGet("assignmentsubmissions/{Id}")]
+        [Authorize(Roles = AppRoles.AdminOrInstructor)]
         public async Task<IActionResult> assignmentsubmissions(Guid Id)
         {
             var submissions = await userService.GetAssignmentSubmissions(Id);
             return Ok(submissions);
         }
         [HttpGet("submission/{Id}/{Email?}")]
+        [Authorize(Roles = AppRoles.All)]
         public async Task<IActionResult> submission(Guid Id, string? Email)
         {
             if (string.IsNullOrEmpty(Email))
@@ -144,6 +155,7 @@ namespace API.Controllers
             return Ok(submission);
         }
         [HttpPost("payment/{CourseId}/{Method}")]
+        [Authorize(Roles = AppRoles.Student)]
         public async Task<IActionResult> payment(Guid CourseId, string Method)
         {
             var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;

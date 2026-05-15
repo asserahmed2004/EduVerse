@@ -31,6 +31,42 @@ namespace InfraStructure.Data
             modelBuilder.Entity<Rating>()
                 .HasKey(r => new { r.CourseId, r.StudentId });
 
+            modelBuilder.Entity<Course>()
+                .HasOne<AppUser>()
+                .WithMany()
+                .HasForeignKey(c => c.OrgId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            modelBuilder.Entity<Session>()
+                .HasOne<AppUser>()
+                .WithMany()
+                .HasForeignKey(s => s.TrainerId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            modelBuilder.Entity<Enrollment>()
+                .HasOne<AppUser>()
+                .WithMany()
+                .HasForeignKey(e => e.StudentId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            modelBuilder.Entity<Payment>()
+                .HasOne<AppUser>()
+                .WithMany()
+                .HasForeignKey(p => p.StudentId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            modelBuilder.Entity<Rating>()
+                .HasOne<AppUser>()
+                .WithMany()
+                .HasForeignKey(r => r.StudentId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            modelBuilder.Entity<AssignmentSubmission>()
+                .HasOne<AppUser>()
+                .WithMany()
+                .HasForeignKey(asub => asub.StudentId)
+                .OnDelete(DeleteBehavior.NoAction);
+
 
         }
 

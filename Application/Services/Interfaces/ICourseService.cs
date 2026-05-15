@@ -14,7 +14,7 @@ namespace Application.Services.Interfaces
 {
     public interface ICourseService
     {
-        Task<ServiceResponse> CreateCourse(CreateCourse Course);
+        Task<ServiceResponse> CreateCourse(CreateCourse Course, string orgId);
         Task<ServiceResponse> UpdateCourse(UpdateCourse Course);
         Task<ServiceResponse> DeleteCourse(Guid id);
         Task<List<GetCourse>> GetAllCourses(string? userid);

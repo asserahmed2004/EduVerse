@@ -201,17 +201,18 @@ namespace Application.Services.Implementitions.Auth
             var mappedconfirmation = mapper.Map<EmailConfirmation>(confirmationResult);
 
             mappedUser.EmailConfirmed = true;
-            var file = new AddCloudFile { };
-            var details = new FileDetails
-            {
-                FileName = $"{user.Email}_ProfilrPicture{Path.GetExtension(user.ProfilePicture.FileName)}",
-                
-                Folder = "ProfilePicture"
-            };
-            file.Details = details;
-            file.File=user.ProfilePicture;
             if (user.ProfilePicture != null)
             {
+                var details = new FileDetails
+                {
+                    FileName = $"{user.Email}_ProfilrPicture{Path.GetExtension(user.ProfilePicture.FileName)}",
+                    Folder = "ProfilePicture"
+                };
+                var file = new AddCloudFile
+                {
+                    Details = details,
+                    File = user.ProfilePicture
+                };
                 var uploadResult = await cloudService.UploadFileAsync(file);
                 if (!uploadResult.success)
                 {
@@ -221,9 +222,9 @@ namespace Application.Services.Implementitions.Auth
                         message = "Failed to upload profile image"
                     };
                 }
-                
+
+                mappedUser.ProfilePicture = details.FileName;
             }
-            mappedUser.ProfilePicture = $"{details.FileName}";
             var isRegistered = await userManagment.RegisterUser(mappedUser);
             if(isRegistered== "Registered")
                 await emailConfirmation.RemoveConfirmation(user.Email);

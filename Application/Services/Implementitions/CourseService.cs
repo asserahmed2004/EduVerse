@@ -42,14 +42,16 @@ namespace Application.Services.Implementitions
 
         
 
-        public  async Task<ServiceResponse> CreateCourse(CreateCourse Course)
+        public  async Task<ServiceResponse> CreateCourse(CreateCourse Course, string orgId)
         {
             if (Course == null)
                 return new ServiceResponse { success = false, message = "Course data is null" };
+            if (string.IsNullOrEmpty(orgId))
+                return new ServiceResponse { success = false, message = "Organization user is required" };
             var mapping = mapper.Map<Course>(Course);
             mapping.Duration = 0;
             mapping.ImageUrl = $"{mapping.Id}-Thumbnail{Path.GetExtension(Course.Image.FileName)}";
-            mapping.OrgId = "00000000-0000-0000-0000-000000000001";
+            mapping.OrgId = orgId;
             var details =new FileDetails { FileName = mapping.ImageUrl, Folder = "courses" };
             var AddCloudFile = new AddCloudFile { Details = details, File = Course.Image};
             var uploadResult = await cloud.UploadFileAsync(AddCloudFile);

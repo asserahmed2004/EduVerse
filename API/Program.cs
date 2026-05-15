@@ -1,6 +1,8 @@
 
 using Application.Dependencyinjection;
 using InfraStructure.DependencyInjection;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.OpenApi.Models;
 using Scalar.AspNetCore;
 
 namespace API
@@ -28,7 +30,48 @@ namespace API
             builder.Services.AddSwaggerGen();
             // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
             builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddOpenApi();
+            builder.Services.AddOpenApi(options =>
+            {
+                options.AddDocumentTransformer((document, context, cancellationToken) =>
+                {
+                    document.Components ??= new OpenApiComponents();
+                    document.Components.SecuritySchemes["Bearer"] = new OpenApiSecurityScheme
+                    {
+                        Type = SecuritySchemeType.Http,
+                        Scheme = "bearer",
+                        BearerFormat = "JWT",
+                        In = ParameterLocation.Header,
+                        Description = "Enter a JWT access token."
+                    };
+
+                    return Task.CompletedTask;
+                });
+
+                options.AddOperationTransformer((operation, context, cancellationToken) =>
+                {
+                    var metadata = context.Description.ActionDescriptor.EndpointMetadata;
+                    var requiresAuthorization = metadata.OfType<IAuthorizeData>().Any();
+                    var allowsAnonymous = metadata.OfType<IAllowAnonymous>().Any();
+
+                    if (requiresAuthorization && !allowsAnonymous)
+                    {
+                        operation.Security ??= new List<OpenApiSecurityRequirement>();
+                        operation.Security.Add(new OpenApiSecurityRequirement
+                        {
+                            [new OpenApiSecurityScheme
+                            {
+                                Reference = new OpenApiReference
+                                {
+                                    Type = ReferenceType.SecurityScheme,
+                                    Id = "Bearer"
+                                }
+                            }] = Array.Empty<string>()
+                        });
+                    }
+
+                    return Task.CompletedTask;
+                });
+            });
 
             builder.Services.AddInfraStructureServices(builder.Configuration);
             builder.Services.AddApplicationServices();
@@ -39,7 +82,6 @@ namespace API
 
             builder.Services.AddControllers();
             // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-            builder.Services.AddOpenApi();
 
             var app = builder.Build();
 
@@ -56,6 +98,7 @@ namespace API
 
             app.UseHttpsRedirection();
 
+            app.UseAuthentication();
             app.UseAuthorization();
 
 

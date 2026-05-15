@@ -4,7 +4,9 @@ using Application.DTOs.Rating;
 using Application.DTOs.Responses;
 using Application.DTOs.Sessions;
 using Application.Services.Interfaces;
+using API.Authorization;
 using AutoMapper;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -16,14 +18,20 @@ namespace API.Controllers
     public class CourseController(ICourseService courseService,IMapper mapper) : ControllerBase
     {
         [HttpPost("Create")]
+        [Authorize(Roles = AppRoles.AdminOrInstructor)]
         public async Task<IActionResult> CreateCourse([FromForm] CreateCourse Course)
         {
-            var result = await courseService.CreateCourse(Course);
+            var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized(new { success = false, message = "User id claim is missing" });
+
+            var result = await courseService.CreateCourse(Course, userId);
             if (!result.success)
                 return BadRequest(result);
             return Ok(result);
         }
         [HttpDelete("Delete/{id}")]
+        [Authorize(Roles = AppRoles.AdminOrInstructor)]
         public async Task<IActionResult> DeleteCourse(Guid id)
         {
             var result = await courseService.DeleteCourse(id);
@@ -112,6 +120,7 @@ namespace API.Controllers
             return Ok(result);
         }
         [HttpPut("Update")]
+        [Authorize(Roles = AppRoles.AdminOrInstructor)]
         public async Task<IActionResult> UpdateCourse([FromForm] UpdateCourse Course)
         {
             var result = await courseService.UpdateCourse(Course);
@@ -120,6 +129,7 @@ namespace API.Controllers
             return Ok(result);
         }
         [HttpPost("AddRating")]
+        [Authorize(Roles = AppRoles.Student)]
         public async Task<IActionResult> AddRating( CreateRating rating)
         {
             string userId;
@@ -137,6 +147,7 @@ namespace API.Controllers
             return Ok(result);
         }
         [HttpPost("AddSession")]
+        [Authorize(Roles = AppRoles.AdminOrInstructor)]
         public async Task<IActionResult> AddSession([FromForm]CreateSessionRequest session)
         {
             var sessionEntity = mapper.Map<CreateSession>(session);
@@ -171,6 +182,7 @@ namespace API.Controllers
             return Ok(result);
         }
         [HttpPut("UpdateSession")]
+        [Authorize(Roles = AppRoles.AdminOrInstructor)]
         public async Task<IActionResult> UpdateSession([FromForm] UpdateSession session)
         {
             var result = await courseService.UpdateSession(session);
@@ -179,6 +191,7 @@ namespace API.Controllers
             return Ok(result);
         }
         [HttpDelete("DeleteSession/{id}")]
+        [Authorize(Roles = AppRoles.AdminOrInstructor)]
         public async Task<IActionResult> DeleteSession(Guid id)
         {
             var result = await courseService.DeleteSession(id);
@@ -187,6 +200,7 @@ namespace API.Controllers
             return Ok(result);
         }
         [HttpPost("AddAssignment")]
+        [Authorize(Roles = AppRoles.AdminOrInstructor)]
         public async Task<IActionResult> AddAssignment([FromForm] CreateAssignment assignment)
         {
             
@@ -218,6 +232,7 @@ namespace API.Controllers
             return Ok(result);
         }
         [HttpPut("UpdateAssignment")]
+        [Authorize(Roles = AppRoles.AdminOrInstructor)]
         public async Task<IActionResult> UpdateAssignment([FromForm] UpdateAssignment assignment)
         {
             var result = await courseService.UpdateAssignment(assignment);
@@ -226,6 +241,7 @@ namespace API.Controllers
             return Ok(result);
         }
         [HttpDelete("DeleteAssignment/{id}")]
+        [Authorize(Roles = AppRoles.AdminOrInstructor)]
         public async Task<IActionResult> DeleteAssignment(Guid id)
         {
             var result = await courseService.DeleteAssignment(id);
