@@ -28,10 +28,10 @@ namespace Api.Controllers
             var result = await authServices.LoginUser(loginUser);
             return result.succeed ? Ok(result) : BadRequest(result);
         }
-        [HttpPost("ReviveToken/{*refreshtoken}")]
-        public async Task<IActionResult> ReviveToken([FromRoute] string refreshtoken)
+        [HttpPost("ReviveToken")]
+        public async Task<IActionResult> ReviveToken([FromBody] string refreshtoken)
         {
-            refreshtoken = Uri.UnescapeDataString(refreshtoken);
+            
 
             var result = await authServices.ReviveToken(refreshtoken);
 
