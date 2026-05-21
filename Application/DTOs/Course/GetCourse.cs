@@ -17,6 +17,7 @@ namespace Application.DTOs.Course
         public double Duration { get; set; }
         public float Rating { get; set; }
         public float UserRating { get; set; }
+        public string OrgId { get; set; }
         public string ImageUrl { get; set; }
         public List<GetCategory> Categories { get; set; }
 

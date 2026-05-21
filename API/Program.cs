@@ -16,7 +16,11 @@ namespace API
             {
                 options.AddDefaultPolicy(policy =>
                 {
-                    policy.WithOrigins()
+                    policy.WithOrigins(
+                            "http://localhost:3000",
+                            "https://localhost:3000",
+                            "http://localhost:3001",
+                            "https://localhost:3001")
                           .AllowAnyHeader()
                           .AllowAnyMethod()
                           .AllowCredentials();

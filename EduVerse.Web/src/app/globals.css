@@ -1,0 +1,140 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color: #111827;
+  background: #f5f7fb;
+}
+
+.dark {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(74, 108, 247, 0.15), transparent 34rem),
+    radial-gradient(circle at top right, rgba(124, 58, 237, 0.10), transparent 28rem),
+    linear-gradient(180deg, #fbfcff 0%, #f5f7fb 100%);
+  color: #111827;
+}
+
+.dark body {
+  background:
+    radial-gradient(circle at top left, rgba(74, 108, 247, 0.20), transparent 34rem),
+    radial-gradient(circle at top right, rgba(124, 58, 237, 0.15), transparent 28rem),
+    linear-gradient(180deg, #111827 0%, #0f172a 100%);
+  color: #e5edf7;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: rgba(74, 108, 247, 0.18);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@layer utilities {
+  .dark .bg-surface {
+    background-color: #0f172a;
+  }
+
+  .dark .bg-surface\/85 {
+    background-color: rgba(15, 23, 42, 0.92);
+  }
+
+  .dark .bg-white {
+    background-color: #162033;
+  }
+
+  .dark .bg-white\/95 {
+    background-color: rgba(22, 32, 51, 0.95);
+  }
+
+  .dark .bg-slate-50,
+  .dark .bg-slate-100 {
+    background-color: #223047;
+  }
+
+  .dark .bg-teal-50 {
+    background-color: rgba(74, 108, 247, 0.16);
+  }
+
+  .dark .bg-amber-100 {
+    background-color: rgba(246, 181, 69, 0.18);
+  }
+
+  .dark .bg-coral-100 {
+    background-color: rgba(249, 115, 99, 0.18);
+  }
+
+  .dark .text-ink {
+    color: #e5edf7;
+  }
+
+  .dark .text-muted {
+    color: #9fb0c7;
+  }
+
+  .dark .text-slate-600 {
+    color: #b6c2d3;
+  }
+
+  .dark .border-slate-100,
+  .dark .border-slate-200 {
+    border-color: #263650;
+  }
+
+  .dark .ring-slate-100,
+  .dark .ring-slate-200 {
+    --tw-ring-color: #263650;
+  }
+
+  .dark .shadow-soft {
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.30), 0 4px 16px rgba(74, 108, 247, 0.08);
+  }
+
+  .dark .shadow-button {
+    box-shadow: 0 12px 26px rgba(74, 108, 247, 0.26);
+  }
+
+  .dark input,
+  .dark select,
+  .dark textarea {
+    color: #e5edf7;
+  }
+
+  .dark input::placeholder,
+  .dark textarea::placeholder {
+    color: #7f8ea3;
+  }
+
+  .dark option {
+    background-color: #162033;
+    color: #e5edf7;
+  }
+}
