@@ -16,6 +16,7 @@ using System.Net.Mail;
 using System.Net;
 using Application.Services.Interfaces;
 using Application.DTOs.Cloud;
+using System.Security.Claims;
 
 namespace Application.Services.Implementitions.Auth
 {
@@ -25,6 +26,25 @@ namespace Application.Services.Implementitions.Auth
         ,IMapper mapper,IValidator<RegisterUser> RegisterValidator ,IConfirmation emailConfirmation,
         IValidator<LoginUser> LoginValidator, IValidationService validationService , ICloudService cloudService): IAuthServices
     {
+        public async Task<bool> VerifyCurrentUserPasswordAsync(ClaimsPrincipal userClaims, string password)
+        {
+            if (userClaims == null || string.IsNullOrWhiteSpace(password))
+                return false;
+
+            var email = userClaims.FindFirst(ClaimTypes.Email)?.Value
+                ?? userClaims.FindFirst("email")?.Value
+                ?? userClaims.FindFirst("emailaddress")?.Value;
+
+            if (string.IsNullOrWhiteSpace(email))
+                return false;
+
+            var user = await userManagment.GetUserByEmail(email);
+            if (user == null)
+                return false;
+
+            return await userManagment.CheckPassword(user, password);
+        }
+
         public async Task<ServiceResponse> AddRole(string roleName)
         {
             var response =await roleManagment.AddRole(roleName);

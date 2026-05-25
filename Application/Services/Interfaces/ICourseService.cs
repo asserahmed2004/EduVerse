@@ -17,6 +17,8 @@ namespace Application.Services.Interfaces
         Task<ServiceResponse> CreateCourse(CreateCourse Course, string orgId);
         Task<ServiceResponse> UpdateCourse(UpdateCourse Course);
         Task<ServiceResponse> DeleteCourse(Guid id);
+        Task<bool> CourseExists(Guid id);
+        Task<bool> IsCourseDeleted(Guid id);
         Task<bool> CanManageCourse(Guid courseId, string userId);
         Task<bool> CanManageSession(Guid sessionId, string userId);
         Task<bool> CanManageAssignment(Guid assignmentId, string userId);

@@ -14,6 +14,7 @@ namespace Domain.Interfaces
         Task<AppUser?> GetUserByEmail(string email);
         Task<bool> LoginUser(AppUser user);
         Task<AppUser?> GetUserById(string userId);
+        Task<bool> CheckPassword(AppUser user, string password);
         Task<IEnumerable<AppUser>> GetAllUsers();
         Task<int> RemoveUser(string email);
         Task<List<Claim>> GetUserClaims(string email);

@@ -1,6 +1,7 @@
 ﻿
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
 using Application.DTOs.Responses;
@@ -14,6 +15,7 @@ namespace Application.Services.Interfaces.Auth
         Task<IEnumerable<GetUser>> GetAllUsers(string? roleName);
         Task<LoginResponse> RegisterUser(RegisterUser user);
         Task<LoginResponse> LoginUser(LoginUser user);
+        Task<bool> VerifyCurrentUserPasswordAsync(ClaimsPrincipal userClaims, string password);
         Task<LoginResponse> ReviveToken(string refreshtoken);
         Task<ServiceResponse> AddRole(string roleName); 
         Task<ServiceResponse> RemoveRole(string roleName);

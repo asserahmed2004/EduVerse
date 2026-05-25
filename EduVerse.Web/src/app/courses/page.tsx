@@ -13,6 +13,7 @@ export default function CoursesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  //
   useEffect(() => {
     courseService.getAll()
       .then(setCourses)

@@ -28,6 +28,9 @@ namespace Application.Services.Implementitions
         {
             if(rating == null || rating.CourseId == Guid.Empty || string.IsNullOrEmpty(userid) || rating.RatingValue < 0 || rating.RatingValue > 5)
                 return new ServiceResponse { success = false, message = "Invalid rating data" };
+            var course = await CoursesManagment.GetByIdAsync(rating.CourseId);
+            if (course == null || course.IsDeleted)
+                return new ServiceResponse { success = false, message = "Course not found" };
             var mappedRating = mapper.Map<Rating>(rating);
             mappedRating.StudentId = userid;
             var existingRating = await RatingManagment.GetAllAsync();
@@ -50,6 +53,7 @@ namespace Application.Services.Implementitions
                 return new ServiceResponse { success = false, message = "Organization user is required" };
             var mapping = mapper.Map<Course>(Course);
             mapping.Duration = 0;
+            mapping.IsDeleted = false;
             mapping.ImageUrl = $"{mapping.Id}-Thumbnail{Path.GetExtension(Course.Image.FileName)}";
             mapping.OrgId = orgId;
             var details =new FileDetails { FileName = mapping.ImageUrl, Folder = "courses" };
@@ -74,7 +78,12 @@ namespace Application.Services.Implementitions
                 var courseCategory = new CourseCategory { CourseId =result.Id , CategoryId = test.Id };
                 await CoursesCatManagment.AddAsync(courseCategory);
             }
-            return new ServiceResponse { success = true, message = "Course created successfully" };
+            return new ServiceResponse
+            {
+                success = true,
+                message = $"Course created successfully. CourseId: {result.Id}",
+                data = result.Id.ToString()
+            };
 
 
         }
@@ -86,20 +95,34 @@ namespace Application.Services.Implementitions
             var course = await CoursesManagment.GetByIdAsync(id);
             if (course == null)
                 return new ServiceResponse { success = false, message = "Course not found" };
-            var result = await CoursesManagment.DeleteAsync(course);
-            if (result == 0)
+            if (course.IsDeleted)
+                return new ServiceResponse { success = false, message = "Course is already deleted" };
+            course.IsDeleted = true;
+            var result = await CoursesManagment.UpdateAsync(course);
+            if (result == null)
                 return new ServiceResponse { success = false, message = "Failed to delete Course" };
-            var fileDetails = new FileDetails { FileName = course.ImageUrl, Folder = "courses" };
-            var cloudResult = await cloud.DeleteFileAsync(fileDetails);
-            if (!cloudResult.success)
-                return new ServiceResponse { success = false, message = "Failed to delete course image from cloud" };
-            var categoryLinks = await CoursesCatManagment.GetAllAsync();
-            var courseCategories = categoryLinks.Where(cc => cc.CourseId == id).ToList();
-            foreach (var courseCategory in courseCategories)
-            {
-                await CoursesCatManagment.DeleteAsync(courseCategory);
-            }
             return new ServiceResponse { success = true, message = "Course deleted successfully" };
+        }
+
+        public async Task<bool> CourseExists(Guid id)
+        {
+            if (id == Guid.Empty)
+            {
+                return false;
+            }
+
+            return await CoursesManagment.GetByIdAsync(id) != null;
+        }
+
+        public async Task<bool> IsCourseDeleted(Guid id)
+        {
+            if (id == Guid.Empty)
+            {
+                return false;
+            }
+
+            var course = await CoursesManagment.GetByIdAsync(id);
+            return course?.IsDeleted == true;
         }
 
         public async Task<bool> CanManageCourse(Guid courseId, string userId)
@@ -110,7 +133,7 @@ namespace Application.Services.Implementitions
             }
 
             var course = await CoursesManagment.GetByIdAsync(courseId);
-            return course != null && course.OrgId == userId;
+            return course != null && !course.IsDeleted && course.OrgId == userId;
         }
 
         public async Task<bool> CanManageSession(Guid sessionId, string userId)
@@ -143,7 +166,7 @@ namespace Application.Services.Implementitions
 
         public async Task<List<GetCourse>> GetAllCourses(string? userid)
         {
-            var courses = await CoursesManagment.GetAllAsync();
+            var courses = (await CoursesManagment.GetAllAsync()).Where(c => !c.IsDeleted).ToList();
             if (courses == null || !courses.Any())
                 return new List<GetCourse>();
             var mappedCourses = mapper.Map<List<GetCourse>>(courses);
@@ -190,7 +213,7 @@ namespace Application.Services.Implementitions
             var categoryLinks = await CoursesCatManagment.GetAllAsync();
             var courseIds = categoryLinks.Where(cl => cl.CategoryId == categoryId).Select(cl => cl.CourseId).ToList();
             var courses = await CoursesManagment.GetAllAsync();
-            var filteredCourses = courses.Where(c => courseIds.Contains(c.Id)).ToList();
+            var filteredCourses = courses.Where(c => !c.IsDeleted && courseIds.Contains(c.Id)).ToList();
             if (filteredCourses == null || !filteredCourses.Any())
                 return new List<GetCourse>();
             var mappedCourses = mapper.Map<List<GetCourse>>(filteredCourses);
@@ -212,7 +235,7 @@ namespace Application.Services.Implementitions
         public async Task<List<GetCourse>> Search(string name,string? userid)
         {
             var courses = await CoursesManagment.GetAllAsync();
-            var filteredCourses = courses.Where(c => c.Name.Contains(name, StringComparison.OrdinalIgnoreCase)).ToList();
+            var filteredCourses = courses.Where(c => !c.IsDeleted && c.Name.Contains(name, StringComparison.OrdinalIgnoreCase)).ToList();
             if (courses == null || !courses.Any())
                 return new List<GetCourse>();
             var mappedCourses = mapper.Map<List<GetCourse>>(filteredCourses);
@@ -259,7 +282,7 @@ namespace Application.Services.Implementitions
         {
             var ratings = await RatingManagment.GetAllAsync();
             var course = await CoursesManagment.GetByIdAsync(id);
-            if (course == null)
+            if (course == null || course.IsDeleted)
                 return null;
             var mappedCourse = mapper.Map<GetCourse>(course);
             var categoryLinks = await CoursesCatManagment.GetAllAsync();
@@ -295,7 +318,7 @@ namespace Application.Services.Implementitions
         public async Task<GetCourse> GetCourseByName(string name, string? userid)
         {
             var courses = await CoursesManagment.GetAllAsync();
-            var course = courses.FirstOrDefault(c => c.Name==name);
+            var course = courses.FirstOrDefault(c => !c.IsDeleted && c.Name==name);
             if (course == null )
                 return null;
             var mappedCourse = mapper.Map<GetCourse>(course);
@@ -336,7 +359,7 @@ namespace Application.Services.Implementitions
             if (id == Guid.Empty || duration <= 0)
                 return new ServiceResponse { success = false, message = "Invalid Course ID or duration" };
             var course= await CoursesManagment.GetByIdAsync(id);
-            if (course == null)
+            if (course == null || course.IsDeleted)
                 return new ServiceResponse { success = false, message = "Course not found" };
             course.Duration += duration;
             var result = await CoursesManagment.UpdateAsync(course);
@@ -350,7 +373,7 @@ namespace Application.Services.Implementitions
             if (Course == null || Course.Id == Guid.Empty)
                 return new ServiceResponse { success = false, message = "Invalid Course data" };
             var existingCourse = await CoursesManagment.GetByIdAsync(Course.Id);
-            if (existingCourse == null)
+            if (existingCourse == null || existingCourse.IsDeleted)
                 return new ServiceResponse { success = false, message = "Course not found" };
             existingCourse.Name = Course.Name;
             existingCourse.Description = Course.Description;
@@ -397,6 +420,9 @@ namespace Application.Services.Implementitions
         {
             if (session == null)
                 return new ServiceResponse { success = false, message = "Invalid session data" };
+            var course = await CoursesManagment.GetByIdAsync(session.CourseId);
+            if (course == null || course.IsDeleted)
+                return new ServiceResponse { success = false, message = "Course not found" };
             var mappedSession = mapper.Map<Session>(session);
             mappedSession.Date= DateTime .Today;
             var duration = GetVideoDuration(session.File);
@@ -515,6 +541,9 @@ namespace Application.Services.Implementitions
         {
             if (courdeid == Guid.Empty)
                 return new List<GetSession>();
+            var course = await CoursesManagment.GetByIdAsync(courdeid);
+            if (course == null || course.IsDeleted)
+                return new List<GetSession>();
             var sessions = await SessionManagment.GetAllAsync();
             if (sessions == null || !sessions.Any())
                 return new List<GetSession>();
@@ -535,6 +564,9 @@ namespace Application.Services.Implementitions
             var targetSession = session.FirstOrDefault(s => s.Id == id);
             if (targetSession == null)
                 return null;
+            var course = await CoursesManagment.GetByIdAsync(targetSession.CourseId);
+            if (course == null || course.IsDeleted)
+                return null;
             var mappedSession = mapper.Map<GetSession>(targetSession);
             return mappedSession;
         }
@@ -548,6 +580,9 @@ namespace Application.Services.Implementitions
                 return null;
             var targetSession = sessions.FirstOrDefault(s => s.CourseId == courseid && s.SessionNumber == sessionnumber);
             if (targetSession == null)
+                return null;
+            var course = await CoursesManagment.GetByIdAsync(targetSession.CourseId);
+            if (course == null || course.IsDeleted)
                 return null;
             var mappedSession = mapper.Map<GetSession>(targetSession);
             return mappedSession;

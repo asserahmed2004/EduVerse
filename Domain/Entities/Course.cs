@@ -17,6 +17,7 @@ namespace Domain.Entities
         public double Price { get; set; }
         public double Duration { get; set; }
         public string ImageUrl { get; set; }
+        public bool IsDeleted { get; set; } = false;
         
         public string OrgId { get; set; }
     }

@@ -3,6 +3,7 @@
     public record ServiceResponse
         (
         bool success = false,
-        string message = null
+        string message = null,
+        object data = null
         );
 }

@@ -25,6 +25,14 @@ namespace InfraStructure.Repositories
             return await userManager.FindByIdAsync(userId);
         }
 
+        public async Task<bool> CheckPassword(AppUser user, string password)
+        {
+            if (user == null || string.IsNullOrWhiteSpace(password))
+                return false;
+
+            return await userManager.CheckPasswordAsync(user, password);
+        }
+
         public async Task<List<Claim>> GetUserClaims(string email)
         {
             var user = await GetUserByEmail(email);

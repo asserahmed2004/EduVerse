@@ -3,6 +3,7 @@ using Application.DTOs.Course;
 using Application.DTOs.Rating;
 using Application.DTOs.Responses;
 using Application.DTOs.Sessions;
+using Application.Services.Interfaces.Auth;
 using Application.Services.Interfaces;
 using API.Authorization;
 using AutoMapper;
@@ -15,7 +16,7 @@ namespace API.Controllers
 {
     [Route("[controller]")]
     [ApiController]
-    public class CourseController(ICourseService courseService,IMapper mapper) : ControllerBase
+    public class CourseController(ICourseService courseService, IAuthServices authServices, IMapper mapper) : ControllerBase
     {
         [HttpPost("Create")]
         [Authorize(Roles = AppRoles.AdminOrInstructor)]
@@ -34,8 +35,35 @@ namespace API.Controllers
         [Authorize(Roles = AppRoles.AdminOrInstructor)]
         public async Task<IActionResult> DeleteCourse(Guid id)
         {
+            return BadRequest(new
+            {
+                success = false,
+                message = "Password is required to delete a course. Use POST /Course/DeleteWithPassword/{id} with a password in the request body."
+            });
+        }
+
+        [HttpPost("DeleteWithPassword/{id}")]
+        [Authorize(Roles = AppRoles.AdminOrInstructor)]
+        public async Task<IActionResult> DeleteCourseWithPassword(Guid id, [FromBody] DeleteCourseRequest request)
+        {
+            if (User?.Identity?.IsAuthenticated != true)
+                return Unauthorized(new { success = false, message = "You must be logged in to delete a course" });
+
+            if (request == null || string.IsNullOrWhiteSpace(request.Password))
+                return BadRequest(new { success = false, message = "Password is required" });
+
+            if (!await courseService.CourseExists(id))
+                return NotFound(new { success = false, message = "Course not found" });
+
+            if (await courseService.IsCourseDeleted(id))
+                return BadRequest(new { success = false, message = "Course is already deleted" });
+
             if (!await CanManageCourse(id))
                 return Forbid();
+
+            var passwordIsValid = await authServices.VerifyCurrentUserPasswordAsync(User, request.Password);
+            if (!passwordIsValid)
+                return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Invalid password" });
 
             var result = await courseService.DeleteCourse(id);
             if (!result.success)

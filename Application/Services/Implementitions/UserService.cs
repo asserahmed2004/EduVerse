@@ -90,6 +90,11 @@ namespace Application.Services.Implementitions
             {
                 return new ServiceResponse(false, "Invalid course ID or user ID.");
             }
+            var course = await Courses.GetByIdAsync(courseId);
+            if (course == null || course.IsDeleted)
+            {
+                return new ServiceResponse(false, "Course not found.");
+            }
             var enrollment = new Enrollment
             {
                 CourseId = courseId,
@@ -128,7 +133,7 @@ namespace Application.Services.Implementitions
         {
             var enrollments = (await Enrollment.GetAllAsync()).Where(e => e.StudentId == userId).ToList();
             var courseIds = enrollments.Select(e => e.CourseId).ToList();
-            var courses = (await Courses.GetAllAsync()).Where(c => courseIds.Contains(c.Id)).ToList();
+            var courses = (await Courses.GetAllAsync()).Where(c => !c.IsDeleted && courseIds.Contains(c.Id)).ToList();
             var enrolledCourses = mapper.Map<IEnumerable<GetCourse>>(courses);
             return enrolledCourses;
         }
@@ -367,7 +372,7 @@ namespace Application.Services.Implementitions
         {
             var course = await Courses.GetByIdAsync(Course);
             var User = await userManagment.GetUserById(userId);
-            if (course == null || User == null)
+            if (course == null || course.IsDeleted || User == null)
             {
                 return null;
             }
