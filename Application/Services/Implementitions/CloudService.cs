@@ -35,7 +35,7 @@ namespace Application.Services.Implementitions
                 await blobClient.DeleteAsync();
                 return new ServiceResponse { success = true, message = "File deleted successfully" };
             }
-            return new ServiceResponse { success = false, message = "File not found" };
+            return new ServiceResponse { success = true, message = "File not found" };
         }
 
         public async Task<GetCloudFile> GetFileAsync(FileDetails details)
