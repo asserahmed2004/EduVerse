@@ -52,6 +52,7 @@ namespace Api.Controllers
 
                 return Ok(new
                 {
+                    Role = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Role)?.Value,
                     Id = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value,
                     email = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value,
                     UserName = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Name)?.Value,
