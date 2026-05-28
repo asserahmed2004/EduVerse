@@ -225,7 +225,7 @@ namespace Application.Services.Implementitions.Auth
             {
                 var details = new FileDetails
                 {
-                    FileName = $"{user.Email}_ProfilrPicture{Path.GetExtension(user.ProfilePicture.FileName)}",
+                    FileName = $"{user.Email}_ProfilrPicture",
                     Folder = "ProfilePicture"
                 };
                 var file = new AddCloudFile
