@@ -6,7 +6,8 @@ import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
 import { useToast } from "@/components/toast-provider";
 import { Badge, EmptyState, LoadingState, PageHeader, StatCard } from "@/components/ui";
-import { studentService } from "@/lib/api";
+import { paymentService, studentService } from "@/lib/api";
+import { getStoredUser } from "@/lib/auth";
 import type { Payment } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
@@ -17,7 +18,12 @@ export default function PaymentsPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    studentService.getPayments()
+    const user = getStoredUser();
+    const loader = user?.role === "Admin"
+      ? paymentService.getAdminTransactions(1, 50).then((data) => data.items ?? [])
+      : studentService.getPayments();
+
+    loader
       .then(setPayments)
       .catch(() => {
         setError("Could not load payments from the API.");
@@ -30,7 +36,7 @@ export default function PaymentsPage() {
 
   return (
     <AppShell>
-      <AuthGuard roles={["Student", "Instructor", "Admin"]}>
+      <AuthGuard roles={["Student", "OrganizationAdmin", "Admin"]}>
         <PageHeader eyebrow="Payments" title="Payment activity" description="Track Paymob requests, payment methods, status, and references." />
 
         <div className="mt-8 grid gap-5 md:grid-cols-3">
@@ -62,7 +68,7 @@ export default function PaymentsPage() {
                 <tbody>
                   {payments.map((payment) => (
                     <tr key={`${payment.courseId}-${payment.merchantOrderId}`} className="border-b border-slate-100 last:border-0">
-                      <td className="px-5 py-4 text-sm font-semibold text-ink">{payment.courseId}</td>
+                      <td className="px-5 py-4 text-sm font-semibold text-ink">{payment.courseName ?? payment.courseId}</td>
                       <td className="px-5 py-4 text-sm text-ink">{formatCurrency(payment.totalPrice)}</td>
                       <td className="px-5 py-4 text-sm capitalize text-muted">{payment.paymentMethod}</td>
                       <td className="px-5 py-4">

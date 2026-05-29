@@ -70,6 +70,26 @@ namespace API.Controllers
                 return BadRequest(result);
             return Ok(result);
         }
+
+        [HttpPost("Restore/{id}")]
+        [Authorize(Roles = AppRoles.Admin)]
+        public async Task<IActionResult> RestoreCourse(Guid id)
+        {
+            var result = await courseService.RestoreCourse(id);
+            if (!result.success)
+                return BadRequest(result);
+            return Ok(result);
+        }
+
+        [HttpGet("GetDeletedCourses")]
+        [Authorize(Roles = AppRoles.Admin)]
+        public async Task<IActionResult> GetDeletedCourses()
+        {
+            var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            var result = await courseService.GetDeletedCourses(userId);
+            return Ok(result);
+        }
+
         [HttpGet("GetAll")]
         public async Task<IActionResult> GetAllCourses()
         {

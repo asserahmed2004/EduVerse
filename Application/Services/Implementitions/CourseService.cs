@@ -22,7 +22,8 @@ namespace Application.Services.Implementitions
 {
     public  class CourseService(IGeneric<Course> CoursesManagment ,
         IGeneric<CourseCategory> CoursesCatManagment,IGeneric<Category> CategoryManagment,
-        IMapper mapper ,ICloudService cloud,IGeneric<Rating> RatingManagment ,IGeneric<Session> SessionManagment,IGeneric<Assignment> AssignmentManagment) : ICourseService
+        IMapper mapper ,ICloudService cloud,IGeneric<Rating> RatingManagment ,IGeneric<Session> SessionManagment,IGeneric<Assignment> AssignmentManagment,
+        IGeneric<Enrollment> EnrollmentManagment, IUserManagment UserManagment) : ICourseService
     {
         public async Task<ServiceResponse> AddRating(CreateRating rating, string userid)
         {
@@ -102,6 +103,26 @@ namespace Application.Services.Implementitions
             if (result == null)
                 return new ServiceResponse { success = false, message = "Failed to delete Course" };
             return new ServiceResponse { success = true, message = "Course deleted successfully" };
+        }
+
+        public async Task<ServiceResponse> RestoreCourse(Guid id)
+        {
+            if (id == Guid.Empty)
+                return new ServiceResponse { success = false, message = "Invalid Course ID" };
+
+            var course = await CoursesManagment.GetByIdAsync(id);
+            if (course == null)
+                return new ServiceResponse { success = false, message = "Course not found" };
+
+            if (!course.IsDeleted)
+                return new ServiceResponse { success = false, message = "Course is not deleted" };
+
+            course.IsDeleted = false;
+            var result = await CoursesManagment.UpdateAsync(course);
+            if (result == null)
+                return new ServiceResponse { success = false, message = "Failed to restore Course" };
+
+            return new ServiceResponse { success = true, message = "Course restored successfully" };
         }
 
         public async Task<bool> CourseExists(Guid id)
@@ -208,6 +229,18 @@ namespace Application.Services.Implementitions
                     
                 }
             
+            await EnrichCourses(mappedCourses, userid);
+            return mappedCourses;
+        }
+
+        public async Task<List<GetCourse>> GetDeletedCourses(string? userid)
+        {
+            var courses = (await CoursesManagment.GetAllAsync()).Where(c => c.IsDeleted).ToList();
+            if (courses == null || !courses.Any())
+                return new List<GetCourse>();
+
+            var mappedCourses = mapper.Map<List<GetCourse>>(courses);
+            await EnrichCourses(mappedCourses, userid);
             return mappedCourses;
         }
         public async Task<List<GetCourse>> GetCourseByCategory(Guid categoryId, string? userid)
@@ -232,6 +265,7 @@ namespace Application.Services.Implementitions
                     course.UserRating = courseRatings.FirstOrDefault(r => r.StudentId == userid)?.RatingValue ?? 0;
                 }
             }
+            await EnrichCourses(mappedCourses, userid);
             return mappedCourses;
         }
         public async Task<List<GetCourse>> Search(string name,string? userid)
@@ -277,7 +311,40 @@ namespace Application.Services.Implementitions
 
             }
 
+            await EnrichCourses(mappedCourses, userid);
             return mappedCourses;
+        }
+
+        private async Task EnrichCourses(List<GetCourse> mappedCourses, string? userid)
+        {
+            if (mappedCourses == null || mappedCourses.Count == 0)
+            {
+                return;
+            }
+
+            var courseIds = mappedCourses.Select(c => c.Id).ToHashSet();
+            var sessions = (await SessionManagment.GetAllAsync())
+                .Where(s => courseIds.Contains(s.CourseId))
+                .ToList();
+            var enrollments = (await EnrollmentManagment.GetAllAsync())
+                .Where(e => courseIds.Contains(e.CourseId))
+                .ToList();
+
+            foreach (var course in mappedCourses)
+            {
+                var courseSessions = sessions.Where(s => s.CourseId == course.Id).ToList();
+                course.SessionsCount = courseSessions.Count;
+                course.StudentsCount = enrollments.Where(e => e.CourseId == course.Id).Select(e => e.StudentId).Distinct().Count();
+                course.Category = course.Categories?.FirstOrDefault()?.Name;
+                course.IsDeleted = course.IsDeleted;
+
+                var trainerId = courseSessions.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.TrainerId))?.TrainerId;
+                if (!string.IsNullOrWhiteSpace(trainerId))
+                {
+                    var trainer = await UserManagment.GetUserById(trainerId);
+                    course.InstructorName = trainer?.FullName;
+                }
+            }
         }
 
         public async Task<GetCourse> GetCourseById(Guid id, string? userid)
@@ -313,6 +380,7 @@ namespace Application.Services.Implementitions
             {
                 mappedCourse.UserRating = courseRatings.FirstOrDefault(r => r.StudentId == userid)?.RatingValue ?? 0;
             }
+            await EnrichCourses(new List<GetCourse> { mappedCourse }, userid);
             return mappedCourse;
 
         }
@@ -352,6 +420,7 @@ namespace Application.Services.Implementitions
                 mappedCourse.UserRating = courseRatings.FirstOrDefault(r => r.StudentId == userid)?.RatingValue ?? 0;
             }
 
+            await EnrichCourses(new List<GetCourse> { mappedCourse }, userid);
 
             return mappedCourse;
         }

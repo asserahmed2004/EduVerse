@@ -1,6 +1,6 @@
 import axios from "axios";
 import { clearAuth, getCurrentUserId, getRoleFromToken, getToken, getUserIdFromToken, inferRole, setStoredUser, setToken } from "./auth";
-import type { AuthUser, Certificate, Course, CourseSession, LoginPayload, ManagedUser, Payment, RegisterPayload, ServiceResult } from "./types";
+import type { AuthUser, Certificate, Course, CourseSession, DashboardStats, LoginPayload, ManagedUser, Payment, RegisterPayload, ServiceResult } from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5153";
 
@@ -42,7 +42,12 @@ function normalizeCourse(course: any): Course {
     userRating: course.userRating ?? course.UserRating ?? 0,
     orgId: course.orgId ?? course.OrgId,
     imageUrl: normalizeImageUrl(course.imageUrl ?? course.ImageUrl),
-    categories: course.categories ?? course.Categories ?? []
+    categories: course.categories ?? course.Categories ?? [],
+    category: course.category ?? course.Category ?? course.categories?.[0]?.name ?? course.Categories?.[0]?.Name,
+    instructorName: course.instructorName ?? course.InstructorName,
+    studentsCount: course.studentsCount ?? course.StudentsCount ?? 0,
+    sessionsCount: course.sessionsCount ?? course.SessionsCount ?? 0,
+    isDeleted: course.isDeleted ?? course.IsDeleted ?? false
   };
 }
 
@@ -72,7 +77,33 @@ function normalizePayment(payment: any): Payment {
     merchantOrderId: payment.merchantOrderId ?? payment.MerchantOrderId,
     providerIntentionId: payment.providerIntentionId ?? payment.ProviderIntentionId,
     redirectUrl: payment.redirectUrl ?? payment.RedirectUrl,
-    providerStatusCode: payment.providerStatusCode ?? payment.ProviderStatusCode
+    providerStatusCode: payment.providerStatusCode ?? payment.ProviderStatusCode,
+    courseName: payment.courseName ?? payment.CourseName,
+    studentName: payment.studentName ?? payment.StudentName,
+    studentEmail: payment.studentEmail ?? payment.StudentEmail
+  };
+}
+
+function unwrapData(data: any) {
+  return data?.data ?? data?.Data ?? data;
+}
+
+function normalizeStats(data: any): DashboardStats {
+  const value = unwrapData(data);
+  return {
+    totalUsers: value.totalUsers ?? value.TotalUsers,
+    totalOrganizations: value.totalOrganizations ?? value.TotalOrganizations,
+    totalCourses: value.totalCourses ?? value.TotalCourses ?? 0,
+    deletedCourses: value.deletedCourses ?? value.DeletedCourses ?? 0,
+    totalRevenue: value.totalRevenue ?? value.TotalRevenue ?? 0,
+    totalPayments: value.totalPayments ?? value.TotalPayments ?? 0,
+    totalStudents: value.totalStudents ?? value.TotalStudents ?? 0,
+    totalInstructors: value.totalInstructors ?? value.TotalInstructors ?? 0,
+    totalEnrollments: value.totalEnrollments ?? value.TotalEnrollments ?? 0,
+    totalSessions: value.totalSessions ?? value.TotalSessions ?? 0,
+    totalAssignments: value.totalAssignments ?? value.TotalAssignments ?? 0,
+    pendingPayments: value.pendingPayments ?? value.PendingPayments ?? 0,
+    averageRating: value.averageRating ?? value.AverageRating ?? 0
   };
 }
 
@@ -181,7 +212,7 @@ export const authService = {
   async register(payload: RegisterPayload) {
     const formData = new FormData();
     Object.entries(payload).forEach(([key, value]) => {
-      if (value) formData.append(key, String(value));
+      if (value) formData.append(key, key === "role" && value === "OrganizationAdmin" ? "organizationAdmin" : String(value));
     });
 
     const response = await api.post("/Auth/Register", formData);
@@ -216,6 +247,16 @@ export const courseService = {
     return ownedCourses;
   },
 
+  async getDeleted() {
+    const response = await api.get("/Course/GetDeletedCourses");
+    return (response.data as any[]).map(normalizeCourse);
+  },
+
+  async restore(id: string): Promise<ServiceResult> {
+    const response = await api.post(`/Course/Restore/${id}`);
+    return ensureSuccessfulResult(response.data, "Course restore failed.");
+  },
+
   async getById(id: string) {
     const response = await api.get(`/Course/GetById/${id}`);
     return normalizeCourse(response.data);
@@ -242,7 +283,9 @@ export const courseService = {
   },
 
   async delete(id: string): Promise<ServiceResult> {
-    const response = await api.delete(`/Course/Delete/${id}`);
+    const password = window.prompt("Enter your password to delete this course");
+    if (!password) throw new Error("Password is required.");
+    const response = await api.post(`/Course/DeleteWithPassword/${id}`, { password });
     return ensureSuccessfulResult(response.data, "Course delete failed.");
   },
 
@@ -300,6 +343,29 @@ export const instructorService = {
   async getEnrolledUsers(courseId: string) {
     const response = await api.get(`/User/enrolledusers/${courseId}`);
     return response.data;
+  }
+};
+
+export const dashboardService = {
+  async getOrganizationOverview() {
+    const response = await api.get("/Dashboard/OrganizationOverview");
+    return normalizeStats(response.data);
+  }
+};
+
+export const paymentService = {
+  async getAdminSummary() {
+    const response = await api.get("/Payment/AdminSummary");
+    return unwrapData(response.data);
+  },
+
+  async getAdminTransactions(page = 1, pageSize = 20) {
+    const response = await api.get(`/Payment/AdminTransactions?page=${page}&pageSize=${pageSize}`);
+    const data = unwrapData(response.data);
+    return {
+      ...data,
+      items: (data.items ?? data.Items ?? []).map(normalizePayment)
+    };
   }
 };
 

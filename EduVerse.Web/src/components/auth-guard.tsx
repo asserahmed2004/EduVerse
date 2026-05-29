@@ -20,7 +20,7 @@ export function AuthGuard({ children, roles }: { children: React.ReactNode; role
     }
 
     if (roles?.length && user && !roles.includes(user.role)) {
-      router.replace(user.role === "Admin" ? "/admin" : user.role === "Instructor" ? "/dashboard/instructor" : "/dashboard/student");
+      router.replace(user.role === "Admin" ? "/admin" : user.role === "OrganizationAdmin" ? "/instructor/courses" : user.role === "Instructor" ? "/dashboard/instructor" : "/dashboard/student");
       return;
     }
 

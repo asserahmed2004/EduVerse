@@ -127,8 +127,8 @@ export default function InstructorCoursesPage() {
 
   return (
     <AppShell>
-      <AuthGuard roles={["Instructor", "Admin"]}>
-        <PageHeader eyebrow="Instructor tools" title="Course management" description="Create courses, review catalog data, and manage course ownership without changing backend contracts." />
+      <AuthGuard roles={["OrganizationAdmin", "Admin"]}>
+        <PageHeader eyebrow="Organization tools" title="Course management" description="Create, review, and soft-delete courses owned by your organization." />
 
         <div className="mt-8 grid gap-5 md:grid-cols-3">
           <StatCard label="Courses" value={`${courses.length}`} icon={BookOpen} />

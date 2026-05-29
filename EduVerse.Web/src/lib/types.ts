@@ -1,4 +1,4 @@
-export type UserRole = "Student" | "Instructor" | "Admin";
+export type UserRole = "Student" | "Instructor" | "OrganizationAdmin" | "Admin";
 
 export type CourseCategory = {
   id?: string;
@@ -18,6 +18,11 @@ export type Course = {
   orgId?: string;
   imageUrl?: string;
   categories?: CourseCategory[];
+  category?: string;
+  instructorName?: string;
+  studentsCount?: number;
+  sessionsCount?: number;
+  isDeleted?: boolean;
   level?: string;
   students?: number;
 };
@@ -86,6 +91,25 @@ export type Payment = {
   providerIntentionId?: string;
   redirectUrl?: string;
   providerStatusCode?: number;
+  courseName?: string;
+  studentName?: string;
+  studentEmail?: string;
+};
+
+export type DashboardStats = {
+  totalUsers?: number;
+  totalOrganizations?: number;
+  totalCourses: number;
+  deletedCourses: number;
+  totalRevenue: number;
+  totalPayments: number;
+  totalStudents: number;
+  totalInstructors: number;
+  totalEnrollments?: number;
+  totalSessions?: number;
+  totalAssignments?: number;
+  pendingPayments?: number;
+  averageRating?: number;
 };
 
 export type Enrollment = {

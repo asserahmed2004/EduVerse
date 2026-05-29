@@ -117,18 +117,23 @@ export function CourseCard({ course, compact = false }: { course: Course; compac
           </div>
         )}
         <div className="absolute left-4 top-4">
-          <Badge tone="amber">{course.level ?? "Featured"}</Badge>
+          <Badge tone="amber">{course.category ?? course.categories?.[0]?.name ?? course.level ?? "Course"}</Badge>
         </div>
       </div>
       <div className="p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase text-teal-600">{course.name}</p>
+            <p className="text-xs font-semibold uppercase text-teal-600">{course.category ?? course.name}</p>
             <h3 className="mt-2 text-lg font-bold leading-snug text-ink">{course.title}</h3>
           </div>
           <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-ink shadow-sm">{course.rating.toFixed(1)}</span>
         </div>
         <p className="mt-3 line-clamp-2 text-sm leading-6 text-muted">{course.description}</p>
+        <div className="mt-4 grid grid-cols-3 gap-2 text-xs font-semibold text-muted">
+          <span>{course.instructorName ?? "No instructor"}</span>
+          <span>{course.studentsCount ?? course.students ?? 0} students</span>
+          <span>{course.sessionsCount ?? 0} sessions</span>
+        </div>
         <div className="mt-5 flex items-center justify-between">
           <p className="font-bold text-ink">{formatCurrency(course.price)}</p>
           <span className="inline-flex items-center gap-1 text-sm font-semibold text-teal-600">

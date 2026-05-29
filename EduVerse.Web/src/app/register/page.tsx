@@ -44,7 +44,7 @@ export default function RegisterPage() {
       <form onSubmit={onSubmit} className="w-full max-w-3xl rounded-xl2 bg-white p-6 shadow-soft ring-1 ring-slate-100 sm:p-10">
         <p className="text-sm font-semibold text-teal-600">Create account</p>
         <h1 className="mt-2 text-3xl font-bold text-ink">Join EduVerse</h1>
-        <p className="mt-3 text-sm text-muted">Register as a student or instructor. Admin accounts can be managed from backend roles.</p>
+        <p className="mt-3 text-sm text-muted">Register as a student, instructor, or organization admin. Platform admin accounts are managed from backend roles.</p>
 
         {message && <div className="mt-6 rounded-xl bg-amber-100 px-4 py-3 text-sm font-semibold text-amber-500">{message}</div>}
 
@@ -73,8 +73,8 @@ export default function RegisterPage() {
 
         <div className="mt-6">
           <p className="text-sm font-semibold text-ink">Role</p>
-          <div className="mt-2 grid grid-cols-2 gap-3 rounded-xl bg-slate-100 p-1">
-            {(["Student", "Instructor"] as UserRole[]).map((item) => (
+          <div className="mt-2 grid grid-cols-3 gap-3 rounded-xl bg-slate-100 p-1">
+            {(["Student", "Instructor", "OrganizationAdmin"] as UserRole[]).map((item) => (
               <button
                 key={item}
                 type="button"

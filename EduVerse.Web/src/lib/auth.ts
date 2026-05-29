@@ -36,6 +36,7 @@ export function setStoredUser(user: AuthUser) {
 export function inferRole(value?: string): UserRole {
   const normalized = value?.toLowerCase();
   if (normalized === "admin") return "Admin";
+  if (normalized === "organizationadmin" || normalized === "organization_admin") return "OrganizationAdmin";
   if (normalized === "instructor") return "Instructor";
   return "Student";
 }

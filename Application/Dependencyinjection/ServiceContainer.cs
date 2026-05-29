@@ -28,6 +28,7 @@ namespace Application.Dependencyinjection
             services.AddScoped<ICategoryService, CategoryService>();
             services.AddScoped<ICourseService, CourseService>();
             services.AddScoped<IDashboardService, DashboardService>();
+            services.AddScoped<IPaymentService, PaymentService>();
             services.AddScoped<IUserService, UserService>();
 
             services.AddFluentValidationAutoValidation();

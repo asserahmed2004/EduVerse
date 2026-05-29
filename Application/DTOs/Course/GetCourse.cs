@@ -20,6 +20,11 @@ namespace Application.DTOs.Course
         public string OrgId { get; set; }
         public string ImageUrl { get; set; }
         public List<GetCategory> Categories { get; set; }
+        public string? Category { get; set; }
+        public string? InstructorName { get; set; }
+        public int StudentsCount { get; set; }
+        public int SessionsCount { get; set; }
+        public bool IsDeleted { get; set; }
 
 
 

@@ -1,15 +1,16 @@
 "use client";
 
-import { ShieldCheck, UserPlus, Users } from "lucide-react";
+import { BookOpen, CreditCard, ShieldCheck, Trash2, UserPlus, Users, Wallet } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
 import { useToast } from "@/components/toast-provider";
 import { Badge, Button, EmptyState, LoadingState, PageHeader, StatCard } from "@/components/ui";
-import { adminService } from "@/lib/api";
-import type { ManagedUser, UserRole } from "@/lib/types";
+import { adminService, courseService, dashboardService, paymentService } from "@/lib/api";
+import type { Course, DashboardStats, ManagedUser, Payment, UserRole } from "@/lib/types";
+import { formatCurrency, formatDate } from "@/lib/utils";
 
-const roles: UserRole[] = ["Student", "Instructor", "Admin"];
+const roles: UserRole[] = ["Student", "Instructor", "OrganizationAdmin", "Admin"];
 
 export default function AdminPage() {
   const { showToast } = useToast();
@@ -17,6 +18,9 @@ export default function AdminPage() {
   const [roleFilter, setRoleFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [topCourses, setTopCourses] = useState<Course[]>([]);
 
   async function loadUsers(role = roleFilter) {
     setLoading(true);
@@ -24,6 +28,18 @@ export default function AdminPage() {
     try {
       const data = await adminService.getUsers(role || undefined);
       setUsers(data);
+      const [statsData, paymentData, courseData] = await Promise.all([
+        dashboardService.getOrganizationOverview(),
+        paymentService.getAdminTransactions(1, 5),
+        courseService.getAll()
+      ]);
+      setStats({
+        ...statsData,
+        totalUsers: data.length,
+        totalOrganizations: data.filter((user) => user.role === "OrganizationAdmin").length
+      });
+      setPayments(paymentData.items ?? []);
+      setTopCourses([...courseData].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0)).slice(0, 5));
     } catch {
       setUsers([]);
       setError("Could not load users from the API.");
@@ -68,11 +84,47 @@ export default function AdminPage() {
       <AuthGuard roles={["Admin"]}>
         <PageHeader eyebrow="Admin" title="Platform management" description="Manage roles and users while keeping the backend authorization model intact." />
 
-        <div className="mt-8 grid gap-5 md:grid-cols-3">
-          <StatCard label="Users" value={`${users.length}`} icon={Users} />
-          <StatCard label="Roles in users" value={`${new Set(users.map((user) => user.role)).size}`} icon={ShieldCheck} accent="amber" />
-          <StatCard label="Admin tools" value={error ? "No data yet" : `${users.length}`} icon={UserPlus} accent="coral" />
+        <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+          <StatCard label="Total users" value={`${stats?.totalUsers ?? users.length}`} icon={Users} />
+          <StatCard label="Organizations" value={`${stats?.totalOrganizations ?? 0}`} icon={ShieldCheck} accent="amber" />
+          <StatCard label="Total courses" value={`${stats?.totalCourses ?? 0}`} icon={BookOpen} />
+          <StatCard label="Deleted courses" value={`${stats?.deletedCourses ?? 0}`} icon={Trash2} accent="coral" />
+          <StatCard label="Total revenue" value={formatCurrency(stats?.totalRevenue ?? 0)} icon={Wallet} />
+          <StatCard label="Total payments" value={`${stats?.totalPayments ?? 0}`} icon={CreditCard} accent="amber" />
+          <StatCard label="Students" value={`${stats?.totalStudents ?? 0}`} icon={Users} />
+          <StatCard label="Instructors" value={`${stats?.totalInstructors ?? 0}`} icon={UserPlus} accent="coral" />
         </div>
+
+        <section className="mt-8 grid gap-6 xl:grid-cols-2">
+          <div className="rounded-xl2 bg-white p-6 shadow-soft ring-1 ring-slate-100">
+            <h2 className="text-xl font-bold text-ink">Recent payments</h2>
+            <div className="mt-4 space-y-3">
+              {payments.length === 0 ? <p className="text-sm text-muted">No data yet</p> : payments.map((payment) => (
+                <div key={`${payment.courseId}-${payment.studentId}-${payment.submittingDate}`} className="flex items-center justify-between rounded-xl bg-slate-50 p-4">
+                  <div>
+                    <p className="font-semibold text-ink">{payment.courseName ?? payment.courseId}</p>
+                    <p className="text-xs text-muted">{payment.studentEmail ?? payment.studentId} - {formatDate(payment.submittingDate)}</p>
+                  </div>
+                  <p className="font-bold text-ink">{formatCurrency(payment.totalPrice)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-xl2 bg-white p-6 shadow-soft ring-1 ring-slate-100">
+            <h2 className="text-xl font-bold text-ink">Top courses</h2>
+            <div className="mt-4 space-y-3">
+              {topCourses.length === 0 ? <p className="text-sm text-muted">No data yet</p> : topCourses.map((course) => (
+                <div key={course.id} className="flex items-center justify-between rounded-xl bg-slate-50 p-4">
+                  <div>
+                    <p className="font-semibold text-ink">{course.title}</p>
+                    <p className="text-xs text-muted">{course.studentsCount ?? 0} students - {course.sessionsCount ?? 0} sessions</p>
+                  </div>
+                  <Badge>{course.rating.toFixed(1)}</Badge>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
 
         <section className="mt-8 grid gap-8 xl:grid-cols-[360px_1fr]">
           <div className="space-y-6">

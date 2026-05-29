@@ -14,6 +14,18 @@ namespace API.Controllers
         [Authorize(Roles = AppRoles.AdminOrganizationAdminOrInstructor)]
         public async Task<IActionResult> GetOrganizationStats()
         {
+            return await GetDashboardOverview();
+        }
+
+        [HttpGet("OrganizationOverview")]
+        [Authorize(Roles = AppRoles.AdminOrganizationAdminOrInstructor)]
+        public async Task<IActionResult> GetOrganizationOverview()
+        {
+            return await GetDashboardOverview();
+        }
+
+        private async Task<IActionResult> GetDashboardOverview()
+        {
             if (User?.Identity?.IsAuthenticated != true)
             {
                 return Unauthorized(new { success = false, message = "You must be logged in" });

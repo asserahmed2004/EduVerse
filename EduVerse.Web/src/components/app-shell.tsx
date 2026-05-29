@@ -13,13 +13,14 @@ import { ThemeToggle } from "./theme-toggle";
 const navItems = [
   { href: "/dashboard/student", label: "Student", icon: LayoutDashboard, roles: ["Student"] },
   { href: "/dashboard/instructor", label: "Instructor", icon: Users, roles: ["Instructor", "Admin"] },
-  { href: "/instructor/courses", label: "Manage courses", icon: Settings, roles: ["Instructor", "Admin"] },
+  { href: "/instructor/courses", label: "Manage courses", icon: Settings, roles: ["OrganizationAdmin", "Admin"] },
   { href: "/admin", label: "Admin", icon: ShieldIcon, roles: ["Admin"] },
-  { href: "/courses", label: "Courses", icon: BookOpen, roles: ["Student", "Instructor", "Admin"] },
+  { href: "/admin/deleted-courses", label: "Deleted courses", icon: BookOpen, roles: ["Admin"] },
+  { href: "/courses", label: "Courses", icon: BookOpen, roles: ["Student", "Instructor", "OrganizationAdmin", "Admin"] },
   { href: "/enrollments", label: "Enrollments", icon: GraduationCap, roles: ["Student"] },
   { href: "/certificates", label: "Certificates", icon: Award, roles: ["Student"] },
-  { href: "/payments", label: "Payments", icon: CreditCard, roles: ["Student", "Instructor", "Admin"] },
-  { href: "/profile", label: "Profile", icon: User, roles: ["Student", "Instructor", "Admin"] }
+  { href: "/payments", label: "Payments", icon: CreditCard, roles: ["Student", "OrganizationAdmin", "Admin"] },
+  { href: "/profile", label: "Profile", icon: User, roles: ["Student", "Instructor", "OrganizationAdmin", "Admin"] }
 ];
 
 function ShieldIcon(props: ComponentProps<typeof Settings>) {

@@ -83,9 +83,13 @@ namespace Application.Services.Implementitions
 
             var paidPayments = payments.Where(p =>
                 string.Equals(p.PaymentStatus, "Paid", StringComparison.OrdinalIgnoreCase));
+            var pendingPayments = payments.Count(p =>
+                string.Equals(p.PaymentStatus, "Pending", StringComparison.OrdinalIgnoreCase));
 
             var stats = new OrganizationStatsDto
             {
+                TotalUsers = isAdmin ? (await userManagement.GetAllUsers()).Count() : 0,
+                TotalOrganizations = isAdmin ? await CountUsersInRoleAsync("organizationAdmin") : isOrganizationAdmin ? 1 : 0,
                 TotalCourses = activeCourses.Count,
                 DeletedCourses = deletedCourses,
                 TotalInstructors = totalInstructors,
@@ -94,6 +98,7 @@ namespace Application.Services.Implementitions
                 TotalSessions = sessions.Count,
                 TotalAssignments = assignments.Count,
                 TotalPayments = payments.Count,
+                PendingPayments = pendingPayments,
                 TotalRevenue = paidPayments.Sum(p => p.TotalPrice),
                 AverageRating = ratings.Any() ? Math.Round(ratings.Average(r => r.RatingValue), 2) : 0
             };
