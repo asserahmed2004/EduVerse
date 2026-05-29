@@ -19,10 +19,11 @@ namespace API.Controllers
     public class UserController(IUserService userService) : ControllerBase
     {
         [HttpPost("enroll/{courseId}")]
-        [Authorize(Roles = AppRoles.Student)]
+        [Authorize(Roles = AppRoles.All)]
         public async Task<IActionResult> Enroll(Guid courseId)
         {
-            var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            var claims = User.Claims.ToList();
+            var userId = claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(userId))
             {
                 return Unauthorized("User id was not found in token.");
