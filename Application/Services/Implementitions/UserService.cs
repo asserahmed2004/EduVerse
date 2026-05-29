@@ -154,6 +154,11 @@ namespace Application.Services.Implementitions
             var enrollment = (await Enrollment.GetAllAsync()).FirstOrDefault(e => e.CourseId == courseId && e.StudentId == userId);
             return enrollment;
         }
+        public async Task<IEnumerable<Enrollment>> EnrollmentData()
+        {
+            var enrollments = await Enrollment.GetAllAsync();
+            return enrollments;
+        }
 
 
         public async Task<IEnumerable<string>> GetUserCertificates(string Email)

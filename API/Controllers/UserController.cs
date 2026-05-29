@@ -172,6 +172,17 @@ namespace API.Controllers
             }
             return Ok(enrollment);
         }
+        [HttpGet("enrollmentdata")]
+        [Authorize(Roles = AppRoles.AdminOrganizationAdminOrInstructor)]
+        public async Task<IActionResult> enrollmentdata()
+        {
+            var enrollment = await userService.EnrollmentData();
+            if (enrollment == null)
+            {
+                return NotFound("Enrollment data not found.");
+            }
+            return Ok(enrollment);
+        }
 
         [HttpGet("my-enrollment/{courseId}")]
         [Authorize(Roles = AppRoles.Student)]

@@ -28,6 +28,7 @@ namespace Application.Services.Interfaces
         Task<string> GetCertificateFile(Guid courseId, string userId);
         Task<IEnumerable<string>> GetUserCertificates(string userId);
         Task<Enrollment>GetEnrollmentData(Guid courseId,string userId);
+        Task<IEnumerable<Enrollment>> EnrollmentData();
         Task<ServiceResponse> UpdateProgress(Guid courseId, string userId, double progression);
         Task<ServiceResponse> SubmitAssignment(CreateAssignmentSubmission submission);
         
