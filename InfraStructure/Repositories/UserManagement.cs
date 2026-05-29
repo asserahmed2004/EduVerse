@@ -64,16 +64,20 @@ namespace InfraStructure.Repositories
             return result;
         }
 
-        public async Task<string> RegisterUser(AppUser user)
+        public async Task<IdentityResult> RegisterUser(AppUser user)
         {
             var Exist = await GetUserByEmail(user.Email);
             if (Exist != null)
-                return String.Empty;
-            var result = await userManager.CreateAsync(user, user.PasswordHash);
-            var error = result.Errors.ToString();
-            
+            {
+                return IdentityResult.Failed(new IdentityError
+                {
+                    Code = "DuplicateEmail",
+                    Description = "Email already exists"
+                });
+            }
 
-            return result.Succeeded?"Registered":error;
+            var result = await userManager.CreateAsync(user, user.PasswordHash);
+            return result;
 
         }
         public async Task<bool> UpdateUser(AppUser user)

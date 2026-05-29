@@ -11,7 +11,7 @@ namespace API.Controllers
     public class CloudController(ICloudService cloudService) : ControllerBase
     {
         [HttpPost("Add/{Folder}")]
-        [Authorize(Roles = AppRoles.AdminOrInstructor)]
+        [Authorize(Roles = AppRoles.AdminOrOrganizationAdmin)]
         public async Task<IActionResult> AddPhoto(IFormFile file, string Folder)
         {
             var cloudFile = new Application.DTOs.Cloud.AddCloudFile
@@ -40,7 +40,7 @@ namespace API.Controllers
             return NotFound();
         }
         [HttpDelete("Delete/{Folder}/{FileName}")]
-        [Authorize(Roles = AppRoles.AdminOrInstructor)]
+        [Authorize(Roles = AppRoles.AdminOrOrganizationAdmin)]
         public async Task<IActionResult> DeletePhoto(string FileName, string Folder)
         {
             var details = new Application.DTOs.Cloud.FileDetails

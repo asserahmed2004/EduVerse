@@ -19,7 +19,7 @@ namespace API.Controllers
     public class CourseController(ICourseService courseService, IAuthServices authServices, IMapper mapper) : ControllerBase
     {
         [HttpPost("Create")]
-        [Authorize(Roles = AppRoles.AdminOrInstructor)]
+        [Authorize(Roles = AppRoles.AdminOrOrganizationAdmin)]
         public async Task<IActionResult> CreateCourse([FromForm] CreateCourse Course)
         {
             var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
@@ -32,7 +32,7 @@ namespace API.Controllers
             return Ok(result);
         }
         [HttpDelete("Delete/{id}")]
-        [Authorize(Roles = AppRoles.AdminOrInstructor)]
+        [Authorize(Roles = AppRoles.AdminOrOrganizationAdmin)]
         public async Task<IActionResult> DeleteCourse(Guid id)
         {
             return BadRequest(new
@@ -43,7 +43,7 @@ namespace API.Controllers
         }
 
         [HttpPost("DeleteWithPassword/{id}")]
-        [Authorize(Roles = AppRoles.AdminOrInstructor)]
+        [Authorize(Roles = AppRoles.AdminOrOrganizationAdmin)]
         public async Task<IActionResult> DeleteCourseWithPassword(Guid id, [FromBody] DeleteCourseRequest request)
         {
             if (User?.Identity?.IsAuthenticated != true)
@@ -151,7 +151,7 @@ namespace API.Controllers
             return Ok(result);
         }
         [HttpPut("Update")]
-        [Authorize(Roles = AppRoles.AdminOrInstructor)]
+        [Authorize(Roles = AppRoles.AdminOrOrganizationAdmin)]
         public async Task<IActionResult> UpdateCourse([FromForm] UpdateCourse Course)
         {
             if (!await CanManageCourse(Course.Id))
@@ -181,7 +181,7 @@ namespace API.Controllers
             return Ok(result);
         }
         [HttpPost("AddSession")]
-        [Authorize(Roles = AppRoles.AdminOrInstructor)]
+        [Authorize(Roles = AppRoles.AdminOrOrganizationAdmin)]
         public async Task<IActionResult> AddSession([FromForm]CreateSessionRequest session)
         {
             var sessionEntity = mapper.Map<CreateSession>(session);
@@ -219,7 +219,7 @@ namespace API.Controllers
             return Ok(result);
         }
         [HttpPut("UpdateSession")]
-        [Authorize(Roles = AppRoles.AdminOrInstructor)]
+        [Authorize(Roles = AppRoles.AdminOrganizationAdminOrInstructor)]
         public async Task<IActionResult> UpdateSession([FromForm] UpdateSession session)
         {
             if (!await CanManageSession(session.Id))
@@ -231,7 +231,7 @@ namespace API.Controllers
             return Ok(result);
         }
         [HttpDelete("DeleteSession/{id}")]
-        [Authorize(Roles = AppRoles.AdminOrInstructor)]
+        [Authorize(Roles = AppRoles.AdminOrganizationAdminOrInstructor)]
         public async Task<IActionResult> DeleteSession(Guid id)
         {
             if (!await CanManageSession(id))
@@ -243,7 +243,7 @@ namespace API.Controllers
             return Ok(result);
         }
         [HttpPost("AddAssignment")]
-        [Authorize(Roles = AppRoles.AdminOrInstructor)]
+        [Authorize(Roles = AppRoles.AdminOrganizationAdminOrInstructor)]
         public async Task<IActionResult> AddAssignment([FromForm] CreateAssignment assignment)
         {
             if (!await CanManageSession(assignment.SessionId))
@@ -277,7 +277,7 @@ namespace API.Controllers
             return Ok(result);
         }
         [HttpPut("UpdateAssignment")]
-        [Authorize(Roles = AppRoles.AdminOrInstructor)]
+        [Authorize(Roles = AppRoles.AdminOrganizationAdminOrInstructor)]
         public async Task<IActionResult> UpdateAssignment([FromForm] UpdateAssignment assignment)
         {
             if (!await CanManageAssignment(assignment.Id))
@@ -289,7 +289,7 @@ namespace API.Controllers
             return Ok(result);
         }
         [HttpDelete("DeleteAssignment/{id}")]
-        [Authorize(Roles = AppRoles.AdminOrInstructor)]
+        [Authorize(Roles = AppRoles.AdminOrganizationAdminOrInstructor)]
         public async Task<IActionResult> DeleteAssignment(Guid id)
         {
             if (!await CanManageAssignment(id))
@@ -305,6 +305,9 @@ namespace API.Controllers
         {
             if (User.IsInRole(AppRoles.Admin))
                 return true;
+
+            if (!User.IsInRole(AppRoles.OrganizationAdmin))
+                return false;
 
             var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
             return !string.IsNullOrEmpty(userId) && await courseService.CanManageCourse(courseId, userId);

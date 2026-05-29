@@ -11,7 +11,7 @@ namespace API.Controllers
     public class DashboardController(IDashboardService dashboardService) : ControllerBase
     {
         [HttpGet("OrganizationStats")]
-        [Authorize(Roles = AppRoles.AdminOrInstructor)]
+        [Authorize(Roles = AppRoles.AdminOrganizationAdminOrInstructor)]
         public async Task<IActionResult> GetOrganizationStats()
         {
             if (User?.Identity?.IsAuthenticated != true)
@@ -19,7 +19,9 @@ namespace API.Controllers
                 return Unauthorized(new { success = false, message = "You must be logged in" });
             }
 
-            if (!User.IsInRole(AppRoles.Admin) && !User.IsInRole(AppRoles.Instructor))
+            if (!User.IsInRole(AppRoles.Admin) &&
+                !User.IsInRole(AppRoles.OrganizationAdmin) &&
+                !User.IsInRole(AppRoles.Instructor))
             {
                 return Forbid();
             }
@@ -27,7 +29,11 @@ namespace API.Controllers
             try
             {
                 var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                var result = await dashboardService.GetOrganizationStatsAsync(currentUserId, User.IsInRole(AppRoles.Admin));
+                var result = await dashboardService.GetOrganizationStatsAsync(
+                    currentUserId,
+                    User.IsInRole(AppRoles.Admin),
+                    User.IsInRole(AppRoles.OrganizationAdmin),
+                    User.IsInRole(AppRoles.Instructor));
 
                 if (!result.success)
                 {

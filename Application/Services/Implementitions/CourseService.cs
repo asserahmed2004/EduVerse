@@ -144,7 +144,8 @@ namespace Application.Services.Implementitions
             }
 
             var session = await SessionManagment.GetByIdAsync(sessionId);
-            return session != null && await CanManageCourse(session.CourseId, userId);
+            return session != null &&
+                (session.TrainerId == userId || await CanManageCourse(session.CourseId, userId));
         }
 
         public async Task<bool> CanManageAssignment(Guid assignmentId, string userId)
@@ -161,7 +162,8 @@ namespace Application.Services.Implementitions
             }
 
             var session = await SessionManagment.GetByIdAsync(assignment.SessionId);
-            return session != null && await CanManageCourse(session.CourseId, userId);
+            return session != null &&
+                (session.TrainerId == userId || await CanManageCourse(session.CourseId, userId));
         }
 
         public async Task<List<GetCourse>> GetAllCourses(string? userid)

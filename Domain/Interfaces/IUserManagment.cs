@@ -1,4 +1,5 @@
 ﻿using Domain.Entities;
+using Microsoft.AspNetCore.Identity;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,7 +11,7 @@ namespace Domain.Interfaces
 {
     public interface IUserManagment
     {
-        Task<string> RegisterUser(AppUser user);
+        Task<IdentityResult> RegisterUser(AppUser user);
         Task<AppUser?> GetUserByEmail(string email);
         Task<bool> LoginUser(AppUser user);
         Task<AppUser?> GetUserById(string userId);

@@ -246,11 +246,12 @@ namespace Application.Services.Implementitions.Auth
                 mappedUser.ProfilePicture = details.FileName;
             }
             var isRegistered = await userManagment.RegisterUser(mappedUser);
-            if(isRegistered== "Registered")
+            if(isRegistered.Succeeded)
                 await emailConfirmation.RemoveConfirmation(user.Email);
-            if (isRegistered != "Registered")
+            if (!isRegistered.Succeeded)
             {
-                return new LoginResponse(false, $"Registration failed{isRegistered}");
+                var errors = isRegistered.Errors.Select(e => e.Description).ToList();
+                return new LoginResponse(false, "Registration failed", errors: errors);
             }
             
             var _user = await userManagment.GetUserByEmail(user.Email);

@@ -11,6 +11,7 @@ namespace Application.DTOs.Responses
         bool succeed=false,
         string message=null,
         string token = null,
-        string refreshToken = null
+        string refreshToken = null,
+        IEnumerable<string> errors = null
         );
 }
