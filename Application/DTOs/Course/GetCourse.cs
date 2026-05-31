@@ -22,9 +22,17 @@ namespace Application.DTOs.Course
         public List<GetCategory> Categories { get; set; }
         public string? Category { get; set; }
         public string? InstructorName { get; set; }
+        public string? OrganizationOwnerName { get; set; }
+        public string? OrganizationOwnerEmail { get; set; }
         public int StudentsCount { get; set; }
         public int SessionsCount { get; set; }
         public bool IsDeleted { get; set; }
+        public DateTime? DeletedAt { get; set; }
+        public string? DeletedById { get; set; }
+        public string? DeletedByName { get; set; }
+        public DateTime? RestoredAt { get; set; }
+        public string? RestoredById { get; set; }
+        public string? RestoredByName { get; set; }
 
 
 

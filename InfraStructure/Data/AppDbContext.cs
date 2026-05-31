@@ -96,6 +96,7 @@ namespace InfraStructure.Data
         public DbSet<Session> Sessions { get; set; }
         public DbSet<RefreshToken> RefreshTokens { get; set; }
         public DbSet<EmailConfirmation> EmailConfirmations { get; set; }
+        public DbSet<ActivityLog> ActivityLogs { get; set; }
         
         
         }

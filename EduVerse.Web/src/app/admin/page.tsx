@@ -1,205 +1,231 @@
 "use client";
 
-import { BookOpen, CreditCard, ShieldCheck, Trash2, UserPlus, Users, Wallet } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
+import { Activity, Award, BookOpen, CreditCard, FileText, GraduationCap, ShieldCheck, Star, Trash2, Users, Wallet } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
-import { useToast } from "@/components/toast-provider";
-import { Badge, Button, EmptyState, LoadingState, PageHeader, StatCard } from "@/components/ui";
-import { adminService, courseService, dashboardService, paymentService } from "@/lib/api";
-import type { Course, DashboardStats, ManagedUser, Payment, UserRole } from "@/lib/types";
+import { EmptyState, LoadingState, PageHeader, StatCard } from "@/components/ui";
+import { dashboardService } from "@/lib/api";
+import type { DashboardStats, Payment, RecentActivity, RecentCourse, RecentEnrollment, TopCourse, TopInstructor, TopOrganization } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
-const roles: UserRole[] = ["Student", "Instructor", "OrganizationAdmin", "Admin"];
-
 export default function AdminPage() {
-  const { showToast } = useToast();
-  const [users, setUsers] = useState<ManagedUser[]>([]);
-  const [roleFilter, setRoleFilter] = useState("");
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [recentEnrollments, setRecentEnrollments] = useState<RecentEnrollment[]>([]);
+  const [recentPayments, setRecentPayments] = useState<Payment[]>([]);
+  const [recentCourses, setRecentCourses] = useState<RecentCourse[]>([]);
+  const [topCourses, setTopCourses] = useState<TopCourse[]>([]);
+  const [topOrganizations, setTopOrganizations] = useState<TopOrganization[]>([]);
+  const [topInstructors, setTopInstructors] = useState<TopInstructor[]>([]);
+  const [activities, setActivities] = useState<RecentActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [topCourses, setTopCourses] = useState<Course[]>([]);
-
-  async function loadUsers(role = roleFilter) {
-    setLoading(true);
-    setError("");
-    try {
-      const data = await adminService.getUsers(role || undefined);
-      setUsers(data);
-      const [statsData, paymentData, courseData] = await Promise.all([
-        dashboardService.getOrganizationOverview(),
-        paymentService.getAdminTransactions(1, 5),
-        courseService.getAll()
-      ]);
-      setStats({
-        ...statsData,
-        totalUsers: data.length,
-        totalOrganizations: data.filter((user) => user.role === "OrganizationAdmin").length
-      });
-      setPayments(paymentData.items ?? []);
-      setTopCourses([...courseData].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0)).slice(0, 5));
-    } catch {
-      setUsers([]);
-      setError("Could not load users from the API.");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const [detailTitle, setDetailTitle] = useState("");
+  const [detailRows, setDetailRows] = useState<{ title: string; meta: string; value?: string }[]>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   useEffect(() => {
-    loadUsers("");
+    Promise.all([
+      dashboardService.getOrganizationOverview(),
+      dashboardService.getRecentEnrollments(),
+      dashboardService.getRecentPayments(),
+      dashboardService.getRecentCourses(),
+      dashboardService.getTopCourses(),
+      dashboardService.getTopOrganizations(),
+      dashboardService.getTopInstructors(),
+      dashboardService.getRecentActivities()
+    ])
+      .then(([statsData, enrollmentsData, paymentsData, coursesData, topCoursesData, topOrganizationsData, topInstructorsData, activitiesData]) => {
+        setStats(statsData);
+        setRecentEnrollments(enrollmentsData);
+        setRecentPayments(paymentsData);
+        setRecentCourses(coursesData);
+        setTopCourses(topCoursesData);
+        setTopOrganizations(topOrganizationsData);
+        setTopInstructors(topInstructorsData);
+        setActivities(activitiesData);
+      })
+      .catch(() => setError("Could not load admin dashboard data from the API."))
+      .finally(() => setLoading(false));
   }, []);
 
-  async function addRole(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const role = String(new FormData(event.currentTarget).get("role"));
+  async function openDetail(kind: "students" | "instructors" | "enrollments" | "sessions" | "assignments" | "rating") {
+    setDetailTitle(kind[0].toUpperCase() + kind.slice(1));
+    setDetailRows([]);
+    setDetailLoading(true);
     try {
-      await adminService.addRole(role);
-      showToast({ title: "Role added", message: `${role} is now available.`, tone: "success" });
-      event.currentTarget.reset();
-    } catch {
-      showToast({ title: "Role action failed", message: "The role may already exist or your token is not Admin.", tone: "error" });
-    }
-  }
-
-  async function assignRole(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const userId = String(form.get("userId"));
-    const role = String(form.get("role"));
-    try {
-      await adminService.addUserToRole(userId, role);
-      showToast({ title: "User role updated", message: `${userId} assigned to ${role}.`, tone: "success" });
-      event.currentTarget.reset();
-      await loadUsers();
-    } catch {
-      showToast({ title: "Assign role failed", message: "Check user id, role name, and Admin permissions.", tone: "error" });
+      if (kind === "students") {
+        const rows = await dashboardService.getAdminStudents();
+        setDetailRows(rows.map((item) => ({ title: item.fullName || item.email, meta: item.email, value: item.enrollmentsCount ? `${item.enrollmentsCount} enrollments` : item.role })));
+      } else if (kind === "instructors") {
+        const rows = await dashboardService.getAdminInstructors();
+        setDetailRows(rows.map((item) => ({ title: item.fullName || item.email, meta: item.email, value: item.sessionsCount ? `${item.sessionsCount} sessions` : item.role })));
+      } else if (kind === "enrollments") {
+        setDetailRows(recentEnrollments.map((item) => ({ title: item.studentName || item.studentEmail || item.studentId, meta: item.courseName, value: formatDate(item.enrollmentDate) })));
+      } else if (kind === "sessions") {
+        const rows = await dashboardService.getRecentSessions();
+        setDetailRows(rows.map((item) => ({ title: item.title, meta: `${item.courseName} - ${item.instructorName || "Unassigned"}`, value: `#${item.sessionNumber}` })));
+      } else if (kind === "assignments") {
+        const rows = await dashboardService.getRecentAssignments();
+        setDetailRows(rows.map((item) => ({ title: item.subject, meta: item.courseName || item.description, value: "Assignment" })));
+      } else {
+        const rows = await dashboardService.getTopRatedCourses();
+        setDetailRows(rows.map((item) => ({ title: item.title || item.courseName, meta: `${item.studentsCount} students`, value: item.averageRating.toFixed(1) })));
+      }
+    } finally {
+      setDetailLoading(false);
     }
   }
 
   return (
     <AppShell>
       <AuthGuard roles={["Admin"]}>
-        <PageHeader eyebrow="Admin" title="Platform management" description="Manage roles and users while keeping the backend authorization model intact." />
+        <PageHeader eyebrow="Admin control center" title="Platform overview" description="A global view of EduVerse users, organizations, courses, payments, and learning activity." />
 
         <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Total users" value={`${stats?.totalUsers ?? users.length}`} icon={Users} />
-          <StatCard label="Organizations" value={`${stats?.totalOrganizations ?? 0}`} icon={ShieldCheck} accent="amber" />
-          <StatCard label="Total courses" value={`${stats?.totalCourses ?? 0}`} icon={BookOpen} />
-          <StatCard label="Deleted courses" value={`${stats?.deletedCourses ?? 0}`} icon={Trash2} accent="coral" />
-          <StatCard label="Total revenue" value={formatCurrency(stats?.totalRevenue ?? 0)} icon={Wallet} />
-          <StatCard label="Total payments" value={`${stats?.totalPayments ?? 0}`} icon={CreditCard} accent="amber" />
-          <StatCard label="Students" value={`${stats?.totalStudents ?? 0}`} icon={Users} />
-          <StatCard label="Instructors" value={`${stats?.totalInstructors ?? 0}`} icon={UserPlus} accent="coral" />
+          <LinkedStat href="/admin/users"><StatCard label="Total users" value={`${stats?.totalUsers ?? 0}`} icon={Users} /></LinkedStat>
+          <LinkedStat href="/organizations"><StatCard label="Total organizations" value={`${stats?.totalOrganizations ?? 0}`} icon={ShieldCheck} accent="amber" /></LinkedStat>
+          <LinkedStat href="/courses"><StatCard label="Total courses" value={`${stats?.totalCourses ?? 0}`} icon={BookOpen} /></LinkedStat>
+          <LinkedStat href="/admin/deleted-courses"><StatCard label="Deleted courses" value={`${stats?.deletedCourses ?? 0}`} icon={Trash2} accent="coral" /></LinkedStat>
+          <LinkedStat href="/payments"><StatCard label="Total revenue" value={formatCurrency(stats?.totalRevenue ?? 0)} icon={Wallet} /></LinkedStat>
+          <LinkedStat href="/payments"><StatCard label="Total payments" value={`${stats?.totalPayments ?? 0}`} icon={CreditCard} accent="amber" /></LinkedStat>
+          <DetailStat onClick={() => openDetail("students")}><StatCard label="Total students" value={`${stats?.totalStudents ?? 0}`} icon={GraduationCap} /></DetailStat>
+          <DetailStat onClick={() => openDetail("instructors")}><StatCard label="Total instructors" value={`${stats?.totalInstructors ?? 0}`} icon={Users} accent="coral" /></DetailStat>
+          <DetailStat onClick={() => openDetail("enrollments")}><StatCard label="Total enrollments" value={`${stats?.totalEnrollments ?? 0}`} icon={Award} /></DetailStat>
+          <DetailStat onClick={() => openDetail("sessions")}><StatCard label="Total sessions" value={`${stats?.totalSessions ?? 0}`} icon={BookOpen} accent="amber" /></DetailStat>
+          <DetailStat onClick={() => openDetail("assignments")}><StatCard label="Total assignments" value={`${stats?.totalAssignments ?? 0}`} icon={FileText} /></DetailStat>
+          <DetailStat onClick={() => openDetail("rating")}><StatCard label="Average rating" value={`${(stats?.averageRating ?? 0).toFixed(1)}`} icon={Star} accent="coral" /></DetailStat>
         </div>
 
-        <section className="mt-8 grid gap-6 xl:grid-cols-2">
-          <div className="rounded-xl2 bg-white p-6 shadow-soft ring-1 ring-slate-100">
-            <h2 className="text-xl font-bold text-ink">Recent payments</h2>
-            <div className="mt-4 space-y-3">
-              {payments.length === 0 ? <p className="text-sm text-muted">No data yet</p> : payments.map((payment) => (
-                <div key={`${payment.courseId}-${payment.studentId}-${payment.submittingDate}`} className="flex items-center justify-between rounded-xl bg-slate-50 p-4">
-                  <div>
-                    <p className="font-semibold text-ink">{payment.courseName ?? payment.courseId}</p>
-                    <p className="text-xs text-muted">{payment.studentEmail ?? payment.studentId} - {formatDate(payment.submittingDate)}</p>
+        {loading ? (
+          <div className="mt-8">
+            <LoadingState label="Loading admin activity" />
+          </div>
+        ) : error ? (
+          <div className="mt-8">
+            <EmptyState title="Admin data unavailable" description={error} />
+          </div>
+        ) : (
+          <>
+            <section className="mt-8 grid gap-6 xl:grid-cols-3">
+              <Panel title="Recent enrollments">
+                {recentEnrollments.length === 0 ? <Muted>No data yet</Muted> : recentEnrollments.map((item) => (
+                  <Row key={`${item.courseId}-${item.studentId}-${item.enrollmentDate}`} title={item.studentName || item.studentEmail || item.studentId} meta={`${item.courseName} - ${formatDate(item.enrollmentDate)}`} value={`${Math.round(item.progression)}%`} />
+                ))}
+              </Panel>
+              <Panel title="Recent payments">
+                {recentPayments.length === 0 ? <Muted>No data yet</Muted> : recentPayments.map((item) => (
+                  <Row key={`${item.courseId}-${item.studentId}-${item.submittingDate}`} title={item.courseName ?? item.courseId} meta={`${item.studentEmail ?? item.studentId} - ${item.paymentStatus}`} value={formatCurrency(item.totalPrice)} />
+                ))}
+              </Panel>
+              <Panel title="Recent created courses">
+                {recentCourses.length === 0 ? <Muted>No data yet</Muted> : recentCourses.map((item) => (
+                  <Row key={item.courseId} title={item.title || item.courseName} meta={item.organizationAdminName || "No organization owner"} value={formatCurrency(item.price)} />
+                ))}
+              </Panel>
+            </section>
+
+            <section className="mt-8 grid gap-6 xl:grid-cols-3">
+              <Panel title="Top courses">
+                {topCourses.length === 0 ? <Muted>No data yet</Muted> : topCourses.map((item) => (
+                  <Row key={item.courseId} title={item.title || item.courseName} meta={`${item.studentsCount} students - ${item.sessionsCount} sessions`} value={item.averageRating.toFixed(1)} />
+                ))}
+              </Panel>
+              <Panel title="Top organizations">
+                {topOrganizations.length === 0 ? <Muted>No data yet</Muted> : topOrganizations.map((item) => (
+                  <Row key={item.organizationAdminId} title={item.organizationAdminName} meta={`${item.coursesCount} courses - ${item.enrollmentsCount} enrollments`} value={formatCurrency(item.revenue)} />
+                ))}
+              </Panel>
+              <Panel title="Top instructors">
+                {topInstructors.length === 0 ? <Muted>No data yet</Muted> : topInstructors.map((item) => (
+                  <Row key={item.instructorId} title={item.instructorName || item.email} meta={`${item.coursesCount} courses - ${item.studentsCount} students`} value={`${item.sessionsCount} sessions`} />
+                ))}
+              </Panel>
+            </section>
+
+            <section className="mt-8 rounded-xl2 bg-white p-6 shadow-soft ring-1 ring-slate-100">
+              <h2 className="text-lg font-bold text-ink">Activity feed</h2>
+              <div className="mt-5 space-y-4">
+                {activities.length === 0 ? <Muted>No activity yet</Muted> : activities.map((item, index) => (
+                  <div key={`${item.type}-${item.createdAt}-${index}`} className="flex gap-4 rounded-xl bg-slate-50 p-4">
+                    <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-teal-50 text-teal-600">
+                      <Activity size={18} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-bold text-ink">{item.title}</p>
+                      <p className="mt-1 text-sm text-muted">{item.description}</p>
+                      <p className="mt-2 text-xs font-semibold text-muted">{formatDate(item.createdAt)}</p>
+                    </div>
                   </div>
-                  <p className="font-bold text-ink">{formatCurrency(payment.totalPrice)}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="rounded-xl2 bg-white p-6 shadow-soft ring-1 ring-slate-100">
-            <h2 className="text-xl font-bold text-ink">Top courses</h2>
-            <div className="mt-4 space-y-3">
-              {topCourses.length === 0 ? <p className="text-sm text-muted">No data yet</p> : topCourses.map((course) => (
-                <div key={course.id} className="flex items-center justify-between rounded-xl bg-slate-50 p-4">
-                  <div>
-                    <p className="font-semibold text-ink">{course.title}</p>
-                    <p className="text-xs text-muted">{course.studentsCount ?? 0} students - {course.sessionsCount ?? 0} sessions</p>
-                  </div>
-                  <Badge>{course.rating.toFixed(1)}</Badge>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="mt-8 grid gap-8 xl:grid-cols-[360px_1fr]">
-          <div className="space-y-6">
-            <form onSubmit={addRole} className="rounded-xl2 bg-white p-6 shadow-soft ring-1 ring-slate-100">
-              <h2 className="text-lg font-bold text-ink">Add role</h2>
-              <p className="mt-1 text-sm text-muted">Uses POST /Auth/AddRole/role</p>
-              <input name="role" placeholder="Role name" className="mt-5 h-12 w-full rounded-xl bg-slate-50 px-4 text-sm outline-none ring-1 ring-slate-200 focus:ring-teal-500" required />
-              <Button className="mt-4 w-full">Add role</Button>
-            </form>
-
-            <form onSubmit={assignRole} className="rounded-xl2 bg-white p-6 shadow-soft ring-1 ring-slate-100">
-              <h2 className="text-lg font-bold text-ink">Assign role</h2>
-              <p className="mt-1 text-sm text-muted">Uses POST /Auth/AddUserToRole/userId/role</p>
-              <input name="userId" placeholder="User id" className="mt-5 h-12 w-full rounded-xl bg-slate-50 px-4 text-sm outline-none ring-1 ring-slate-200 focus:ring-teal-500" required />
-              <select name="role" className="mt-3 h-12 w-full rounded-xl bg-slate-50 px-4 text-sm outline-none ring-1 ring-slate-200 focus:ring-teal-500">
-                {roles.map((role) => <option key={role}>{role}</option>)}
-              </select>
-              <Button className="mt-4 w-full">Assign role</Button>
-            </form>
-          </div>
-
-          <div className="rounded-xl2 bg-white p-6 shadow-soft ring-1 ring-slate-100">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-ink">Users</h2>
-                <p className="mt-1 text-sm text-muted">Real API data only.</p>
+                ))}
               </div>
-              <select
-                value={roleFilter}
-                onChange={(event) => {
-                  setRoleFilter(event.target.value);
-                  loadUsers(event.target.value);
-                }}
-                className="h-11 rounded-xl bg-slate-50 px-4 text-sm font-semibold outline-none ring-1 ring-slate-200"
-              >
-                <option value="">All roles</option>
-                {roles.map((role) => <option key={role}>{role}</option>)}
-              </select>
-            </div>
+            </section>
+          </>
+        )}
 
-            <div className="mt-6">
-              {loading ? (
-                <LoadingState label="Loading users" />
-              ) : error ? (
-                <EmptyState title="Users unavailable" description={error} />
-              ) : users.length === 0 ? (
-                <EmptyState title="No users found" description="Try another role filter." />
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[680px] text-left">
-                    <thead>
-                      <tr className="border-b border-slate-100 text-sm text-muted">
-                        <th className="px-4 py-3 font-semibold">Name</th>
-                        <th className="px-4 py-3 font-semibold">Email</th>
-                        <th className="px-4 py-3 font-semibold">Role</th>
-                        <th className="px-4 py-3 font-semibold">User id</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {users.map((user) => (
-                        <tr key={`${user.email}-${user.id}`} className="border-b border-slate-100 last:border-0">
-                          <td className="px-4 py-4 text-sm font-semibold text-ink">{user.fullName}</td>
-                          <td className="px-4 py-4 text-sm text-muted">{user.email}</td>
-                          <td className="px-4 py-4"><Badge>{user.role}</Badge></td>
-                          <td className="px-4 py-4 text-xs text-muted">{user.id ?? "-"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+        {detailTitle && (
+          <div className="fixed inset-0 z-50 grid place-items-center bg-ink/50 p-4" onClick={() => setDetailTitle("")}>
+            <div className="w-full max-w-2xl rounded-xl2 bg-white p-6 shadow-xl ring-1 ring-slate-100" onClick={(event) => event.stopPropagation()}>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-bold uppercase text-teal-600">Quick details</p>
+                  <h2 className="mt-2 text-2xl font-black text-ink">{detailTitle}</h2>
                 </div>
-              )}
+                <button onClick={() => setDetailTitle("")} className="rounded-xl bg-slate-50 px-3 py-2 text-sm font-bold text-muted">Close</button>
+              </div>
+              <div className="mt-5 space-y-3">
+                {detailLoading ? <LoadingState label="Loading details" /> : detailRows.length === 0 ? <EmptyState title="No data yet" description="No records are available for this quick view." /> : detailRows.map((item, index) => (
+                  <Row key={`${item.title}-${index}`} title={item.title} meta={item.meta} value={item.value ?? "View"} />
+                ))}
+              </div>
             </div>
           </div>
-        </section>
+        )}
       </AuthGuard>
     </AppShell>
   );
+}
+
+function LinkedStat({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <Link href={href} className="group block cursor-pointer">
+      {children}
+      <p className="mt-2 px-1 text-xs font-bold text-teal-600 opacity-80 transition group-hover:opacity-100">View Details</p>
+    </Link>
+  );
+}
+
+function DetailStat({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button onClick={onClick} className="group block cursor-pointer text-left">
+      {children}
+      <p className="mt-2 px-1 text-xs font-bold text-teal-600 opacity-80 transition group-hover:opacity-100">View Details</p>
+    </button>
+  );
+}
+
+function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl2 bg-white p-6 shadow-soft ring-1 ring-slate-100">
+      <h2 className="text-lg font-bold text-ink">{title}</h2>
+      <div className="mt-4 space-y-3">{children}</div>
+    </div>
+  );
+}
+
+function Row({ title, meta, value }: { title: string; meta: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-xl bg-slate-50 p-4">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-bold text-ink">{title || "Not available"}</p>
+        <p className="mt-1 truncate text-xs text-muted">{meta}</p>
+      </div>
+      <p className="shrink-0 text-sm font-bold text-teal-600">{value}</p>
+    </div>
+  );
+}
+
+function Muted({ children }: { children: React.ReactNode }) {
+  return <p className="rounded-xl bg-slate-50 p-4 text-sm font-semibold text-muted">{children}</p>;
 }

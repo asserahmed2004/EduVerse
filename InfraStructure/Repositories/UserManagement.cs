@@ -33,6 +33,14 @@ namespace InfraStructure.Repositories
             return await userManager.CheckPasswordAsync(user, password);
         }
 
+        public async Task<IdentityResult> ChangePassword(AppUser user, string currentPassword, string newPassword)
+        {
+            if (user == null)
+                return IdentityResult.Failed(new IdentityError { Code = "UserNotFound", Description = "User not found" });
+
+            return await userManager.ChangePasswordAsync(user, currentPassword, newPassword);
+        }
+
         public async Task<List<Claim>> GetUserClaims(string email)
         {
             var user = await GetUserByEmail(email);
@@ -80,13 +88,12 @@ namespace InfraStructure.Repositories
             return result;
 
         }
-        public async Task<bool> UpdateUser(AppUser user)
+        public async Task<IdentityResult> UpdateUser(AppUser user)
         {
             if (user == null)
-                return false;
-            var result = await userManager.UpdateAsync(user);
+                return IdentityResult.Failed(new IdentityError { Code = "UserNotFound", Description = "User not found" });
 
-            return result.Succeeded;
+            return await userManager.UpdateAsync(user);
         }
 
         public async Task<int> RemoveUser(string email)

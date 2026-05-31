@@ -46,6 +46,7 @@ namespace InfraStructure.DependencyInjection
             services.AddScoped<IGeneric<Session>, GenericRepository<Session>>();
             services.AddScoped<IGeneric<Assignment>, GenericRepository<Assignment>>();
             services.AddScoped<IGeneric<AssignmentSubmission>, GenericRepository<AssignmentSubmission>>();
+            services.AddScoped<IGeneric<ActivityLog>, GenericRepository<ActivityLog>>();
 
 
 

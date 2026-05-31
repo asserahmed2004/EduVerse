@@ -5,9 +5,10 @@ import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
 import { useToast } from "@/components/toast-provider";
-import { Button, CourseCard, EmptyState, LoadingState, PageHeader, StatCard } from "@/components/ui";
+import { Badge, Button, CourseCard, EmptyState, LoadingState, PageHeader, StatCard } from "@/components/ui";
 import { courseService } from "@/lib/api";
 import type { Course } from "@/lib/types";
+import { formatDate } from "@/lib/utils";
 
 export default function DeletedCoursesPage() {
   const { showToast } = useToast();
@@ -35,8 +36,8 @@ export default function DeletedCoursesPage() {
   async function restoreCourse(id: string) {
     try {
       await courseService.restore(id);
+      setCourses((current) => current.filter((course) => course.id !== id));
       showToast({ title: "Course restored", message: "The course is visible again.", tone: "success" });
-      await loadDeletedCourses();
     } catch (error) {
       showToast({ title: "Restore failed", message: error instanceof Error ? error.message : "Could not restore course.", tone: "error" });
     }
@@ -61,7 +62,16 @@ export default function DeletedCoursesPage() {
           <div className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
             {courses.map((course) => (
               <div key={course.id} className="space-y-3">
-                <CourseCard course={course} compact />
+                <div className="relative">
+                  <div className="absolute right-4 top-4 z-10">
+                    <Badge tone="coral">Deleted</Badge>
+                  </div>
+                  <CourseCard course={course} compact />
+                </div>
+                <div className="rounded-xl bg-white px-4 py-3 text-xs font-semibold text-muted shadow-soft ring-1 ring-slate-100">
+                  <p>Deleted at: {course.deletedAt ? formatDate(course.deletedAt) : "Not recorded"}</p>
+                  <p>Deleted by: {course.deletedByName ?? course.deletedById ?? "Unknown"}</p>
+                </div>
                 <Button className="w-full" onClick={() => restoreCourse(course.id)}>
                   <RotateCcw size={16} />
                   Restore course

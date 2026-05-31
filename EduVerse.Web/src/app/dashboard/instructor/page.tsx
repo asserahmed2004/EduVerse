@@ -21,7 +21,7 @@ export default function InstructorDashboardPage() {
 
   return (
     <AppShell>
-      <AuthGuard roles={["Instructor", "Admin"]}>
+      <AuthGuard roles={["Instructor"]}>
         <PageHeader eyebrow="Instructor dashboard" title="My teaching workspace" description="Review sessions, assignments, submitted work, and students assigned to your teaching schedule." />
         <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
           <StatCard label="My sessions" value={`${stats?.totalSessions ?? 0}`} icon={CalendarClock} />

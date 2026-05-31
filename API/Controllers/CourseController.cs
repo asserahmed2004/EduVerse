@@ -65,7 +65,19 @@ namespace API.Controllers
             if (!passwordIsValid)
                 return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Invalid password" });
 
-            var result = await courseService.DeleteCourse(id);
+            var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrWhiteSpace(userId))
+                return Unauthorized(new { success = false, message = "User id claim is missing" });
+
+            var profile = await authServices.GetProfile(userId);
+            var deletedByName = profile?.FullName
+                ?? profile?.UserName
+                ?? profile?.Email
+                ?? User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Name)?.Value
+                ?? User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value
+                ?? "Unknown";
+
+            var result = await courseService.DeleteCourse(id, userId, deletedByName);
             if (!result.success)
                 return BadRequest(result);
             return Ok(result);
@@ -75,7 +87,19 @@ namespace API.Controllers
         [Authorize(Roles = AppRoles.Admin)]
         public async Task<IActionResult> RestoreCourse(Guid id)
         {
-            var result = await courseService.RestoreCourse(id);
+            var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrWhiteSpace(userId))
+                return Unauthorized(new { success = false, message = "User id claim is missing" });
+
+            var profile = await authServices.GetProfile(userId);
+            var restoredByName = profile?.FullName
+                ?? profile?.UserName
+                ?? profile?.Email
+                ?? User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Name)?.Value
+                ?? User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value
+                ?? "Unknown";
+
+            var result = await courseService.RestoreCourse(id, userId, restoredByName);
             if (!result.success)
                 return BadRequest(result);
             return Ok(result);
@@ -152,6 +176,24 @@ namespace API.Controllers
             if (result == null)
                 return NotFound(new { success = false, message = "Course not found" });
             return Ok(result);
+        }
+
+        [HttpGet("AdminDetails/{id}")]
+        [Authorize(Roles = AppRoles.AdminOrganizationAdminOrInstructor)]
+        public async Task<IActionResult> GetAdminCourseDetails(Guid id)
+        {
+            var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            var result = await courseService.GetAdminCourseDetails(
+                id,
+                userId,
+                User.IsInRole(AppRoles.Admin),
+                User.IsInRole(AppRoles.OrganizationAdmin),
+                User.IsInRole(AppRoles.Instructor));
+
+            if (result == null)
+                return NotFound(new { success = false, message = "Course details not found or access denied" });
+
+            return Ok(new { success = true, message = "Course details retrieved successfully", data = result });
         }
         [HttpGet("GetByName/{name}")]
         public async Task<IActionResult> GetCourseByName(string name)

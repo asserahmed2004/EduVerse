@@ -83,7 +83,14 @@ namespace Api.Controllers
         [Authorize(Roles = AppRoles.Admin)]
         public async Task<IActionResult> AddUserToRole(string UserId, string Role)
         {
-            var result = await authServices.AddUserToRole(UserId, Role);
+            var performedById = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            var performedByName =
+                User.Claims.FirstOrDefault(c => c.Type == "FullName")?.Value ??
+                User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Name)?.Value ??
+                User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value ??
+                "Admin";
+
+            var result = await authServices.AddUserToRole(UserId, Role, performedById, performedByName);
             if (result.success)
                 return Ok(result);
             return BadRequest(result);
@@ -115,10 +122,43 @@ namespace Api.Controllers
             {
                 var result = await authServices.GetProfile(userId);
                 if (result != null)
-                    return Ok(result);
-                return BadRequest(result);
+                    return Ok(new
+                    {
+                        success = true,
+                        message = "Profile retrieved successfully",
+                        data = result
+                    });
+                return NotFound(new
+                {
+                    success = false,
+                    message = "User not found"
+                });
             }
             return Unauthorized();
+        }
+
+        [HttpPut("UpdateProfile")]
+        [Authorize]
+        public async Task<IActionResult> UpdateProfile([FromForm] UpdateProfileRequest request)
+        {
+            var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrWhiteSpace(userId))
+                return Unauthorized(new { success = false, message = "User is not authenticated" });
+
+            var result = await authServices.UpdateProfile(userId, request);
+            return result.success ? Ok(result) : BadRequest(result);
+        }
+
+        [HttpPost("ChangePassword")]
+        [Authorize]
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
+        {
+            var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrWhiteSpace(userId))
+                return Unauthorized(new { success = false, message = "User is not authenticated" });
+
+            var result = await authServices.ChangePassword(userId, request);
+            return result.success ? Ok(result) : BadRequest(result);
         }
        
     }

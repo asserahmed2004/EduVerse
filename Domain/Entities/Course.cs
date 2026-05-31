@@ -18,6 +18,12 @@ namespace Domain.Entities
         public double Duration { get; set; }
         public string ImageUrl { get; set; }
         public bool IsDeleted { get; set; } = false;
+        public DateTime? DeletedAt { get; set; }
+        public string? DeletedById { get; set; }
+        public string? DeletedByName { get; set; }
+        public DateTime? RestoredAt { get; set; }
+        public string? RestoredById { get; set; }
+        public string? RestoredByName { get; set; }
         
         public string OrgId { get; set; }
     }

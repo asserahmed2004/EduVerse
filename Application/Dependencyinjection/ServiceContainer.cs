@@ -28,6 +28,8 @@ namespace Application.Dependencyinjection
             services.AddScoped<ICategoryService, CategoryService>();
             services.AddScoped<ICourseService, CourseService>();
             services.AddScoped<IDashboardService, DashboardService>();
+            services.AddScoped<IActivityLogService, ActivityLogService>();
+            services.AddScoped<IAdminService, AdminService>();
             services.AddScoped<IPaymentService, PaymentService>();
             services.AddScoped<IUserService, UserService>();
 

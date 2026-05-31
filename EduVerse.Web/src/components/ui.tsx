@@ -130,10 +130,16 @@ export function CourseCard({ course, compact = false }: { course: Course; compac
         </div>
         <p className="mt-3 line-clamp-2 text-sm leading-6 text-muted">{course.description}</p>
         <div className="mt-4 grid grid-cols-3 gap-2 text-xs font-semibold text-muted">
-          <span>{course.instructorName ?? "No instructor"}</span>
+          <span>Instructor: {course.instructorName ?? "Unassigned"}</span>
           <span>{course.studentsCount ?? course.students ?? 0} students</span>
           <span>{course.sessionsCount ?? 0} sessions</span>
         </div>
+        {(course.organizationOwnerName || course.isDeleted) && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-semibold text-muted">
+            {course.organizationOwnerName && <span>Organization: {course.organizationOwnerName}</span>}
+            <Badge tone={course.isDeleted ? "coral" : "teal"}>{course.isDeleted ? "Deleted" : "Active"}</Badge>
+          </div>
+        )}
         <div className="mt-5 flex items-center justify-between">
           <p className="font-bold text-ink">{formatCurrency(course.price)}</p>
           <span className="inline-flex items-center gap-1 text-sm font-semibold text-teal-600">

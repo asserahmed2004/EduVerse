@@ -24,7 +24,8 @@ namespace Application.Services.Implementitions.Auth
         , ITokenManagment tokenManagment , IUserManagment userManagment
         
         ,IMapper mapper,IValidator<RegisterUser> RegisterValidator ,IConfirmation emailConfirmation,
-        IValidator<LoginUser> LoginValidator, IValidationService validationService , ICloudService cloudService): IAuthServices
+        IValidator<LoginUser> LoginValidator, IValidationService validationService , ICloudService cloudService,
+        IActivityLogService activityLogService): IAuthServices
     {
         public async Task<bool> VerifyCurrentUserPasswordAsync(ClaimsPrincipal userClaims, string password)
         {
@@ -64,7 +65,7 @@ namespace Application.Services.Implementitions.Auth
 
         }
 
-        public async Task<ServiceResponse> AddUserToRole(string UserId, string roleName)
+        public async Task<ServiceResponse> AddUserToRole(string UserId, string roleName, string? performedById = null, string? performedByName = null)
         {
             var response = await roleManagment.AddUserToRole(new AppUser { Id = UserId }, roleName);
             if (!response)
@@ -75,6 +76,15 @@ namespace Application.Services.Implementitions.Auth
                     message = "Failed to add user to role"
                 };
             }
+            var targetUser = await userManagment.GetUserById(UserId);
+            await activityLogService.LogAsync(
+                performedById,
+                performedByName ?? "Admin",
+                "RoleAssigned",
+                "User",
+                UserId,
+                $"{DisplayName(targetUser)} assigned to role {roleName}");
+
             return new ServiceResponse
             {
                 success = true,
@@ -117,17 +127,110 @@ namespace Application.Services.Implementitions.Auth
         public async Task<GetUser> GetProfile(string userId)
         {
             var user = await userManagment.GetUserById(userId);
-            var userRole = await roleManagment.GetUserRole(user.Email);
             if (user == null)
             {
                 return null;
             }
-            var mappedUser = mapper.Map<GetUser>(user);
-            mappedUser.role = userRole;
-            return mappedUser;
+            return await BuildUserProfile(user);
+        }
 
+        public async Task<ServiceResponse> UpdateProfile(string userId, UpdateProfileRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(userId))
+                return new ServiceResponse(false, "User is not authenticated");
 
+            var user = await userManagment.GetUserById(userId);
+            if (user == null)
+                return new ServiceResponse(false, "User not found");
 
+            if (!string.IsNullOrWhiteSpace(request.FullName))
+                user.FullName = request.FullName.Trim();
+
+            if (!string.IsNullOrWhiteSpace(request.PhoneNumber))
+                user.PhoneNumber = request.PhoneNumber.Trim();
+
+            if (request.ProfilePicture != null)
+            {
+                var details = new FileDetails
+                {
+                    FileName = $"{user.Id}_{DateTime.UtcNow:yyyyMMddHHmmss}_ProfilePicture",
+                    Folder = "ProfilePicture"
+                };
+                var file = new AddCloudFile
+                {
+                    Details = details,
+                    File = request.ProfilePicture
+                };
+                var uploadResult = await cloudService.UploadFileAsync(file);
+                if (!uploadResult.success)
+                    return new ServiceResponse(false, "Failed to upload profile image");
+
+                user.ProfilePicture = details.FileName;
+            }
+
+            var updateResult = await userManagment.UpdateUser(user);
+            if (!updateResult.Succeeded)
+            {
+                var errors = updateResult.Errors.Select(e => e.Description).ToList();
+                return new ServiceResponse(false, "Profile update failed", errors: errors);
+            }
+
+            var profile = await BuildUserProfile(user);
+            await activityLogService.LogAsync(user.Id, DisplayName(user), "ProfileUpdated", "User", user.Id, $"{DisplayName(user)} updated profile information");
+            return new ServiceResponse(true, "Profile updated successfully", profile);
+        }
+
+        public async Task<ServiceResponse> ChangePassword(string userId, ChangePasswordRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(userId))
+                return new ServiceResponse(false, "User is not authenticated");
+
+            if (string.IsNullOrWhiteSpace(request.CurrentPassword))
+                return new ServiceResponse(false, "Current password is required");
+
+            if (string.IsNullOrWhiteSpace(request.NewPassword))
+                return new ServiceResponse(false, "New password is required");
+
+            if (request.NewPassword != request.ConfirmPassword)
+                return new ServiceResponse(false, "Confirm password must match new password");
+
+            var user = await userManagment.GetUserById(userId);
+            if (user == null)
+                return new ServiceResponse(false, "User not found");
+
+            var result = await userManagment.ChangePassword(user, request.CurrentPassword, request.NewPassword);
+            if (result.Succeeded)
+            {
+                await activityLogService.LogAsync(user.Id, DisplayName(user), "PasswordChanged", "User", user.Id, $"{DisplayName(user)} changed password");
+                return new ServiceResponse(true, "Password changed successfully");
+            }
+
+            var errors = result.Errors.Select(e => e.Description).ToList();
+            var currentPasswordError = result.Errors.Any(e => e.Code == "PasswordMismatch");
+            return currentPasswordError
+                ? new ServiceResponse(false, "Current password is incorrect", errors: errors)
+                : new ServiceResponse(false, "Password change failed", errors: errors);
+        }
+
+        private async Task<GetUser> BuildUserProfile(AppUser user)
+        {
+            var userRole = await roleManagment.GetUserRole(user.Email);
+            return new GetUser
+            {
+                Id = user.Id,
+                FullName = user.FullName,
+                UserName = user.UserName,
+                Email = user.Email,
+                phoneNumber = user.PhoneNumber,
+                ProfilePicture = user.ProfilePicture,
+                BirthDate = user.Birthdate,
+                role = userRole
+            };
+        }
+
+        private static string DisplayName(AppUser? user)
+        {
+            return user?.FullName ?? user?.UserName ?? user?.Email ?? "Unknown user";
         }
 
         public async Task<LoginResponse> LoginUser(LoginUser user)

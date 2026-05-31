@@ -1,9 +1,12 @@
-﻿namespace Application.DTOs.Responses
+using System.Collections.Generic;
+
+namespace Application.DTOs.Responses
 {
     public record ServiceResponse
         (
         bool success = false,
         string message = null,
-        object data = null
+        object data = null,
+        IEnumerable<string> errors = null
         );
 }

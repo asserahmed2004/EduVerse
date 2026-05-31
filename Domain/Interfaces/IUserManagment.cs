@@ -16,6 +16,8 @@ namespace Domain.Interfaces
         Task<bool> LoginUser(AppUser user);
         Task<AppUser?> GetUserById(string userId);
         Task<bool> CheckPassword(AppUser user, string password);
+        Task<IdentityResult> ChangePassword(AppUser user, string currentPassword, string newPassword);
+        Task<IdentityResult> UpdateUser(AppUser user);
         Task<IEnumerable<AppUser>> GetAllUsers();
         Task<int> RemoveUser(string email);
         Task<List<Claim>> GetUserClaims(string email);

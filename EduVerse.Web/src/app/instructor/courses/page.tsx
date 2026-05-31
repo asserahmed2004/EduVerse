@@ -127,7 +127,7 @@ export default function InstructorCoursesPage() {
 
   return (
     <AppShell>
-      <AuthGuard roles={["OrganizationAdmin", "Admin"]}>
+      <AuthGuard roles={["OrganizationAdmin"]}>
         <PageHeader eyebrow="Organization tools" title="Course management" description="Create, review, and soft-delete courses owned by your organization." />
 
         <div className="mt-8 grid gap-5 md:grid-cols-3">

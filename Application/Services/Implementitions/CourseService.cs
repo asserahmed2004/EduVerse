@@ -2,6 +2,7 @@
 using Application.DTOs.Category;
 using Application.DTOs.Cloud;
 using Application.DTOs.Course;
+using Application.DTOs.Payment;
 using Application.DTOs.Rating;
 using Application.DTOs.Responses;
 using Application.DTOs.Sessions;
@@ -23,7 +24,8 @@ namespace Application.Services.Implementitions
     public  class CourseService(IGeneric<Course> CoursesManagment ,
         IGeneric<CourseCategory> CoursesCatManagment,IGeneric<Category> CategoryManagment,
         IMapper mapper ,ICloudService cloud,IGeneric<Rating> RatingManagment ,IGeneric<Session> SessionManagment,IGeneric<Assignment> AssignmentManagment,
-        IGeneric<Enrollment> EnrollmentManagment, IUserManagment UserManagment) : ICourseService
+        IGeneric<Enrollment> EnrollmentManagment, IGeneric<Payment> PaymentManagment, IUserManagment UserManagment,
+        IActivityLogService activityLogService) : ICourseService
     {
         public async Task<ServiceResponse> AddRating(CreateRating rating, string userid)
         {
@@ -79,6 +81,8 @@ namespace Application.Services.Implementitions
                 var courseCategory = new CourseCategory { CourseId =result.Id , CategoryId = test.Id };
                 await CoursesCatManagment.AddAsync(courseCategory);
             }
+            var creator = await UserManagment.GetUserById(orgId);
+            await activityLogService.LogAsync(orgId, DisplayName(creator), "CourseCreated", "Course", result.Id.ToString(), $"{result.Name} was created");
             return new ServiceResponse
             {
                 success = true,
@@ -89,7 +93,7 @@ namespace Application.Services.Implementitions
 
         }
 
-        public async Task<ServiceResponse> DeleteCourse(Guid id)
+        public async Task<ServiceResponse> DeleteCourse(Guid id, string deletedById, string deletedByName)
         {
             if (id == Guid.Empty)
                 return new ServiceResponse { success = false, message = "Invalid Course ID" };
@@ -99,13 +103,17 @@ namespace Application.Services.Implementitions
             if (course.IsDeleted)
                 return new ServiceResponse { success = false, message = "Course is already deleted" };
             course.IsDeleted = true;
+            course.DeletedAt = DateTime.UtcNow;
+            course.DeletedById = deletedById;
+            course.DeletedByName = deletedByName;
             var result = await CoursesManagment.UpdateAsync(course);
             if (result == null)
                 return new ServiceResponse { success = false, message = "Failed to delete Course" };
+            await activityLogService.LogAsync(deletedById, deletedByName, "CourseDeleted", "Course", course.Id.ToString(), $"{course.Name} was soft deleted");
             return new ServiceResponse { success = true, message = "Course deleted successfully" };
         }
 
-        public async Task<ServiceResponse> RestoreCourse(Guid id)
+        public async Task<ServiceResponse> RestoreCourse(Guid id, string restoredById, string restoredByName)
         {
             if (id == Guid.Empty)
                 return new ServiceResponse { success = false, message = "Invalid Course ID" };
@@ -118,10 +126,17 @@ namespace Application.Services.Implementitions
                 return new ServiceResponse { success = false, message = "Course is not deleted" };
 
             course.IsDeleted = false;
+            course.DeletedAt = null;
+            course.DeletedById = null;
+            course.DeletedByName = null;
+            course.RestoredAt = DateTime.UtcNow;
+            course.RestoredById = restoredById;
+            course.RestoredByName = restoredByName;
             var result = await CoursesManagment.UpdateAsync(course);
             if (result == null)
                 return new ServiceResponse { success = false, message = "Failed to restore Course" };
 
+            await activityLogService.LogAsync(restoredById, restoredByName, "CourseRestored", "Course", course.Id.ToString(), $"{course.Name} was restored");
             return new ServiceResponse { success = true, message = "Course restored successfully" };
         }
 
@@ -338,6 +353,13 @@ namespace Application.Services.Implementitions
                 course.Category = course.Categories?.FirstOrDefault()?.Name;
                 course.IsDeleted = course.IsDeleted;
 
+                if (!string.IsNullOrWhiteSpace(course.OrgId))
+                {
+                    var owner = await UserManagment.GetUserById(course.OrgId);
+                    course.OrganizationOwnerName = owner?.FullName;
+                    course.OrganizationOwnerEmail = owner?.Email;
+                }
+
                 var trainerId = courseSessions.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.TrainerId))?.TrainerId;
                 if (!string.IsNullOrWhiteSpace(trainerId))
                 {
@@ -425,6 +447,140 @@ namespace Application.Services.Implementitions
             return mappedCourse;
         }
 
+        public async Task<AdminCourseDetailsDto?> GetAdminCourseDetails(Guid id, string? currentUserId, bool isAdmin, bool isOrganizationAdmin, bool isInstructor)
+        {
+            if (id == Guid.Empty)
+                return null;
+
+            var course = await CoursesManagment.GetByIdAsync(id);
+            if (course == null)
+                return null;
+
+            var sessions = (await SessionManagment.GetAllAsync())
+                .Where(s => s.CourseId == course.Id)
+                .OrderBy(s => s.SessionNumber)
+                .ToList();
+
+            if (!isAdmin)
+            {
+                if (string.IsNullOrWhiteSpace(currentUserId))
+                    return null;
+
+                if (isOrganizationAdmin && course.OrgId != currentUserId)
+                    return null;
+
+                if (isInstructor && !sessions.Any(s => s.TrainerId == currentUserId))
+                    return null;
+            }
+
+            var categoryLinks = (await CoursesCatManagment.GetAllAsync())
+                .Where(cc => cc.CourseId == course.Id)
+                .ToList();
+            var categories = new List<GetCategory>();
+            foreach (var courseCategory in categoryLinks)
+            {
+                var category = await CategoryManagment.GetByIdAsync(courseCategory.CategoryId);
+                if (category != null)
+                {
+                    categories.Add(mapper.Map<GetCategory>(category));
+                }
+            }
+
+            var enrollments = (await EnrollmentManagment.GetAllAsync())
+                .Where(e => e.CourseId == course.Id)
+                .ToList();
+            var ratings = (await RatingManagment.GetAllAsync())
+                .Where(r => r.CourseId == course.Id)
+                .ToList();
+            var assignments = (await AssignmentManagment.GetAllAsync())
+                .Where(a => sessions.Any(s => s.Id == a.SessionId))
+                .ToList();
+
+            var students = new List<AdminCourseStudentDto>();
+            foreach (var enrollment in enrollments)
+            {
+                var student = await UserManagment.GetUserById(enrollment.StudentId);
+                students.Add(new AdminCourseStudentDto
+                {
+                    StudentId = enrollment.StudentId,
+                    StudentName = student?.FullName ?? string.Empty,
+                    StudentEmail = student?.Email ?? string.Empty,
+                    EnrollmentDate = enrollment.EnrollmentDate,
+                    Progression = enrollment.Progression
+                });
+            }
+
+            var payments = new List<AdminPaymentTransactionDto>();
+            foreach (var payment in (await GetCoursePayments(course.Id)).OrderByDescending(p => p.SubmittingDate).Take(5))
+            {
+                payments.Add(payment);
+            }
+
+            var owner = !string.IsNullOrWhiteSpace(course.OrgId) ? await UserManagment.GetUserById(course.OrgId) : null;
+            var trainerId = sessions.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.TrainerId))?.TrainerId;
+            var trainer = !string.IsNullOrWhiteSpace(trainerId) ? await UserManagment.GetUserById(trainerId) : null;
+
+            return new AdminCourseDetailsDto
+            {
+                CourseId = course.Id,
+                Name = course.Name,
+                Title = course.Title,
+                Description = course.Description,
+                Category = categories.FirstOrDefault()?.Name,
+                OrganizationOwner = owner?.FullName,
+                OrganizationOwnerEmail = owner?.Email,
+                InstructorName = trainer?.FullName,
+                Price = course.Price,
+                ImageUrl = course.ImageUrl,
+                StudentsCount = students.Select(s => s.StudentId).Distinct().Count(),
+                SessionsCount = sessions.Count,
+                AverageRating = ratings.Any() ? Math.Round(ratings.Average(r => r.RatingValue), 2) : 0,
+                IsDeleted = course.IsDeleted,
+                DeletedAt = course.DeletedAt,
+                DeletedById = course.DeletedById,
+                DeletedByName = course.DeletedByName,
+                RestoredAt = course.RestoredAt,
+                RestoredById = course.RestoredById,
+                RestoredByName = course.RestoredByName,
+                Sessions = mapper.Map<List<GetSession>>(sessions),
+                Students = students,
+                Assignments = mapper.Map<List<GetAssignment>>(assignments),
+                RecentPayments = payments
+            };
+        }
+
+        private async Task<List<AdminPaymentTransactionDto>> GetCoursePayments(Guid courseId)
+        {
+            var course = await CoursesManagment.GetByIdAsync(courseId);
+            var payments = (await PaymentManagment.GetAllAsync())
+                .Where(p => p.CourseId == courseId)
+                .OrderByDescending(p => p.SubmittingDate)
+                .ToList();
+            var result = new List<AdminPaymentTransactionDto>();
+
+            foreach (var payment in payments)
+            {
+                var student = await UserManagment.GetUserById(payment.StudentId);
+                result.Add(new AdminPaymentTransactionDto
+                {
+                    CourseId = payment.CourseId,
+                    CourseName = course?.Name ?? string.Empty,
+                    StudentId = payment.StudentId,
+                    StudentName = student?.FullName ?? string.Empty,
+                    StudentEmail = student?.Email ?? string.Empty,
+                    SubmittingDate = payment.SubmittingDate,
+                    TotalPrice = payment.TotalPrice,
+                    PaymentMethod = payment.PaymentMethod,
+                    PaymentStatus = payment.PaymentStatus,
+                    PaymentProvider = payment.PaymentProvider,
+                    MerchantOrderId = payment.MerchantOrderId,
+                    SpecialReference = payment.SpecialReference
+                });
+            }
+
+            return result;
+        }
+
         private async Task<ServiceResponse> UpdateDuration(Guid id, double duration)
         {
             if (id == Guid.Empty || duration <= 0)
@@ -484,7 +640,13 @@ namespace Application.Services.Implementitions
             var updateResult = await CoursesManagment.UpdateAsync(existingCourse);
             if (updateResult == null)
                 return new ServiceResponse { success = false, message = "Failed to update Course" };
+            await activityLogService.LogAsync(existingCourse.OrgId, "Organization admin", "CourseUpdated", "Course", existingCourse.Id.ToString(), $"{existingCourse.Name} was updated");
             return new ServiceResponse { success = true, message = "Course updated successfully" };
+        }
+
+        private static string DisplayName(AppUser? user)
+        {
+            return user?.FullName ?? user?.UserName ?? user?.Email ?? "Unknown user";
         }
 
         public async Task<ServiceResponse> AddSession(CreateSession session)

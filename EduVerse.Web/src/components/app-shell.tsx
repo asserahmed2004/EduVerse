@@ -1,9 +1,8 @@
 "use client";
 
-import { Award, BookOpen, CreditCard, GraduationCap, Home, LayoutDashboard, LogOut, Menu, Settings, User, Users } from "lucide-react";
+import { Award, BookOpen, Building2, CalendarClock, CreditCard, FileText, GraduationCap, Home, LayoutDashboard, LogOut, Menu, Settings, ShieldCheck, User, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import type { ComponentProps } from "react";
 import { useEffect, useState } from "react";
 import { clearAuth, getStoredUser } from "@/lib/auth";
 import type { AuthUser } from "@/lib/types";
@@ -12,9 +11,15 @@ import { ThemeToggle } from "./theme-toggle";
 
 const navItems = [
   { href: "/dashboard/student", label: "Student", icon: LayoutDashboard, roles: ["Student"] },
-  { href: "/dashboard/instructor", label: "Instructor", icon: Users, roles: ["Instructor", "Admin"] },
-  { href: "/instructor/courses", label: "Manage courses", icon: Settings, roles: ["OrganizationAdmin", "Admin"] },
-  { href: "/admin", label: "Admin", icon: ShieldIcon, roles: ["Admin"] },
+  { href: "/dashboard/organization", label: "Organization Dashboard", icon: LayoutDashboard, roles: ["OrganizationAdmin"] },
+  { href: "/dashboard/instructor", label: "Instructor Dashboard", icon: LayoutDashboard, roles: ["Instructor"] },
+  { href: "/instructor/courses", label: "Manage courses", icon: Settings, roles: ["OrganizationAdmin"] },
+  { href: "/instructor/sessions", label: "My Sessions", icon: CalendarClock, roles: ["Instructor"] },
+  { href: "/instructor/assignments", label: "Assignments", icon: FileText, roles: ["Instructor"] },
+  { href: "/instructor/students", label: "Students", icon: Users, roles: ["Instructor"] },
+  { href: "/admin", label: "Admin Dashboard", icon: ShieldCheck, roles: ["Admin"] },
+  { href: "/admin/users", label: "Users / Roles", icon: Users, roles: ["Admin"] },
+  { href: "/organizations", label: "Organizations", icon: Building2, roles: ["Admin"] },
   { href: "/admin/deleted-courses", label: "Deleted courses", icon: BookOpen, roles: ["Admin"] },
   { href: "/courses", label: "Courses", icon: BookOpen, roles: ["Student", "Instructor", "OrganizationAdmin", "Admin"] },
   { href: "/enrollments", label: "Enrollments", icon: GraduationCap, roles: ["Student"] },
@@ -22,10 +27,6 @@ const navItems = [
   { href: "/payments", label: "Payments", icon: CreditCard, roles: ["Student", "OrganizationAdmin", "Admin"] },
   { href: "/profile", label: "Profile", icon: User, roles: ["Student", "Instructor", "OrganizationAdmin", "Admin"] }
 ];
-
-function ShieldIcon(props: ComponentProps<typeof Settings>) {
-  return <Settings {...props} />;
-}
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
