@@ -1,11 +1,12 @@
 "use client";
 
-import { Award, BookOpen, Building2, CalendarClock, CreditCard, FileText, GraduationCap, Home, LayoutDashboard, LogOut, Menu, Settings, ShieldCheck, User, Users } from "lucide-react";
+import { Activity, Award, BookOpen, Building2, CalendarClock, CreditCard, FileText, GraduationCap, Home, LayoutDashboard, LogOut, Menu, Search, Settings, ShieldCheck, User, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { clearAuth, getStoredUser } from "@/lib/auth";
-import type { AuthUser } from "@/lib/types";
+import { adminService } from "@/lib/api";
+import type { AuthUser, GlobalSearchResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -19,6 +20,7 @@ const navItems = [
   { href: "/instructor/students", label: "Students", icon: Users, roles: ["Instructor"] },
   { href: "/admin", label: "Admin Dashboard", icon: ShieldCheck, roles: ["Admin"] },
   { href: "/admin/users", label: "Users / Roles", icon: Users, roles: ["Admin"] },
+  { href: "/admin/activity-logs", label: "Activity Logs", icon: Activity, roles: ["Admin"] },
   { href: "/organizations", label: "Organizations", icon: Building2, roles: ["Admin"] },
   { href: "/admin/deleted-courses", label: "Deleted courses", icon: BookOpen, roles: ["Admin"] },
   { href: "/courses", label: "Courses", icon: BookOpen, roles: ["Student", "Instructor", "OrganizationAdmin", "Admin"] },
@@ -33,12 +35,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<GlobalSearchResult | null>(null);
 
   useEffect(() => {
     setUser(getStoredUser());
   }, []);
 
   const visibleItems = navItems.filter((item) => user ? item.roles.includes(user.role) : item.href === "/courses" || item.href === "/profile");
+
+  useEffect(() => {
+    if (user?.role !== "Admin" || searchQuery.trim().length < 2) {
+      setSearchResults(null);
+      return;
+    }
+
+    const handle = window.setTimeout(() => {
+      adminService.globalSearch(searchQuery)
+        .then(setSearchResults)
+        .catch(() => setSearchResults(null));
+    }, 250);
+
+    return () => window.clearTimeout(handle);
+  }, [searchQuery, user?.role]);
 
   function logout() {
     clearAuth();
@@ -98,6 +117,39 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <p className="text-sm text-muted">Welcome back</p>
               <p className="font-bold text-ink">{user?.fullName ?? user?.userName ?? "EduVerse user"}</p>
             </div>
+            {user?.role === "Admin" && (
+              <div className="relative hidden w-full max-w-lg lg:block">
+                <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={18} />
+                <input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search users, courses, organizations..."
+                  className="h-12 w-full rounded-2xl bg-white px-11 text-sm font-semibold text-ink shadow-soft ring-1 ring-slate-200 outline-none transition focus:ring-teal-300"
+                />
+                {searchResults && (
+                  <div className="absolute left-0 right-0 top-14 z-50 max-h-96 overflow-auto rounded-2xl bg-white p-3 shadow-xl ring-1 ring-slate-100">
+                    <SearchGroup title="Users">
+                      {searchResults.users.map((item) => (
+                        <SearchLink key={item.userId} href="/admin/users" title={item.fullName || item.email} meta={`${item.email} - ${item.role}`} onClick={() => setSearchQuery("")} />
+                      ))}
+                    </SearchGroup>
+                    <SearchGroup title="Courses">
+                      {searchResults.courses.map((item) => (
+                        <SearchLink key={item.courseId} href={`/courses/${item.courseId}`} title={item.title || item.name} meta={`${item.category || "Course"} - ${item.isDeleted ? "Deleted" : "Active"}`} onClick={() => setSearchQuery("")} />
+                      ))}
+                    </SearchGroup>
+                    <SearchGroup title="Organizations">
+                      {searchResults.organizations.map((item) => (
+                        <SearchLink key={item.organizationAdminId} href={`/organizations/${item.organizationAdminId}`} title={item.organizationAdminName} meta={item.email} onClick={() => setSearchQuery("")} />
+                      ))}
+                    </SearchGroup>
+                    {searchResults.users.length + searchResults.courses.length + searchResults.organizations.length === 0 && (
+                      <p className="rounded-xl bg-slate-50 p-3 text-sm font-semibold text-muted">No matching records</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
             <div className="flex items-center gap-3">
               <ThemeToggle />
               <Link href="/profile" className="flex items-center gap-3 rounded-2xl bg-white px-3 py-2 shadow-soft ring-1 ring-slate-200 transition hover:-translate-y-0.5">
@@ -115,5 +167,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <main className="px-5 py-10 lg:px-10">{children}</main>
       </div>
     </div>
+  );
+}
+
+function SearchGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-2 last:mb-0">
+      <p className="px-3 py-2 text-xs font-bold uppercase text-muted">{title}</p>
+      <div className="space-y-1">{children}</div>
+    </div>
+  );
+}
+
+function SearchLink({ href, title, meta, onClick }: { href: string; title: string; meta: string; onClick: () => void }) {
+  return (
+    <Link href={href} onClick={onClick} className="block rounded-xl px-3 py-2 transition hover:bg-slate-50">
+      <p className="text-sm font-bold text-ink">{title || "Not available"}</p>
+      <p className="mt-1 text-xs text-muted">{meta}</p>
+    </Link>
   );
 }

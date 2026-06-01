@@ -1,6 +1,7 @@
 import axios from "axios";
 import { clearAuth, getCurrentUserId, getRoleFromToken, getToken, getUserIdFromToken, inferRole, setStoredUser, setToken } from "./auth";
 import type {
+  ActivityLog,
   AuthUser,
   AdminAssignment,
   AdminSession,
@@ -11,20 +12,25 @@ import type {
   CourseAdminDetails,
   CourseSession,
   DashboardStats,
+  GlobalSearchResult,
   LoginPayload,
   ManagedUser,
   OrganizationOverview,
   OrganizationDetails,
   Payment,
   PaymentFilters,
+  PaginatedResponse,
   RecentCourse,
   RecentActivity,
   RecentEnrollment,
   RegisterPayload,
+  RoleCount,
   ServiceResult,
   TopCourse,
+  TopCourseChart,
   TopInstructor,
   TopOrganization,
+  TrendPoint,
   UpdateProfilePayload
 } from "./types";
 
@@ -125,6 +131,19 @@ function normalizePayment(payment: any): Payment {
   };
 }
 
+function normalizeActivityLog(item: any): ActivityLog {
+  return {
+    id: item.id ?? item.Id ?? "",
+    userId: item.userId ?? item.UserId,
+    userName: item.userName ?? item.UserName ?? "Unknown",
+    action: item.action ?? item.Action ?? "",
+    entityType: item.entityType ?? item.EntityType ?? "",
+    entityId: item.entityId ?? item.EntityId,
+    description: item.description ?? item.Description ?? "",
+    createdAt: item.createdAt ?? item.CreatedAt ?? new Date().toISOString()
+  };
+}
+
 function unwrapData(data: any) {
   return data?.data ?? data?.Data ?? data;
 }
@@ -197,7 +216,9 @@ function normalizeOrganizationDetails(item: any): OrganizationDetails {
       studentsCount: course.studentsCount ?? course.StudentsCount ?? 0,
       sessionsCount: course.sessionsCount ?? course.SessionsCount ?? 0,
       averageRating: course.averageRating ?? course.AverageRating ?? 0
-    }))
+    })),
+    recentEnrollments: (item.recentEnrollments ?? item.RecentEnrollments ?? []).map(normalizeRecentEnrollment),
+    recentPayments: (item.recentPayments ?? item.RecentPayments ?? []).map(normalizePayment)
   };
 }
 
@@ -252,6 +273,31 @@ function normalizeRecentActivity(item: any): RecentActivity {
   };
 }
 
+function normalizeTrendPoint(item: any): TrendPoint {
+  return {
+    label: item.label ?? item.Label ?? "",
+    date: item.date ?? item.Date ?? new Date().toISOString(),
+    value: item.value ?? item.Value ?? 0
+  };
+}
+
+function normalizeRoleCount(item: any): RoleCount {
+  return {
+    role: item.role ?? item.Role ?? "",
+    count: item.count ?? item.Count ?? 0
+  };
+}
+
+function normalizeTopCourseChart(item: any): TopCourseChart {
+  return {
+    courseId: item.courseId ?? item.CourseId ?? "",
+    courseName: item.courseName ?? item.CourseName ?? "",
+    enrollments: item.enrollments ?? item.Enrollments ?? 0,
+    revenue: item.revenue ?? item.Revenue ?? 0,
+    averageRating: item.averageRating ?? item.AverageRating ?? 0
+  };
+}
+
 function normalizeAdminUserDetails(item: any): AdminUserDetails {
   const value = unwrapData(item);
   return {
@@ -263,7 +309,35 @@ function normalizeAdminUserDetails(item: any): AdminUserDetails {
     phone: value.phone ?? value.Phone ?? value.phoneNumber ?? value.PhoneNumber,
     coursesCount: value.coursesCount ?? value.CoursesCount ?? 0,
     sessionsCount: value.sessionsCount ?? value.SessionsCount ?? 0,
-    enrollmentsCount: value.enrollmentsCount ?? value.EnrollmentsCount ?? 0
+    enrollmentsCount: value.enrollmentsCount ?? value.EnrollmentsCount ?? 0,
+    createdAt: value.createdAt ?? value.CreatedAt,
+    lastLogin: value.lastLogin ?? value.LastLogin,
+    recentActivityLogs: (value.recentActivityLogs ?? value.RecentActivityLogs ?? []).map(normalizeActivityLog)
+  };
+}
+
+function normalizeGlobalSearchResult(data: any): GlobalSearchResult {
+  const value = unwrapData(data) ?? {};
+  return {
+    users: (value.users ?? value.Users ?? []).map((user: any) => ({
+      userId: user.userId ?? user.UserId ?? "",
+      fullName: user.fullName ?? user.FullName ?? "EduVerse user",
+      userName: user.userName ?? user.UserName ?? "",
+      email: user.email ?? user.Email ?? "",
+      role: inferRole(user.role ?? user.Role)
+    })),
+    courses: (value.courses ?? value.Courses ?? []).map((course: any) => ({
+      courseId: course.courseId ?? course.CourseId ?? "",
+      name: course.name ?? course.Name ?? "",
+      title: course.title ?? course.Title ?? "",
+      category: course.category ?? course.Category ?? "",
+      isDeleted: course.isDeleted ?? course.IsDeleted ?? false
+    })),
+    organizations: (value.organizations ?? value.Organizations ?? []).map((organization: any) => ({
+      organizationAdminId: organization.organizationAdminId ?? organization.OrganizationAdminId ?? "",
+      organizationAdminName: organization.organizationAdminName ?? organization.OrganizationAdminName ?? "Organization admin",
+      email: organization.email ?? organization.Email ?? ""
+    }))
   };
 }
 
@@ -682,6 +756,26 @@ export const dashboardService = {
   async getAdminUserDetails(userId: string): Promise<AdminUserDetails> {
     const response = await api.get(`/Dashboard/AdminUserDetails/${encodeURIComponent(userId)}`);
     return normalizeAdminUserDetails(response.data);
+  },
+
+  async getRevenueTrend(days = 30): Promise<TrendPoint[]> {
+    const response = await api.get(`/Dashboard/RevenueTrend?days=${days}`);
+    return (unwrapData(response.data) ?? []).map(normalizeTrendPoint);
+  },
+
+  async getEnrollmentsTrend(days = 30): Promise<TrendPoint[]> {
+    const response = await api.get(`/Dashboard/EnrollmentsTrend?days=${days}`);
+    return (unwrapData(response.data) ?? []).map(normalizeTrendPoint);
+  },
+
+  async getUsersByRole(): Promise<RoleCount[]> {
+    const response = await api.get("/Dashboard/UsersByRole");
+    return (unwrapData(response.data) ?? []).map(normalizeRoleCount);
+  },
+
+  async getTopCoursesChart(): Promise<TopCourseChart[]> {
+    const response = await api.get("/Dashboard/TopCoursesChart");
+    return (unwrapData(response.data) ?? []).map(normalizeTopCourseChart);
   }
 };
 
@@ -752,5 +846,34 @@ export const adminService = {
   async addUserToRole(userId: string, role: string): Promise<ServiceResult> {
     const response = await api.post(`/Auth/AddUserToRole/${encodeURIComponent(userId)}/${encodeURIComponent(role)}`);
     return response.data;
+  },
+
+  async getActivityLogs(filters: { page?: number; pageSize?: number; action?: string; entityType?: string; search?: string } = {}): Promise<PaginatedResponse<ActivityLog>> {
+    const params = new URLSearchParams();
+    params.set("page", String(filters.page ?? 1));
+    params.set("pageSize", String(filters.pageSize ?? 20));
+    if (filters.action) params.set("action", filters.action);
+    if (filters.entityType) params.set("entityType", filters.entityType);
+    if (filters.search) params.set("search", filters.search);
+
+    const response = await api.get(`/Admin/ActivityLogs?${params.toString()}`);
+    const data = unwrapData(response.data);
+    return {
+      items: (data.items ?? data.Items ?? []).map(normalizeActivityLog),
+      page: data.page ?? data.Page ?? 1,
+      pageSize: data.pageSize ?? data.PageSize ?? 20,
+      totalCount: data.totalCount ?? data.TotalCount ?? 0,
+      totalPages: data.totalPages ?? data.TotalPages ?? 1
+    };
+  },
+
+  async globalSearch(query: string): Promise<GlobalSearchResult> {
+    const response = await api.get(`/Admin/GlobalSearch?q=${encodeURIComponent(query)}`);
+    return normalizeGlobalSearchResult(response.data);
+  },
+
+  async getUserDetails(userId: string): Promise<AdminUserDetails> {
+    const response = await api.get(`/Admin/UserDetails/${encodeURIComponent(userId)}`);
+    return normalizeAdminUserDetails(response.data);
   }
 };

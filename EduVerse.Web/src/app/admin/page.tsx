@@ -7,7 +7,7 @@ import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
 import { EmptyState, LoadingState, PageHeader, StatCard } from "@/components/ui";
 import { dashboardService } from "@/lib/api";
-import type { DashboardStats, Payment, RecentActivity, RecentCourse, RecentEnrollment, TopCourse, TopInstructor, TopOrganization } from "@/lib/types";
+import type { DashboardStats, Payment, RecentActivity, RecentCourse, RecentEnrollment, RoleCount, TopCourse, TopCourseChart, TopInstructor, TopOrganization, TrendPoint } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 export default function AdminPage() {
@@ -19,6 +19,10 @@ export default function AdminPage() {
   const [topOrganizations, setTopOrganizations] = useState<TopOrganization[]>([]);
   const [topInstructors, setTopInstructors] = useState<TopInstructor[]>([]);
   const [activities, setActivities] = useState<RecentActivity[]>([]);
+  const [revenueTrend, setRevenueTrend] = useState<TrendPoint[]>([]);
+  const [enrollmentsTrend, setEnrollmentsTrend] = useState<TrendPoint[]>([]);
+  const [usersByRole, setUsersByRole] = useState<RoleCount[]>([]);
+  const [topCoursesChart, setTopCoursesChart] = useState<TopCourseChart[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [detailTitle, setDetailTitle] = useState("");
@@ -34,9 +38,13 @@ export default function AdminPage() {
       dashboardService.getTopCourses(),
       dashboardService.getTopOrganizations(),
       dashboardService.getTopInstructors(),
-      dashboardService.getRecentActivities()
+      dashboardService.getRecentActivities(),
+      dashboardService.getRevenueTrend(30),
+      dashboardService.getEnrollmentsTrend(30),
+      dashboardService.getUsersByRole(),
+      dashboardService.getTopCoursesChart()
     ])
-      .then(([statsData, enrollmentsData, paymentsData, coursesData, topCoursesData, topOrganizationsData, topInstructorsData, activitiesData]) => {
+      .then(([statsData, enrollmentsData, paymentsData, coursesData, topCoursesData, topOrganizationsData, topInstructorsData, activitiesData, revenueTrendData, enrollmentsTrendData, usersByRoleData, topCoursesChartData]) => {
         setStats(statsData);
         setRecentEnrollments(enrollmentsData);
         setRecentPayments(paymentsData);
@@ -45,6 +53,10 @@ export default function AdminPage() {
         setTopOrganizations(topOrganizationsData);
         setTopInstructors(topInstructorsData);
         setActivities(activitiesData);
+        setRevenueTrend(revenueTrendData);
+        setEnrollmentsTrend(enrollmentsTrendData);
+        setUsersByRole(usersByRoleData);
+        setTopCoursesChart(topCoursesChartData);
       })
       .catch(() => setError("Could not load admin dashboard data from the API."))
       .finally(() => setLoading(false));
@@ -108,6 +120,21 @@ export default function AdminPage() {
           </div>
         ) : (
           <>
+            <section className="mt-8 grid gap-6 xl:grid-cols-2">
+              <ChartPanel title="Revenue trend" subtitle="Last 30 days">
+                <SparkBars data={revenueTrend} formatter={formatCurrency} />
+              </ChartPanel>
+              <ChartPanel title="Enrollments trend" subtitle="Last 30 days">
+                <SparkBars data={enrollmentsTrend} />
+              </ChartPanel>
+              <ChartPanel title="Users by role" subtitle="Current identity roles">
+                <RoleBars data={usersByRole} />
+              </ChartPanel>
+              <ChartPanel title="Top courses chart" subtitle="Ranked by enrollments and revenue">
+                <TopCourseBars data={topCoursesChart} />
+              </ChartPanel>
+            </section>
+
             <section className="mt-8 grid gap-6 xl:grid-cols-3">
               <Panel title="Recent enrollments">
                 {recentEnrollments.length === 0 ? <Muted>No data yet</Muted> : recentEnrollments.map((item) => (
@@ -210,6 +237,85 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
     <div className="rounded-xl2 bg-white p-6 shadow-soft ring-1 ring-slate-100">
       <h2 className="text-lg font-bold text-ink">{title}</h2>
       <div className="mt-4 space-y-3">{children}</div>
+    </div>
+  );
+}
+
+function ChartPanel({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl2 bg-white p-6 shadow-soft ring-1 ring-slate-100">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-bold text-ink">{title}</h2>
+          <p className="mt-1 text-sm text-muted">{subtitle}</p>
+        </div>
+      </div>
+      <div className="mt-5">{children}</div>
+    </div>
+  );
+}
+
+function SparkBars({ data, formatter = (value: number) => `${value}` }: { data: TrendPoint[]; formatter?: (value: number) => string }) {
+  const max = Math.max(...data.map((item) => item.value), 1);
+  const total = data.reduce((sum, item) => sum + item.value, 0);
+
+  if (data.length === 0) return <Muted>No chart data yet</Muted>;
+
+  return (
+    <div>
+      <p className="text-2xl font-black text-ink">{formatter(total)}</p>
+      <div className="mt-5 flex h-32 items-end gap-1">
+        {data.map((item) => (
+          <div key={`${item.date}-${item.label}`} className="group relative flex-1 rounded-t-lg bg-gradient-to-t from-teal-500 to-indigo-500 transition hover:opacity-80" style={{ height: `${Math.max(5, (item.value / max) * 100)}%` }}>
+            <span className="pointer-events-none absolute bottom-full left-1/2 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded-lg bg-ink px-2 py-1 text-xs font-bold text-white group-hover:block">
+              {item.label}: {formatter(item.value)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RoleBars({ data }: { data: RoleCount[] }) {
+  const max = Math.max(...data.map((item) => item.count), 1);
+  if (data.length === 0) return <Muted>No user role data yet</Muted>;
+
+  return (
+    <div className="space-y-3">
+      {data.map((item) => (
+        <div key={item.role}>
+          <div className="flex items-center justify-between text-sm font-bold">
+            <span className="capitalize text-ink">{item.role}</span>
+            <span className="text-teal-600">{item.count}</span>
+          </div>
+          <div className="mt-2 h-3 overflow-hidden rounded-full bg-slate-100">
+            <div className="h-full rounded-full bg-gradient-to-r from-teal-500 to-indigo-500" style={{ width: `${(item.count / max) * 100}%` }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TopCourseBars({ data }: { data: TopCourseChart[] }) {
+  const max = Math.max(...data.map((item) => item.enrollments), 1);
+  if (data.length === 0) return <Muted>No top course data yet</Muted>;
+
+  return (
+    <div className="space-y-3">
+      {data.map((item) => (
+        <div key={item.courseId} className="rounded-xl bg-slate-50 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="truncate text-sm font-bold text-ink">{item.courseName}</p>
+            <p className="shrink-0 text-xs font-bold text-teal-600">{item.enrollments} enrollments</p>
+          </div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
+            <div className="h-full rounded-full bg-coral-500" style={{ width: `${(item.enrollments / max) * 100}%` }} />
+          </div>
+          <p className="mt-2 text-xs font-semibold text-muted">{formatCurrency(item.revenue)} revenue - {item.averageRating.toFixed(1)} rating</p>
+        </div>
+      ))}
     </div>
   );
 }

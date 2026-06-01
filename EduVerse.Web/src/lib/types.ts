@@ -154,6 +154,8 @@ export type OrganizationDetails = OrganizationOverview & {
     sessionsCount: number;
     averageRating: number;
   }[];
+  recentEnrollments?: RecentEnrollment[];
+  recentPayments?: Payment[];
 };
 
 export type CourseAdminDetails = {
@@ -254,6 +256,66 @@ export type RecentActivity = {
   createdAt: string;
 };
 
+export type ActivityLog = {
+  id: string;
+  userId?: string;
+  userName: string;
+  action: string;
+  entityType: string;
+  entityId?: string;
+  description: string;
+  createdAt: string;
+};
+
+export type PaginatedResponse<T> = {
+  items: T[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+};
+
+export type TrendPoint = {
+  label: string;
+  date: string;
+  value: number;
+};
+
+export type RoleCount = {
+  role: string;
+  count: number;
+};
+
+export type TopCourseChart = {
+  courseId: string;
+  courseName: string;
+  enrollments: number;
+  revenue: number;
+  averageRating: number;
+};
+
+export type GlobalSearchResult = {
+  users: {
+    userId: string;
+    fullName: string;
+    userName: string;
+    email: string;
+    role: UserRole;
+  }[];
+  courses: {
+    courseId: string;
+    name: string;
+    title: string;
+    category: string;
+    isDeleted: boolean;
+  }[];
+  organizations: {
+    organizationAdminId: string;
+    organizationAdminName: string;
+    email: string;
+  }[];
+};
+
 export type AdminUserDetails = {
   userId: string;
   fullName: string;
@@ -264,6 +326,9 @@ export type AdminUserDetails = {
   coursesCount: number;
   sessionsCount: number;
   enrollmentsCount: number;
+  createdAt?: string;
+  lastLogin?: string;
+  recentActivityLogs?: ActivityLog[];
 };
 
 export type AdminSession = {

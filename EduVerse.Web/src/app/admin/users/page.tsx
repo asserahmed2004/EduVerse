@@ -5,8 +5,9 @@ import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
 import { useToast } from "@/components/toast-provider";
 import { Badge, Button, EmptyState, LoadingState, PageHeader } from "@/components/ui";
-import { adminService, dashboardService } from "@/lib/api";
+import { adminService } from "@/lib/api";
 import type { AdminUserDetails, ManagedUser, UserRole } from "@/lib/types";
+import { formatDate } from "@/lib/utils";
 
 const roles: UserRole[] = ["Student", "Instructor", "OrganizationAdmin", "Admin"];
 
@@ -160,7 +161,7 @@ export default function AdminUsersPage() {
                                 setSelectedUser(user);
                                 setDetailsUser(null);
                                 if (user.id) {
-                                  setDetailsUser(await dashboardService.getAdminUserDetails(user.id));
+                                  setDetailsUser(await adminService.getUserDetails(user.id));
                                 }
                               }} className="text-sm font-bold text-teal-600">View Details</button>
                               <button onClick={() => setAssignUser(user)} className="text-sm font-bold text-amber-500">Assign Role</button>
@@ -196,9 +197,27 @@ export default function AdminUsersPage() {
                   <Info label="Role" value={detailsUser.role} />
                   <Info label="UserId" value={detailsUser.userId || "Not available"} />
                   <Info label="Phone" value={detailsUser.phone ?? "Not available"} />
+                  <Info label="Created At" value={detailsUser.createdAt && detailsUser.createdAt !== "Not available" ? formatDate(detailsUser.createdAt) : "Not available"} />
+                  <Info label="Last Login" value={detailsUser.lastLogin && detailsUser.lastLogin !== "Not available" ? formatDate(detailsUser.lastLogin) : "Not available"} />
                   <Info label="Courses Count" value={`${detailsUser.coursesCount}`} />
                   <Info label="Sessions Count" value={`${detailsUser.sessionsCount}`} />
                   <Info label="Enrollments Count" value={`${detailsUser.enrollmentsCount}`} />
+                  <div className="md:col-span-2">
+                    <p className="mb-3 text-sm font-bold text-ink">Recent activity</p>
+                    {detailsUser.recentActivityLogs?.length ? (
+                      <div className="space-y-2">
+                        {detailsUser.recentActivityLogs.map((log) => (
+                          <div key={log.id} className="rounded-xl bg-slate-50 p-3">
+                            <p className="text-sm font-bold text-ink">{log.action}</p>
+                            <p className="mt-1 text-xs text-muted">{log.description}</p>
+                            <p className="mt-2 text-xs font-semibold text-teal-600">{formatDate(log.createdAt)}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="rounded-xl bg-slate-50 p-4 text-sm font-semibold text-muted">No recent activity logs for this user.</p>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
