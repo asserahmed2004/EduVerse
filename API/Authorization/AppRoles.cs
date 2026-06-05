@@ -7,9 +7,14 @@ namespace API.Authorization
         public const string Instructor = "instructor";
         public const string Student = "student";
 
-        public const string All = Admin + "," + OrganizationAdmin + "," + Instructor + "," + Student;
-        public const string AdminOrInstructor = Admin + "," + Instructor;
-        public const string AdminOrOrganizationAdmin = Admin + "," + OrganizationAdmin;
-        public const string AdminOrganizationAdminOrInstructor = Admin + "," + OrganizationAdmin + "," + Instructor;
+        public const string AdminAccess = Admin + ",Admin";
+        public const string OrganizationAdminAccess = OrganizationAdmin + ",OrganizationAdmin";
+        public const string InstructorAccess = Instructor + ",Instructor";
+        public const string StudentAccess = Student + ",Student";
+
+        public const string All = AdminAccess + "," + OrganizationAdminAccess + "," + InstructorAccess + "," + StudentAccess;
+        public const string AdminOrInstructor = AdminAccess + "," + InstructorAccess;
+        public const string AdminOrOrganizationAdmin = AdminAccess + "," + OrganizationAdminAccess;
+        public const string AdminOrganizationAdminOrInstructor = AdminAccess + "," + OrganizationAdminAccess + "," + InstructorAccess;
     }
 }

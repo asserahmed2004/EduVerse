@@ -12,6 +12,7 @@ namespace Domain.Entities
         public string FullName { get; set; }=string.Empty;
         public string? ProfilePicture { get; set; }= string.Empty;
         public DateOnly Birthdate { get; set; }
+        public Guid? OrganizationId { get; set; }
 
 
     }

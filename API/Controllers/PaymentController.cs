@@ -11,7 +11,7 @@ namespace API.Controllers
     public class PaymentController(IPaymentService paymentService) : ControllerBase
     {
         [HttpGet("AdminSummary")]
-        [Authorize(Roles = AppRoles.Admin)]
+        [Authorize(Roles = AppRoles.AdminAccess)]
         public async Task<IActionResult> GetAdminSummary()
         {
             var result = await paymentService.GetAdminSummaryAsync();
@@ -19,7 +19,7 @@ namespace API.Controllers
         }
 
         [HttpGet("AdminTransactions")]
-        [Authorize(Roles = AppRoles.Admin)]
+        [Authorize(Roles = AppRoles.AdminAccess)]
         public async Task<IActionResult> GetAdminTransactions(
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 10,
@@ -33,7 +33,7 @@ namespace API.Controllers
         }
 
         [HttpGet("OrganizationSummary")]
-        [Authorize(Roles = AppRoles.OrganizationAdmin)]
+        [Authorize(Roles = AppRoles.OrganizationAdminAccess)]
         public async Task<IActionResult> GetOrganizationSummary()
         {
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -42,7 +42,7 @@ namespace API.Controllers
         }
 
         [HttpGet("OrganizationTransactions")]
-        [Authorize(Roles = AppRoles.OrganizationAdmin)]
+        [Authorize(Roles = AppRoles.OrganizationAdminAccess)]
         public async Task<IActionResult> GetOrganizationTransactions(
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 10,

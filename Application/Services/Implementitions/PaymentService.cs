@@ -40,8 +40,12 @@ namespace Application.Services.Implementitions
                 return new ServiceResponse(false, "Organization user id is missing");
             }
 
+            var organizationId = await ResolveUserOrganizationIdAsync(organizationAdminId);
+            if (!organizationId.HasValue)
+                return new ServiceResponse(false, "User is not assigned to an organization");
+
             var activeCourseIds = (await coursesManagement.GetAllAsync())
-                .Where(c => !c.IsDeleted && c.OrgId == organizationAdminId)
+                .Where(c => !c.IsDeleted && c.OrganizationId == organizationId.Value)
                 .Select(c => c.Id)
                 .ToHashSet();
 
@@ -161,8 +165,12 @@ namespace Application.Services.Implementitions
             page = page <= 0 ? 1 : page;
             pageSize = pageSize <= 0 ? 10 : Math.Min(pageSize, 100);
 
+            var organizationId = await ResolveUserOrganizationIdAsync(organizationAdminId);
+            if (!organizationId.HasValue)
+                return new ServiceResponse(false, "User is not assigned to an organization");
+
             var courses = (await coursesManagement.GetAllAsync())
-                .Where(c => !c.IsDeleted && c.OrgId == organizationAdminId)
+                .Where(c => !c.IsDeleted && c.OrganizationId == organizationId.Value)
                 .ToDictionary(c => c.Id, c => c);
 
             var paymentsQuery = (await paymentsManagement.GetAllAsync())
@@ -240,6 +248,12 @@ namespace Application.Services.Implementitions
         {
             return !string.IsNullOrWhiteSpace(value) &&
                 value.Contains(search, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private async Task<Guid?> ResolveUserOrganizationIdAsync(string userId)
+        {
+            var user = await userManagement.GetUserById(userId);
+            return user?.OrganizationId;
         }
     }
 }

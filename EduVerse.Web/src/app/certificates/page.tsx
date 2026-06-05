@@ -54,6 +54,8 @@ export default function CertificatesPage() {
                 </div>
                 <h2 className="mt-5 text-xl font-bold text-ink">{certificate.courseName}</h2>
                 <p className="mt-2 text-sm text-muted">Issued at {formatDate(certificate.issuedAt)}</p>
+                <p className="mt-2 text-xs font-semibold text-muted">Code: {certificate.certificateCode ?? certificate.id}</p>
+                <p className="mt-1 text-xs font-semibold text-muted">Status: {certificate.status ?? "Valid"}</p>
                 {certificate.fileUrl ? (
                   <LinkButton href={certificate.fileUrl} variant="ghost" className="mt-6 w-full">
                     <Download size={18} />
@@ -65,6 +67,10 @@ export default function CertificatesPage() {
                     Certificate file not available
                   </Button>
                 )}
+                <LinkButton href={`/verify-certificate?code=${encodeURIComponent(certificate.certificateCode ?? certificate.id)}`} variant="ghost" className="mt-3 w-full">
+                  <ShieldCheck size={18} />
+                  Verify
+                </LinkButton>
               </article>
             ))
           )}

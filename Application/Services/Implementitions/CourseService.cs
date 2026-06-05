@@ -25,7 +25,8 @@ namespace Application.Services.Implementitions
         IGeneric<CourseCategory> CoursesCatManagment,IGeneric<Category> CategoryManagment,
         IMapper mapper ,ICloudService cloud,IGeneric<Rating> RatingManagment ,IGeneric<Session> SessionManagment,IGeneric<Assignment> AssignmentManagment,
         IGeneric<Enrollment> EnrollmentManagment, IGeneric<Payment> PaymentManagment, IUserManagment UserManagment,
-        IActivityLogService activityLogService) : ICourseService
+        IActivityLogService activityLogService,
+        IGeneric<Organization> OrganizationManagment) : ICourseService
     {
         public async Task<ServiceResponse> AddRating(CreateRating rating, string userid)
         {
@@ -34,6 +35,10 @@ namespace Application.Services.Implementitions
             var course = await CoursesManagment.GetByIdAsync(rating.CourseId);
             if (course == null || course.IsDeleted)
                 return new ServiceResponse { success = false, message = "Course not found" };
+            var enrolled = (await EnrollmentManagment.GetAllAsync())
+                .Any(e => e.CourseId == rating.CourseId && e.StudentId == userid);
+            if (!enrolled)
+                return new ServiceResponse { success = false, message = "You must enroll in this course before rating it." };
             var mappedRating = mapper.Map<Rating>(rating);
             mappedRating.StudentId = userid;
             var existingRating = await RatingManagment.GetAllAsync();
@@ -48,17 +53,38 @@ namespace Application.Services.Implementitions
 
         
 
-        public  async Task<ServiceResponse> CreateCourse(CreateCourse Course, string orgId)
+        public  async Task<ServiceResponse> CreateCourse(CreateCourse Course, string currentUserId, bool isAdmin)
         {
             if (Course == null)
                 return new ServiceResponse { success = false, message = "Course data is null" };
-            if (string.IsNullOrEmpty(orgId))
-                return new ServiceResponse { success = false, message = "Organization user is required" };
+            if (string.IsNullOrEmpty(currentUserId))
+                return new ServiceResponse { success = false, message = "Current user is required" };
+
+            var creator = await UserManagment.GetUserById(currentUserId);
+            if (creator == null)
+                return new ServiceResponse { success = false, message = "Current user not found" };
+
+            Guid? targetOrganizationId = null;
+            if (isAdmin && Course.OrganizationId.HasValue)
+            {
+                var targetOrganization = await OrganizationManagment.GetByIdAsync(Course.OrganizationId.Value);
+                if (targetOrganization == null)
+                    return new ServiceResponse { success = false, message = "Organization not found" };
+                targetOrganizationId = targetOrganization.Id;
+            }
+            else
+            {
+                if (!creator.OrganizationId.HasValue)
+                    return new ServiceResponse { success = false, message = "User is not assigned to an organization" };
+                targetOrganizationId = creator.OrganizationId.Value;
+            }
+
             var mapping = mapper.Map<Course>(Course);
             mapping.Duration = 0;
             mapping.IsDeleted = false;
             mapping.ImageUrl = $"{mapping.Id}-Thumbnail";
-            mapping.OrgId = orgId;
+            mapping.OrgId = currentUserId;
+            mapping.OrganizationId = targetOrganizationId;
             var details =new FileDetails { FileName = mapping.ImageUrl, Folder = "courses" };
             var AddCloudFile = new AddCloudFile { Details = details, File = Course.Image};
             var uploadResult = await cloud.UploadFileAsync(AddCloudFile);
@@ -81,8 +107,7 @@ namespace Application.Services.Implementitions
                 var courseCategory = new CourseCategory { CourseId =result.Id , CategoryId = test.Id };
                 await CoursesCatManagment.AddAsync(courseCategory);
             }
-            var creator = await UserManagment.GetUserById(orgId);
-            await activityLogService.LogAsync(orgId, DisplayName(creator), "CourseCreated", "Course", result.Id.ToString(), $"{result.Name} was created");
+            await activityLogService.LogAsync(currentUserId, DisplayName(creator), "CourseCreated", "Course", result.Id.ToString(), $"{result.Name} was created");
             return new ServiceResponse
             {
                 success = true,
@@ -140,6 +165,40 @@ namespace Application.Services.Implementitions
             return new ServiceResponse { success = true, message = "Course restored successfully" };
         }
 
+        public async Task<ServiceResponse> AssignInstructor(Guid courseId, string instructorId, string currentUserId, bool isAdmin)
+        {
+            if (courseId == Guid.Empty || string.IsNullOrWhiteSpace(instructorId) || string.IsNullOrWhiteSpace(currentUserId))
+                return new ServiceResponse(false, "Course id, instructor id, and current user are required");
+
+            var course = await CoursesManagment.GetByIdAsync(courseId);
+            if (course == null || course.IsDeleted)
+                return new ServiceResponse(false, "Course not found");
+
+            var instructor = await UserManagment.GetUserById(instructorId);
+            if (instructor == null)
+                return new ServiceResponse(false, "Instructor not found");
+
+            if (!isAdmin)
+            {
+                var currentUser = await UserManagment.GetUserById(currentUserId);
+                if (currentUser?.OrganizationId.HasValue != true ||
+                    course.OrganizationId != currentUser.OrganizationId ||
+                    instructor.OrganizationId != currentUser.OrganizationId)
+                {
+                    return new ServiceResponse(false, "You can assign only instructors from your organization to your courses");
+                }
+            }
+
+            course.InstructorId = instructorId;
+            var result = await CoursesManagment.UpdateAsync(course);
+            if (result == null)
+                return new ServiceResponse(false, "Failed to assign instructor");
+
+            var actor = await UserManagment.GetUserById(currentUserId);
+            await activityLogService.LogAsync(currentUserId, DisplayName(actor), "CourseInstructorAssigned", "Course", course.Id.ToString(), $"{DisplayName(instructor)} assigned to {course.Name}");
+            return new ServiceResponse(true, "Instructor assigned to course successfully");
+        }
+
         public async Task<bool> CourseExists(Guid id)
         {
             if (id == Guid.Empty)
@@ -169,7 +228,12 @@ namespace Application.Services.Implementitions
             }
 
             var course = await CoursesManagment.GetByIdAsync(courseId);
-            return course != null && !course.IsDeleted && course.OrgId == userId;
+            var user = await UserManagment.GetUserById(userId);
+            return course != null &&
+                !course.IsDeleted &&
+                course.OrganizationId.HasValue &&
+                user?.OrganizationId.HasValue == true &&
+                course.OrganizationId.Value == user.OrganizationId.Value;
         }
 
         public async Task<bool> CanManageSession(Guid sessionId, string userId)
@@ -180,8 +244,9 @@ namespace Application.Services.Implementitions
             }
 
             var session = await SessionManagment.GetByIdAsync(sessionId);
+            var course = session == null ? null : await CoursesManagment.GetByIdAsync(session.CourseId);
             return session != null &&
-                (session.TrainerId == userId || await CanManageCourse(session.CourseId, userId));
+                (session.TrainerId == userId || course?.InstructorId == userId || await CanManageCourse(session.CourseId, userId));
         }
 
         public async Task<bool> CanManageAssignment(Guid assignmentId, string userId)
@@ -198,13 +263,56 @@ namespace Application.Services.Implementitions
             }
 
             var session = await SessionManagment.GetByIdAsync(assignment.SessionId);
+            var course = session == null ? null : await CoursesManagment.GetByIdAsync(session.CourseId);
             return session != null &&
-                (session.TrainerId == userId || await CanManageCourse(session.CourseId, userId));
+                (session.TrainerId == userId || course?.InstructorId == userId || await CanManageCourse(session.CourseId, userId));
         }
 
-        public async Task<List<GetCourse>> GetAllCourses(string? userid)
+        private async Task<List<Course>> ScopeActiveCoursesAsync(
+            IEnumerable<Course> sourceCourses,
+            string? userId,
+            bool isAdmin,
+            bool isOrganizationAdmin,
+            bool isInstructor)
         {
-            var courses = (await CoursesManagment.GetAllAsync()).Where(c => !c.IsDeleted).ToList();
+            var courses = sourceCourses.ToList();
+
+            if (isAdmin)
+            {
+                return courses;
+            }
+
+            if (isOrganizationAdmin)
+            {
+                if (string.IsNullOrWhiteSpace(userId))
+                    return [];
+
+                var user = await UserManagment.GetUserById(userId);
+                if (user?.OrganizationId.HasValue != true)
+                    return [];
+
+                return courses.Where(c => c.OrganizationId == user.OrganizationId.Value).ToList();
+            }
+
+            if (isInstructor)
+            {
+                if (string.IsNullOrWhiteSpace(userId))
+                    return [];
+
+                var assignedCourseIds = (await SessionManagment.GetAllAsync())
+                    .Where(s => s.TrainerId == userId)
+                    .Select(s => s.CourseId)
+                    .ToHashSet();
+
+                return courses.Where(c => c.InstructorId == userId || assignedCourseIds.Contains(c.Id)).ToList();
+            }
+
+            return courses;
+        }
+
+        public async Task<List<GetCourse>> GetAllCourses(string? userid, bool isAdmin = false, bool isOrganizationAdmin = false, bool isInstructor = false)
+        {
+            var courses = await ScopeActiveCoursesAsync((await CoursesManagment.GetAllAsync()).Where(c => !c.IsDeleted), userid, isAdmin, isOrganizationAdmin, isInstructor);
             if (courses == null || !courses.Any())
                 return new List<GetCourse>();
             var mappedCourses = mapper.Map<List<GetCourse>>(courses);
@@ -258,12 +366,12 @@ namespace Application.Services.Implementitions
             await EnrichCourses(mappedCourses, userid);
             return mappedCourses;
         }
-        public async Task<List<GetCourse>> GetCourseByCategory(Guid categoryId, string? userid)
+        public async Task<List<GetCourse>> GetCourseByCategory(Guid categoryId, string? userid, bool isAdmin = false, bool isOrganizationAdmin = false, bool isInstructor = false)
         {
             var categoryLinks = await CoursesCatManagment.GetAllAsync();
             var courseIds = categoryLinks.Where(cl => cl.CategoryId == categoryId).Select(cl => cl.CourseId).ToList();
             var courses = await CoursesManagment.GetAllAsync();
-            var filteredCourses = courses.Where(c => !c.IsDeleted && courseIds.Contains(c.Id)).ToList();
+            var filteredCourses = await ScopeActiveCoursesAsync(courses.Where(c => !c.IsDeleted && courseIds.Contains(c.Id)), userid, isAdmin, isOrganizationAdmin, isInstructor);
             if (filteredCourses == null || !filteredCourses.Any())
                 return new List<GetCourse>();
             var mappedCourses = mapper.Map<List<GetCourse>>(filteredCourses);
@@ -283,10 +391,10 @@ namespace Application.Services.Implementitions
             await EnrichCourses(mappedCourses, userid);
             return mappedCourses;
         }
-        public async Task<List<GetCourse>> Search(string name,string? userid)
+        public async Task<List<GetCourse>> Search(string name,string? userid, bool isAdmin = false, bool isOrganizationAdmin = false, bool isInstructor = false)
         {
             var courses = await CoursesManagment.GetAllAsync();
-            var filteredCourses = courses.Where(c => !c.IsDeleted && c.Name.Contains(name, StringComparison.OrdinalIgnoreCase)).ToList();
+            var filteredCourses = await ScopeActiveCoursesAsync(courses.Where(c => !c.IsDeleted && c.Name.Contains(name, StringComparison.OrdinalIgnoreCase)), userid, isAdmin, isOrganizationAdmin, isInstructor);
             if (courses == null || !courses.Any())
                 return new List<GetCourse>();
             var mappedCourses = mapper.Map<List<GetCourse>>(filteredCourses);
@@ -353,14 +461,30 @@ namespace Application.Services.Implementitions
                 course.Category = course.Categories?.FirstOrDefault()?.Name;
                 course.IsDeleted = course.IsDeleted;
 
-                if (!string.IsNullOrWhiteSpace(course.OrgId))
+                if (course.OrganizationId.HasValue)
                 {
-                    var owner = await UserManagment.GetUserById(course.OrgId);
-                    course.OrganizationOwnerName = owner?.FullName;
-                    course.OrganizationOwnerEmail = owner?.Email;
+                    var organization = await OrganizationManagment.GetByIdAsync(course.OrganizationId.Value);
+                    course.OrganizationId = organization?.Id;
+                    course.OrganizationName = organization?.Name ?? "EduVerseOrganization";
+                    course.OrganizationOwnerName = course.OrganizationName;
+                    course.OrganizationOwnerEmail = organization?.Email;
+                }
+                else if (!string.IsNullOrWhiteSpace(course.OrgId))
+                {
+                    course.OrganizationName = "EduVerseOrganization";
+                    course.OrganizationOwnerName = "EduVerseOrganization";
+                    course.OrganizationOwnerEmail = null;
+                }
+                else
+                {
+                    course.OrganizationName = "EduVerseOrganization";
+                    course.OrganizationOwnerName = "EduVerseOrganization";
+                    course.OrganizationOwnerEmail = null;
                 }
 
-                var trainerId = courseSessions.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.TrainerId))?.TrainerId;
+                var sourceCourse = (await CoursesManagment.GetAllAsync()).FirstOrDefault(c => c.Id == course.Id);
+                course.InstructorId = sourceCourse?.InstructorId;
+                var trainerId = sourceCourse?.InstructorId ?? courseSessions.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.TrainerId))?.TrainerId;
                 if (!string.IsNullOrWhiteSpace(trainerId))
                 {
                     var trainer = await UserManagment.GetUserById(trainerId);
@@ -466,10 +590,18 @@ namespace Application.Services.Implementitions
                 if (string.IsNullOrWhiteSpace(currentUserId))
                     return null;
 
-                if (isOrganizationAdmin && course.OrgId != currentUserId)
-                    return null;
+                if (isOrganizationAdmin)
+                {
+                    var currentUser = await UserManagment.GetUserById(currentUserId);
+                    if (!course.OrganizationId.HasValue ||
+                        currentUser?.OrganizationId.HasValue != true ||
+                        course.OrganizationId.Value != currentUser.OrganizationId.Value)
+                    {
+                        return null;
+                    }
+                }
 
-                if (isInstructor && !sessions.Any(s => s.TrainerId == currentUserId))
+                if (isInstructor && course.InstructorId != currentUserId && !sessions.Any(s => s.TrainerId == currentUserId))
                     return null;
             }
 
@@ -516,8 +648,9 @@ namespace Application.Services.Implementitions
                 payments.Add(payment);
             }
 
+            var organization = course.OrganizationId.HasValue ? await OrganizationManagment.GetByIdAsync(course.OrganizationId.Value) : null;
             var owner = !string.IsNullOrWhiteSpace(course.OrgId) ? await UserManagment.GetUserById(course.OrgId) : null;
-            var trainerId = sessions.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.TrainerId))?.TrainerId;
+            var trainerId = course.InstructorId ?? sessions.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.TrainerId))?.TrainerId;
             var trainer = !string.IsNullOrWhiteSpace(trainerId) ? await UserManagment.GetUserById(trainerId) : null;
 
             return new AdminCourseDetailsDto
@@ -527,8 +660,11 @@ namespace Application.Services.Implementitions
                 Title = course.Title,
                 Description = course.Description,
                 Category = categories.FirstOrDefault()?.Name,
-                OrganizationOwner = owner?.FullName,
-                OrganizationOwnerEmail = owner?.Email,
+                OrganizationId = organization?.Id,
+                OrganizationName = organization?.Name ?? "EduVerseOrganization",
+                OrganizationOwner = organization?.Name ?? "EduVerseOrganization",
+                OrganizationOwnerEmail = organization?.Email,
+                InstructorId = trainer?.Id,
                 InstructorName = trainer?.FullName,
                 Price = course.Price,
                 ImageUrl = course.ImageUrl,
@@ -657,6 +793,8 @@ namespace Application.Services.Implementitions
             if (course == null || course.IsDeleted)
                 return new ServiceResponse { success = false, message = "Course not found" };
             var mappedSession = mapper.Map<Session>(session);
+            if (string.IsNullOrWhiteSpace(mappedSession.TrainerId) && !string.IsNullOrWhiteSpace(course.InstructorId))
+                mappedSession.TrainerId = course.InstructorId;
             mappedSession.Date= DateTime .Today;
             var duration = GetVideoDuration(session.File);
             mappedSession.Duration = duration.TotalMinutes;
@@ -861,6 +999,7 @@ namespace Application.Services.Implementitions
             }
             existingAssignment.Subject = assignment.Subject;
             existingAssignment.Description = assignment.Description;
+            existingAssignment.DueDate = assignment.DueDate;
             var updateResult = await AssignmentManagment.UpdateAsync(existingAssignment);
             if (updateResult == null)
                 return new ServiceResponse { success = false, message = "Failed to update assignment" };

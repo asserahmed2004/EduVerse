@@ -16,5 +16,10 @@ namespace Application.DTOs.Sessions
         public DateTime Date { get; set; }
         public double Duration { get; set; }
         public int SessionNumber { get; set; }
+        public string? Description { get; set; }
+        public string? VideoUrl { get; set; }
+        public string? ExternalLink { get; set; }
+        public string? AttendanceCode { get; set; }
+        public DateTime? AttendanceCodeCreatedAt { get; set; }
     }
 }

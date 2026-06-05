@@ -24,6 +24,8 @@ namespace Domain.Entities
         public DateTime? RestoredAt { get; set; }
         public string? RestoredById { get; set; }
         public string? RestoredByName { get; set; }
+        public Guid? OrganizationId { get; set; }
+        public string? InstructorId { get; set; }
         
         public string OrgId { get; set; }
     }

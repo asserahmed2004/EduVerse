@@ -14,21 +14,22 @@ namespace Application.Services.Interfaces
 {
     public interface ICourseService
     {
-        Task<ServiceResponse> CreateCourse(CreateCourse Course, string orgId);
+        Task<ServiceResponse> CreateCourse(CreateCourse Course, string currentUserId, bool isAdmin);
         Task<ServiceResponse> UpdateCourse(UpdateCourse Course);
         Task<ServiceResponse> DeleteCourse(Guid id, string deletedById, string deletedByName);
         Task<ServiceResponse> RestoreCourse(Guid id, string restoredById, string restoredByName);
+        Task<ServiceResponse> AssignInstructor(Guid courseId, string instructorId, string currentUserId, bool isAdmin);
         Task<bool> CourseExists(Guid id);
         Task<bool> IsCourseDeleted(Guid id);
         Task<bool> CanManageCourse(Guid courseId, string userId);
         Task<bool> CanManageSession(Guid sessionId, string userId);
         Task<bool> CanManageAssignment(Guid assignmentId, string userId);
-        Task<List<GetCourse>> GetAllCourses(string? userid);
+        Task<List<GetCourse>> GetAllCourses(string? userid, bool isAdmin = false, bool isOrganizationAdmin = false, bool isInstructor = false);
         Task<List<GetCourse>> GetDeletedCourses(string? userid);
-        Task <List<GetCourse>> Search(string name, string? userid);
+        Task <List<GetCourse>> Search(string name, string? userid, bool isAdmin = false, bool isOrganizationAdmin = false, bool isInstructor = false);
         Task<GetCourse> GetCourseById(Guid id, string? userid);
         Task<GetCourse> GetCourseByName(string name, string userid);
-        Task<List<GetCourse>> GetCourseByCategory(Guid  categoryId, string userid);
+        Task<List<GetCourse>> GetCourseByCategory(Guid  categoryId, string? userid, bool isAdmin = false, bool isOrganizationAdmin = false, bool isInstructor = false);
         Task<AdminCourseDetailsDto?> GetAdminCourseDetails(Guid id, string? currentUserId, bool isAdmin, bool isOrganizationAdmin, bool isInstructor);
 
         Task<ServiceResponse> AddRating(CreateRating rating, string userid);

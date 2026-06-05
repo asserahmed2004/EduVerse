@@ -1,12 +1,12 @@
 "use client";
 
-import { BookOpen, CreditCard, GraduationCap, Star, UserPlus, Wallet } from "lucide-react";
+import { BookOpen, CreditCard, GraduationCap, Star, UserPlus, Users, Wallet } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
 import { Badge, EmptyState, LoadingState, PageHeader, StatCard } from "@/components/ui";
-import { dashboardService } from "@/lib/api";
+import { organizationService } from "@/lib/api";
 import type { OrganizationDetails } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
@@ -17,7 +17,7 @@ export default function OrganizationDetailsPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    dashboardService.getOrganizationDetails(params.id)
+    organizationService.getById(params.id)
       .then(setDetails)
       .catch(() => setError("Could not load organization details from the API."))
       .finally(() => setLoading(false));
@@ -32,7 +32,7 @@ export default function OrganizationDetailsPage() {
           <EmptyState title="Organization unavailable" description={error || "Organization details are not available."} />
         ) : (
           <>
-            <PageHeader eyebrow="Organization details" title={details.organizationAdminName} description={details.email} />
+            <PageHeader eyebrow="Organization details" title={details.organizationName ?? details.organizationAdminName} description={details.description || details.email || "Organization profile"} />
 
             <div className="mt-8 grid gap-5 md:grid-cols-4">
               <StatCard label="Courses" value={`${details.coursesCount}`} icon={BookOpen} />
@@ -40,6 +40,20 @@ export default function OrganizationDetailsPage() {
               <StatCard label="Revenue" value={formatCurrency(details.revenue)} icon={Wallet} />
               <StatCard label="Average rating" value={details.averageRating.toFixed(1)} icon={Star} accent="coral" />
             </div>
+
+            <section className="mt-8 grid gap-6 xl:grid-cols-2">
+              <Panel title="Organization admins" icon={Users}>
+                {details.admins?.length ? details.admins.map((user) => (
+                  <Row key={user.userId} title={user.fullName || user.email} meta={`${user.email} - ${user.role}`} value="Admin" />
+                )) : <Muted>No organization admins assigned yet</Muted>}
+              </Panel>
+
+              <Panel title="Instructors" icon={GraduationCap}>
+                {details.instructors?.length ? details.instructors.map((user) => (
+                  <Row key={user.userId} title={user.fullName || user.email} meta={`${user.email} - ${user.role}`} value="Instructor" />
+                )) : <Muted>No instructors assigned yet</Muted>}
+              </Panel>
+            </section>
 
             <section className="mt-8 rounded-xl2 bg-white p-6 shadow-soft ring-1 ring-slate-100">
               <div className="flex items-center justify-between">
@@ -49,7 +63,7 @@ export default function OrganizationDetailsPage() {
 
               {details.courses.length === 0 ? (
                 <div className="mt-5">
-                  <EmptyState title="No courses" description="This organization admin does not own active courses yet." />
+                  <EmptyState title="No courses" description="This organization does not have active courses yet." />
                 </div>
               ) : (
                 <div className="mt-5 overflow-x-auto">

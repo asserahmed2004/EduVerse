@@ -1,8 +1,9 @@
-﻿using Application.DTOs.Assignment;
+using Application.DTOs.Assignment;
 using Application.DTOs.Course;
 using Application.DTOs.Rating;
 using Application.DTOs.Responses;
 using Application.DTOs.Sessions;
+using Application.DTOs.Learning;
 using Application.Services.Interfaces.Auth;
 using Application.Services.Interfaces;
 using API.Authorization;
@@ -26,7 +27,7 @@ namespace API.Controllers
             if (string.IsNullOrEmpty(userId))
                 return Unauthorized(new { success = false, message = "User id claim is missing" });
 
-            var result = await courseService.CreateCourse(Course, userId);
+            var result = await courseService.CreateCourse(Course, userId, User.HasRole(AppRoles.Admin));
             if (!result.success)
                 return BadRequest(result);
             return Ok(result);
@@ -84,7 +85,7 @@ namespace API.Controllers
         }
 
         [HttpPost("Restore/{id}")]
-        [Authorize(Roles = AppRoles.Admin)]
+        [Authorize(Roles = AppRoles.AdminAccess)]
         public async Task<IActionResult> RestoreCourse(Guid id)
         {
             var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
@@ -106,7 +107,7 @@ namespace API.Controllers
         }
 
         [HttpGet("GetDeletedCourses")]
-        [Authorize(Roles = AppRoles.Admin)]
+        [Authorize(Roles = AppRoles.AdminAccess)]
         public async Task<IActionResult> GetDeletedCourses()
         {
             var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
@@ -127,7 +128,11 @@ namespace API.Controllers
                 userId = null;
             }
 
-            var result = await courseService.GetAllCourses(userId);
+            var result = await courseService.GetAllCourses(
+                userId,
+                User.HasRole(AppRoles.Admin),
+                User.HasRole(AppRoles.OrganizationAdmin),
+                User.HasRole(AppRoles.Instructor));
             return Ok(result);
         }
         [HttpGet("GetByCategory/{category}")]
@@ -142,7 +147,12 @@ namespace API.Controllers
             {
                 userId = null;
             }
-            var result = await courseService.GetCourseByCategory(category, userId);
+            var result = await courseService.GetCourseByCategory(
+                category,
+                userId,
+                User.HasRole(AppRoles.Admin),
+                User.HasRole(AppRoles.OrganizationAdmin),
+                User.HasRole(AppRoles.Instructor));
             return Ok(result);
         }
         [HttpGet("search/{query}")]
@@ -157,7 +167,12 @@ namespace API.Controllers
             {
                 userId = null;
             }
-            var result = await courseService.Search(query, userId);
+            var result = await courseService.Search(
+                query,
+                userId,
+                User.HasRole(AppRoles.Admin),
+                User.HasRole(AppRoles.OrganizationAdmin),
+                User.HasRole(AppRoles.Instructor));
             return Ok(result);
         }
         [HttpGet("GetById/{id}")]
@@ -186,9 +201,9 @@ namespace API.Controllers
             var result = await courseService.GetAdminCourseDetails(
                 id,
                 userId,
-                User.IsInRole(AppRoles.Admin),
-                User.IsInRole(AppRoles.OrganizationAdmin),
-                User.IsInRole(AppRoles.Instructor));
+                User.HasRole(AppRoles.Admin),
+                User.HasRole(AppRoles.OrganizationAdmin),
+                User.HasRole(AppRoles.Instructor));
 
             if (result == null)
                 return NotFound(new { success = false, message = "Course details not found or access denied" });
@@ -224,8 +239,20 @@ namespace API.Controllers
                 return BadRequest(result);
             return Ok(result);
         }
+
+        [HttpPost("AssignInstructor")]
+        [Authorize(Roles = AppRoles.AdminOrOrganizationAdmin)]
+        public async Task<IActionResult> AssignInstructor([FromBody] AssignInstructorRequest request)
+        {
+            var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrWhiteSpace(userId))
+                return Unauthorized(new { success = false, message = "User id claim is missing" });
+
+            var result = await courseService.AssignInstructor(request.CourseId, request.InstructorId, userId, User.HasRole(AppRoles.Admin));
+            return result.success ? Ok(result) : BadRequest(result);
+        }
         [HttpPost("AddRating")]
-        [Authorize(Roles = AppRoles.Student)]
+        [Authorize(Roles = AppRoles.StudentAccess)]
         public async Task<IActionResult> AddRating( CreateRating rating)
         {
             string userId;
@@ -365,10 +392,10 @@ namespace API.Controllers
 
         private async Task<bool> CanManageCourse(Guid courseId)
         {
-            if (User.IsInRole(AppRoles.Admin))
+            if (User.HasRole(AppRoles.Admin))
                 return true;
 
-            if (!User.IsInRole(AppRoles.OrganizationAdmin))
+            if (!User.HasRole(AppRoles.OrganizationAdmin))
                 return false;
 
             var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
@@ -377,7 +404,7 @@ namespace API.Controllers
 
         private async Task<bool> CanManageSession(Guid sessionId)
         {
-            if (User.IsInRole(AppRoles.Admin))
+            if (User.HasRole(AppRoles.Admin))
                 return true;
 
             var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
@@ -386,7 +413,7 @@ namespace API.Controllers
 
         private async Task<bool> CanManageAssignment(Guid assignmentId)
         {
-            if (User.IsInRole(AppRoles.Admin))
+            if (User.HasRole(AppRoles.Admin))
                 return true;
 
             var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;

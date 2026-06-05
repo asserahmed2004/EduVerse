@@ -13,6 +13,7 @@ namespace Application.Services.Implementitions
         IGeneric<Assignment> assignmentsManagement,
         IGeneric<Payment> paymentsManagement,
         IGeneric<Rating> ratingsManagement,
+        IGeneric<Organization> organizationsManagement,
         IUserManagment userManagement,
         IRoleManagment roleManagement,
         IActivityLogService activityLogService) : IDashboardService
@@ -31,7 +32,7 @@ namespace Application.Services.Implementitions
             var allCourses = (await coursesManagement.GetAllAsync()).ToList();
             var allSessions = (await sessionsManagement.GetAllAsync()).ToList();
 
-            var scopedCourses = ResolveScopedCourses(
+            var scopedCourses = await ResolveScopedCourses(
                 allCourses,
                 allSessions,
                 currentUserId,
@@ -49,7 +50,9 @@ namespace Application.Services.Implementitions
 
             if (isInstructor && !isAdmin && !isOrganizationAdmin)
             {
-                sessions = sessions.Where(s => s.TrainerId == currentUserId).ToList();
+                sessions = sessions.Where(s =>
+                    s.TrainerId == currentUserId ||
+                    activeCourses.Any(c => c.Id == s.CourseId && c.InstructorId == currentUserId)).ToList();
             }
 
             var sessionIds = sessions.Select(s => s.Id).ToHashSet();
@@ -90,7 +93,7 @@ namespace Application.Services.Implementitions
             var stats = new OrganizationStatsDto
             {
                 TotalUsers = isAdmin ? (await userManagement.GetAllUsers()).Count() : 0,
-                TotalOrganizations = isAdmin ? await CountUsersInRoleAsync("organizationAdmin") : isOrganizationAdmin ? 1 : 0,
+                TotalOrganizations = isAdmin ? (await organizationsManagement.GetAllAsync()).Count() : isOrganizationAdmin ? 1 : 0,
                 TotalCourses = activeCourses.Count,
                 DeletedCourses = deletedCourses,
                 TotalInstructors = totalInstructors,
@@ -190,14 +193,15 @@ namespace Application.Services.Implementitions
             var result = new List<RecentCourseDto>();
             foreach (var course in courses)
             {
-                var owner = await userManagement.GetUserById(course.OrgId);
+                var organization = course.OrganizationId.HasValue ? await organizationsManagement.GetByIdAsync(course.OrganizationId.Value) : null;
+                var owner = string.IsNullOrWhiteSpace(course.OrgId) ? null : await userManagement.GetUserById(course.OrgId);
                 result.Add(new RecentCourseDto
                 {
                     CourseId = course.Id,
                     CourseName = course.Name,
                     Title = course.Title,
-                    OrganizationAdminId = course.OrgId,
-                    OrganizationAdminName = owner?.FullName ?? string.Empty,
+                    OrganizationAdminId = organization?.Id.ToString() ?? course.OrgId,
+                    OrganizationAdminName = organization?.Name ?? owner?.FullName ?? "Not assigned",
                     Price = course.Price,
                     IsDeleted = course.IsDeleted
                 });
@@ -228,14 +232,15 @@ namespace Application.Services.Implementitions
             var result = new List<TopCourseDto>();
             foreach (var course in courses)
             {
-                var owner = await userManagement.GetUserById(course.OrgId);
+                var organization = course.OrganizationId.HasValue ? await organizationsManagement.GetByIdAsync(course.OrganizationId.Value) : null;
+                var owner = string.IsNullOrWhiteSpace(course.OrgId) ? null : await userManagement.GetUserById(course.OrgId);
                 var courseRatings = ratings.Where(r => r.CourseId == course.Id).ToList();
                 result.Add(new TopCourseDto
                 {
                     CourseId = course.Id,
                     CourseName = course.Name,
                     Title = course.Title,
-                    OrganizationAdminName = owner?.FullName ?? string.Empty,
+                    OrganizationAdminName = organization?.Name ?? owner?.FullName ?? "Not assigned",
                     StudentsCount = enrollments.Where(e => e.CourseId == course.Id).Select(e => e.StudentId).Distinct().Count(),
                     SessionsCount = sessions.Count(s => s.CourseId == course.Id),
                     Revenue = payments.Where(p => p.CourseId == course.Id && IsPaid(p)).Sum(p => p.TotalPrice),
@@ -314,17 +319,17 @@ namespace Application.Services.Implementitions
         {
             if (string.IsNullOrWhiteSpace(organizationAdminId))
             {
-                return new ServiceResponse(false, "Organization admin id is required");
+                return new ServiceResponse(false, "Organization id is required");
             }
 
-            var owner = await userManagement.GetUserById(organizationAdminId);
-            if (owner == null)
+            var organization = await ResolveOrganizationAsync(organizationAdminId);
+            if (organization == null)
             {
-                return new ServiceResponse(false, "Organization admin not found");
+                return new ServiceResponse(false, "Organization not found");
             }
 
             var courses = (await coursesManagement.GetAllAsync())
-                .Where(c => !c.IsDeleted && c.OrgId == organizationAdminId)
+                .Where(c => !c.IsDeleted && c.OrganizationId == organization.Id)
                 .ToList();
             var courseIds = courses.Select(c => c.Id).ToHashSet();
             var enrollments = (await enrollmentsManagement.GetAllAsync())
@@ -379,9 +384,15 @@ namespace Application.Services.Implementitions
 
             var details = new OrganizationDetailsDto
             {
-                OrganizationAdminId = owner.Id,
-                OrganizationAdminName = owner.FullName,
-                Email = owner.Email ?? string.Empty,
+                OrganizationId = organization.Id,
+                OrganizationName = organization.Name,
+                OrganizationAdminId = organization.Id.ToString(),
+                OrganizationAdminName = organization.Name,
+                Email = organization.Email ?? string.Empty,
+                PhoneNumber = organization.PhoneNumber,
+                Description = organization.Description,
+                WebsiteUrl = organization.WebsiteUrl,
+                Status = organization.Status,
                 CoursesCount = courses.Count,
                 StudentsCount = enrollments.Select(e => e.StudentId).Distinct().Count(),
                 EnrollmentsCount = enrollments.Count,
@@ -522,13 +533,14 @@ namespace Application.Services.Implementitions
             foreach (var course in courses)
             {
                 var courseRatings = ratings.Where(r => r.CourseId == course.Id).ToList();
-                var owner = await userManagement.GetUserById(course.OrgId);
+                var organization = course.OrganizationId.HasValue ? await organizationsManagement.GetByIdAsync(course.OrganizationId.Value) : null;
+                var owner = string.IsNullOrWhiteSpace(course.OrgId) ? null : await userManagement.GetUserById(course.OrgId);
                 result.Add(new TopCourseDto
                 {
                     CourseId = course.Id,
                     CourseName = course.Name,
                     Title = course.Title,
-                    OrganizationAdminName = owner?.FullName ?? string.Empty,
+                    OrganizationAdminName = organization?.Name ?? owner?.FullName ?? "Not assigned",
                     StudentsCount = enrollments.Where(e => e.CourseId == course.Id).Select(e => e.StudentId).Distinct().Count(),
                     SessionsCount = sessions.Count(s => s.CourseId == course.Id),
                     Revenue = 0,
@@ -566,7 +578,7 @@ namespace Application.Services.Implementitions
                 Email = user.Email ?? string.Empty,
                 Role = role,
                 Phone = user.PhoneNumber,
-                CoursesCount = activeCourses.Count(c => c.OrgId == user.Id),
+                CoursesCount = user.OrganizationId.HasValue ? activeCourses.Count(c => c.OrganizationId == user.OrganizationId.Value) : 0,
                 SessionsCount = sessions.Count(s => s.TrainerId == user.Id),
                 EnrollmentsCount = enrollments.Count(e => e.StudentId == user.Id)
             };
@@ -676,6 +688,7 @@ namespace Application.Services.Implementitions
 
         private async Task<List<OrganizationOverviewDto>> BuildOrganizationsOverviewAsync()
         {
+            var organizations = (await organizationsManagement.GetAllAsync()).ToList();
             var users = (await userManagement.GetAllUsers()).ToList();
             var courses = (await coursesManagement.GetAllAsync()).ToList();
             var activeCourses = courses.Where(c => !c.IsDeleted).ToList();
@@ -691,28 +704,36 @@ namespace Application.Services.Implementitions
                 .ToList();
 
             var result = new List<OrganizationOverviewDto>();
-            foreach (var user in users)
+            foreach (var organization in organizations)
             {
-                if (string.IsNullOrWhiteSpace(user.Email))
+                AppUser? primaryAdmin = null;
+                foreach (var user in users.Where(u => u.OrganizationId == organization.Id))
                 {
-                    continue;
-                }
+                    if (string.IsNullOrWhiteSpace(user.Email))
+                        continue;
 
-                var role = await roleManagement.GetUserRole(user.Email);
-                if (!string.Equals(role, "organizationAdmin", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
+                    var role = await roleManagement.GetUserRole(user.Email);
+                    if (string.Equals(role, "organizationAdmin", StringComparison.OrdinalIgnoreCase))
+                    {
+                        primaryAdmin = user;
+                        break;
+                    }
                 }
-
-                var organizationCourses = activeCourses.Where(c => c.OrgId == user.Id).ToList();
+                var organizationCourses = activeCourses.Where(c => c.OrganizationId == organization.Id).ToList();
                 var organizationCourseIds = organizationCourses.Select(c => c.Id).ToHashSet();
                 var organizationRatings = ratings.Where(r => organizationCourseIds.Contains(r.CourseId)).ToList();
 
                 result.Add(new OrganizationOverviewDto
                 {
-                    OrganizationAdminId = user.Id,
-                    OrganizationAdminName = user.FullName,
-                    Email = user.Email,
+                    OrganizationId = organization.Id,
+                    OrganizationName = organization.Name,
+                    OrganizationAdminId = organization.Id.ToString(),
+                    OrganizationAdminName = organization.Name,
+                    Email = organization.Email ?? primaryAdmin?.Email ?? string.Empty,
+                    PhoneNumber = organization.PhoneNumber,
+                    Description = organization.Description,
+                    WebsiteUrl = organization.WebsiteUrl,
+                    Status = organization.Status,
                     CoursesCount = organizationCourses.Count,
                     StudentsCount = enrollments
                         .Where(e => organizationCourseIds.Contains(e.CourseId))
@@ -730,7 +751,7 @@ namespace Application.Services.Implementitions
             return result;
         }
 
-        private static List<Course> ResolveScopedCourses(
+        private async Task<List<Course>> ResolveScopedCourses(
             List<Course> allCourses,
             List<Session> allSessions,
             string currentUserId,
@@ -745,7 +766,10 @@ namespace Application.Services.Implementitions
 
             if (isOrganizationAdmin)
             {
-                return allCourses.Where(c => c.OrgId == currentUserId).ToList();
+                var user = await userManagement.GetUserById(currentUserId);
+                if (user?.OrganizationId.HasValue != true)
+                    return [];
+                return allCourses.Where(c => c.OrganizationId == user.OrganizationId.Value).ToList();
             }
 
             if (isInstructor)
@@ -755,10 +779,28 @@ namespace Application.Services.Implementitions
                     .Select(s => s.CourseId)
                     .ToHashSet();
 
-                return allCourses.Where(c => assignedCourseIds.Contains(c.Id)).ToList();
+                return allCourses.Where(c => c.InstructorId == currentUserId || assignedCourseIds.Contains(c.Id)).ToList();
             }
 
             return [];
+        }
+
+        private async Task<Organization?> ResolveOrganizationAsync(string organizationIdOrLegacyAdminId)
+        {
+            if (Guid.TryParse(organizationIdOrLegacyAdminId, out var organizationId))
+            {
+                var organization = await organizationsManagement.GetByIdAsync(organizationId);
+                if (organization != null)
+                    return organization;
+            }
+
+            var legacyUser = await userManagement.GetUserById(organizationIdOrLegacyAdminId);
+            if (legacyUser?.OrganizationId.HasValue == true)
+            {
+                return await organizationsManagement.GetByIdAsync(legacyUser.OrganizationId.Value);
+            }
+
+            return null;
         }
 
         private async Task<int> CountUsersInRoleAsync(string roleName)

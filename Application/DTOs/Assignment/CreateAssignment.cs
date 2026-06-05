@@ -8,5 +8,6 @@ namespace Application.DTOs.Assignment
         public string Subject { get; set; }
         public string Description { get; set; }
         public IFormFile File { get; set; }
+        public DateTime? DueDate { get; set; }
     }
 }

@@ -18,6 +18,8 @@ namespace Application.DTOs.Auth
         public string phoneNumber { get; set; }
         
         public string role { get; set; }
+        public Guid? OrganizationId { get; set; }
+        public string? OrganizationName { get; set; }
         
     }
 }

@@ -119,6 +119,11 @@ export function CourseCard({ course, compact = false }: { course: Course; compac
         <div className="absolute left-4 top-4">
           <Badge tone="amber">{course.category ?? course.categories?.[0]?.name ?? course.level ?? "Course"}</Badge>
         </div>
+        {course.price <= 0 && (
+          <div className="absolute right-4 top-4">
+            <Badge tone="teal">Free</Badge>
+          </div>
+        )}
       </div>
       <div className="p-5">
         <div className="flex items-start justify-between gap-4">
@@ -134,14 +139,14 @@ export function CourseCard({ course, compact = false }: { course: Course; compac
           <span>{course.studentsCount ?? course.students ?? 0} students</span>
           <span>{course.sessionsCount ?? 0} sessions</span>
         </div>
-        {(course.organizationOwnerName || course.isDeleted) && (
+        {(course.organizationName || course.organizationOwnerName || course.isDeleted) && (
           <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-semibold text-muted">
-            {course.organizationOwnerName && <span>Organization: {course.organizationOwnerName}</span>}
+            <span>Organization: {course.organizationName || course.organizationOwnerName || "EduVerseOrganization"}</span>
             <Badge tone={course.isDeleted ? "coral" : "teal"}>{course.isDeleted ? "Deleted" : "Active"}</Badge>
           </div>
         )}
         <div className="mt-5 flex items-center justify-between">
-          <p className="font-bold text-ink">{formatCurrency(course.price)}</p>
+          <p className="font-bold text-ink">{course.price <= 0 ? "Free" : formatCurrency(course.price)}</p>
           <span className="inline-flex items-center gap-1 text-sm font-semibold text-teal-600">
             Details <ArrowRight size={16} />
           </span>

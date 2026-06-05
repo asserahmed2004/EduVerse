@@ -25,7 +25,8 @@ namespace Application.Services.Implementitions.Auth
         
         ,IMapper mapper,IValidator<RegisterUser> RegisterValidator ,IConfirmation emailConfirmation,
         IValidator<LoginUser> LoginValidator, IValidationService validationService , ICloudService cloudService,
-        IActivityLogService activityLogService): IAuthServices
+        IActivityLogService activityLogService,
+        Domain.Interfaces.IGeneric<Organization> organizationManagement): IAuthServices
     {
         public async Task<bool> VerifyCurrentUserPasswordAsync(ClaimsPrincipal userClaims, string password)
         {
@@ -49,12 +50,13 @@ namespace Application.Services.Implementitions.Auth
         public async Task<ServiceResponse> AddRole(string roleName)
         {
             var response =await roleManagment.AddRole(roleName);
-            if (!response)
+            if (!response.Succeeded)
             {
                 return new ServiceResponse
                 {
                     success = false,
-                    message = "Failed to add role"
+                    message = "Failed to add role",
+                    errors = response.Errors.Select(e => e.Description)
                 };
             }
             return new ServiceResponse
@@ -67,16 +69,41 @@ namespace Application.Services.Implementitions.Auth
 
         public async Task<ServiceResponse> AddUserToRole(string UserId, string roleName, string? performedById = null, string? performedByName = null)
         {
-            var response = await roleManagment.AddUserToRole(new AppUser { Id = UserId }, roleName);
-            if (!response)
+            if (string.IsNullOrWhiteSpace(UserId))
+            {
+                return new ServiceResponse(false, "User id is required");
+            }
+
+            if (string.IsNullOrWhiteSpace(roleName))
+            {
+                return new ServiceResponse(false, "Role name is required");
+            }
+
+            var targetUser = await userManagment.GetUserById(UserId);
+            if (targetUser == null)
+            {
+                return new ServiceResponse(false, "User not found");
+            }
+
+            var currentRole = !string.IsNullOrWhiteSpace(targetUser.Email)
+                ? await roleManagment.GetUserRole(targetUser.Email)
+                : string.Empty;
+
+            if (string.Equals(currentRole, roleName, StringComparison.OrdinalIgnoreCase))
+            {
+                return new ServiceResponse(false, $"User already has role '{currentRole}'");
+            }
+
+            var response = await roleManagment.AddUserToRole(targetUser, roleName);
+            if (!response.Succeeded)
             {
                 return new ServiceResponse
                 {
                     success = false,
-                    message = "Failed to add user to role"
+                    message = "Failed to add user to role",
+                    errors = response.Errors.Select(e => e.Description)
                 };
             }
-            var targetUser = await userManagment.GetUserById(UserId);
             await activityLogService.LogAsync(
                 performedById,
                 performedByName ?? "Admin",
@@ -103,6 +130,7 @@ namespace Application.Services.Implementitions.Auth
                 {
                     var userRole = await roleManagment.GetUserRole(user.Email);
                     user.role = userRole;
+                    await FillOrganizationAsync(user);
                 }
                 return mappedUsers;
             }
@@ -117,6 +145,7 @@ namespace Application.Services.Implementitions.Auth
                     if (userRole.ToLower() == roleName.ToLower())
                     {
                         user.role = userRole;
+                        await FillOrganizationAsync(user);
                         filteredUsers.Add(user);
                     }
                 }
@@ -215,7 +244,7 @@ namespace Application.Services.Implementitions.Auth
         private async Task<GetUser> BuildUserProfile(AppUser user)
         {
             var userRole = await roleManagment.GetUserRole(user.Email);
-            return new GetUser
+            var profile = new GetUser
             {
                 Id = user.Id,
                 FullName = user.FullName,
@@ -224,8 +253,23 @@ namespace Application.Services.Implementitions.Auth
                 phoneNumber = user.PhoneNumber,
                 ProfilePicture = user.ProfilePicture,
                 BirthDate = user.Birthdate,
-                role = userRole
+                role = userRole,
+                OrganizationId = user.OrganizationId
             };
+            await FillOrganizationAsync(profile);
+            return profile;
+        }
+
+        private async Task FillOrganizationAsync(GetUser user)
+        {
+            if (user.OrganizationId.HasValue)
+            {
+                var organization = await organizationManagement.GetByIdAsync(user.OrganizationId.Value);
+                user.OrganizationName = organization?.Name ?? "EduVerseOrganization";
+                return;
+            }
+
+            user.OrganizationName = "EduVerseOrganization";
         }
 
         private static string DisplayName(AppUser? user)
@@ -360,10 +404,10 @@ namespace Application.Services.Implementitions.Auth
             var _user = await userManagment.GetUserByEmail(user.Email);
            
             var roleAssign = await roleManagment.AddUserToRole(_user, user.role);
-            if (!roleAssign)
+            if (!roleAssign.Succeeded)
             {
                 var removeUser = await userManagment.RemoveUser(user.Email);
-                return new LoginResponse(false, message: "Role assignment failed");
+                return new LoginResponse(false, message: "Role assignment failed", errors: roleAssign.Errors.Select(e => e.Description));
             }
             var login= await LoginUser(new LoginUser { Email = user.Email, Password = user.Password });
             

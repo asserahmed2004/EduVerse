@@ -16,6 +16,9 @@ export type Course = {
   rating: number;
   userRating?: number;
   orgId?: string;
+  organizationId?: string;
+  organizationName?: string;
+  instructorId?: string;
   imageUrl?: string;
   categories?: CourseCategory[];
   category?: string;
@@ -44,6 +47,11 @@ export type CourseSession = {
   date?: string;
   duration?: number;
   sessionNumber: number;
+  description?: string;
+  videoUrl?: string;
+  externalLink?: string;
+  attendanceCode?: string;
+  attendanceCodeCreatedAt?: string;
 };
 
 export type AuthUser = {
@@ -57,6 +65,8 @@ export type AuthUser = {
   role: UserRole;
   phoneNumber?: string;
   profilePicture?: string;
+  organizationId?: string;
+  organizationName?: string;
   token?: string;
 };
 
@@ -68,6 +78,8 @@ export type ManagedUser = {
   role: UserRole;
   phoneNumber?: string;
   profilePicture?: string;
+  organizationId?: string;
+  organizationName?: string;
 };
 
 export type LoginPayload = {
@@ -134,9 +146,15 @@ export type DashboardStats = {
 };
 
 export type OrganizationOverview = {
+  organizationId?: string;
+  organizationName?: string;
   organizationAdminId: string;
   organizationAdminName: string;
   email: string;
+  phoneNumber?: string;
+  description?: string;
+  websiteUrl?: string;
+  status?: string;
   coursesCount: number;
   studentsCount: number;
   enrollmentsCount: number;
@@ -145,6 +163,22 @@ export type OrganizationOverview = {
 };
 
 export type OrganizationDetails = OrganizationOverview & {
+  id?: string;
+  name?: string;
+  admins?: {
+    userId: string;
+    fullName: string;
+    userName: string;
+    email: string;
+    role: string;
+  }[];
+  instructors?: {
+    userId: string;
+    fullName: string;
+    userName: string;
+    email: string;
+    role: string;
+  }[];
   courses: {
     courseId: string;
     name: string;
@@ -166,6 +200,9 @@ export type CourseAdminDetails = {
   category?: string;
   organizationOwner?: string;
   organizationOwnerEmail?: string;
+  organizationId?: string;
+  organizationName?: string;
+  instructorId?: string;
   instructorName?: string;
   price: number;
   imageUrl?: string;
@@ -193,6 +230,7 @@ export type CourseAdminDetails = {
     subject?: string;
     description?: string;
     content?: string;
+    dueDate?: string;
   }[];
   recentPayments: Payment[];
 };
@@ -323,6 +361,8 @@ export type AdminUserDetails = {
   email: string;
   role: UserRole;
   phone?: string;
+  organizationId?: string;
+  organizationName?: string;
   coursesCount: number;
   sessionsCount: number;
   enrollmentsCount: number;
@@ -363,15 +403,24 @@ export type Enrollment = {
   courseName: string;
   enrollmentDate: string;
   progression: number;
+  progressPercentage?: number;
+  isCompleted?: boolean;
+  completedAt?: string;
   graduationDate?: string;
   fileUrl?: string;
+  certificateCode?: string;
 };
 
 export type Certificate = {
   id: string;
+  courseId?: string;
   courseName: string;
+  studentName?: string;
+  certificateCode?: string;
   issuedAt: string;
   fileUrl: string;
+  status?: string;
+  verificationUrl?: string;
 };
 
 export type Submission = {
@@ -380,6 +429,97 @@ export type Submission = {
   subject: string;
   submittedAt?: string;
   fileUrl: string;
+};
+
+export type StudentAssignment = {
+  assignmentId: string;
+  title: string;
+  description: string;
+  courseId: string;
+  courseName: string;
+  sessionId: string;
+  sessionTitle: string;
+  sessionNumber: number;
+  dueDate?: string;
+  submissionStatus: "Not Submitted" | "Submitted" | "Late" | "Missing" | "Graded";
+  submittedAt?: string;
+  grade?: number;
+  feedback?: string;
+  fileUrl?: string;
+};
+
+export type CourseProgress = {
+  courseId: string;
+  courseName: string;
+  progressPercentage: number;
+  isCompleted: boolean;
+  completedAt?: string;
+  sessions: (CourseSession & {
+    isCompleted: boolean;
+    completedAt?: string;
+    materials?: SessionMaterial[];
+    assignments?: StudentAssignment[];
+  })[];
+};
+
+export type SessionMaterial = {
+  id: string;
+  sessionId: string;
+  title: string;
+  type: string;
+  url?: string;
+  filePath?: string;
+  createdAt: string;
+};
+
+export type NotificationItem = {
+  id: string;
+  title: string;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
+};
+
+export type InstructorOverview = {
+  assignedCourses: number;
+  myStudents: number;
+  pendingSubmissions: number;
+  totalAssignments: number;
+  upcomingSessions: InstructorSession[];
+  recentSubmissions: InstructorSubmission[];
+};
+
+export type InstructorSession = {
+  sessionId: string;
+  courseId: string;
+  courseName: string;
+  title: string;
+  sessionNumber: number;
+  date: string;
+};
+
+export type InstructorStudent = {
+  studentId: string;
+  studentName: string;
+  studentEmail: string;
+  courseId: string;
+  courseName: string;
+  enrollmentDate: string;
+  progressPercentage: number;
+  submissionSummary: string;
+};
+
+export type InstructorSubmission = {
+  studentId: string;
+  studentName: string;
+  assignmentId: string;
+  assignmentTitle: string;
+  courseId: string;
+  courseName: string;
+  submittedAt?: string;
+  grade?: number;
+  feedback?: string;
+  fileUrl?: string;
 };
 
 export type ServiceResult = {

@@ -6,9 +6,9 @@ import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
 import { useToast } from "@/components/toast-provider";
 import { Badge, Button, EmptyState, LoadingState, PageHeader, StatCard } from "@/components/ui";
-import { courseService } from "@/lib/api";
-import { getCurrentUserId } from "@/lib/auth";
-import type { Course, CourseSession } from "@/lib/types";
+import { courseService, organizationService } from "@/lib/api";
+import { getCurrentUserId, getStoredUser } from "@/lib/auth";
+import type { Course, CourseSession, OrganizationDetails } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils";
 
 export default function InstructorCoursesPage() {
@@ -20,12 +20,14 @@ export default function InstructorCoursesPage() {
   const [assignmentCourseId, setAssignmentCourseId] = useState("");
   const [sessions, setSessions] = useState<CourseSession[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [organization, setOrganization] = useState<OrganizationDetails | null>(null);
+  const [assigningInstructor, setAssigningInstructor] = useState("");
 
   async function loadCourses() {
     setLoading(true);
     setError("");
     try {
-      const data = await courseService.getOwnedByCurrentUser();
+      const data = await courseService.getAll();
       setCourses(data);
       setAssignmentCourseId((current) => current || data[0]?.id || "");
       return true;
@@ -39,6 +41,12 @@ export default function InstructorCoursesPage() {
 
   useEffect(() => {
     loadCourses();
+    const user = getStoredUser();
+    if (user?.organizationId) {
+      organizationService.getById(user.organizationId)
+        .then(setOrganization)
+        .catch(() => setOrganization(null));
+    }
   }, []);
 
   useEffect(() => {
@@ -90,6 +98,28 @@ export default function InstructorCoursesPage() {
       showToast({ title: "Course deleted", tone: "success" });
     } catch {
       showToast({ title: "Delete failed", message: "You may not own this course or the backend rejected the request.", tone: "error" });
+    }
+  }
+
+  async function assignInstructor(courseId: string, instructorId: string) {
+    if (!instructorId) {
+      showToast({ title: "Select instructor", message: "Choose an instructor before saving.", tone: "info" });
+      return;
+    }
+
+    setAssigningInstructor(courseId);
+    try {
+      await courseService.assignInstructor(courseId, instructorId);
+      setCourses((current) => current.map((course) => {
+        if (course.id !== courseId) return course;
+        const instructor = organization?.instructors?.find((item) => item.userId === instructorId);
+        return { ...course, instructorId, instructorName: instructor?.fullName ?? instructor?.userName ?? "Assigned instructor" };
+      }));
+      showToast({ title: "Instructor assigned", message: "The course instructor was updated successfully.", tone: "success" });
+    } catch (error) {
+      showToast({ title: "Instructor assignment failed", message: error instanceof Error ? error.message : "Could not assign instructor to this course.", tone: "error" });
+    } finally {
+      setAssigningInstructor("");
     }
   }
 
@@ -184,8 +214,14 @@ export default function InstructorCoursesPage() {
                 <Field name="Title" label="Session title" required />
                 <Field name="SessionNumber" label="Session number" type="number" required />
                 <label className="block">
+                  <span className="text-sm font-semibold text-ink">Description</span>
+                  <textarea name="Description" className="mt-2 min-h-20 w-full rounded-xl bg-slate-50 px-4 py-3 text-sm outline-none ring-1 ring-slate-200 focus:ring-teal-500" />
+                </label>
+                <Field name="VideoUrl" label="Video URL" />
+                <Field name="ExternalLink" label="External link" />
+                <label className="block">
                   <span className="text-sm font-semibold text-ink">Session file</span>
-                  <input name="File" type="file" className="mt-2 w-full rounded-xl bg-slate-50 px-4 py-3 text-sm ring-1 ring-slate-200" required />
+                  <input name="File" type="file" className="mt-2 w-full rounded-xl bg-slate-50 px-4 py-3 text-sm ring-1 ring-slate-200" />
                 </label>
               </div>
               <Button className="mt-5 w-full" variant="ghost">Add session</Button>
@@ -213,6 +249,7 @@ export default function InstructorCoursesPage() {
                   ))}
                 </SelectField>
                 <Field name="Subject" label="Subject" required />
+                <Field name="DueDate" label="Due date" type="date" />
                 <label className="block">
                   <span className="text-sm font-semibold text-ink">Description</span>
                   <textarea name="Description" className="mt-2 min-h-20 w-full rounded-xl bg-slate-50 px-4 py-3 text-sm outline-none ring-1 ring-slate-200 focus:ring-teal-500" required />
@@ -245,12 +282,28 @@ export default function InstructorCoursesPage() {
                           <Badge>{course.name}</Badge>
                           <h3 className="mt-2 text-lg font-bold text-ink">{course.title}</h3>
                           <p className="mt-1 text-sm text-muted">{formatCurrency(course.price)} - {course.rating.toFixed(1)} rating</p>
+                          <p className="mt-1 text-sm text-muted">Instructor: {course.instructorName ?? "Unassigned"}</p>
                         </div>
                       </div>
-                      <Button variant="ghost" onClick={() => deleteCourse(course.id)}>
-                        <Trash2 size={17} />
-                        Delete
-                      </Button>
+                      <div className="grid gap-3 md:min-w-72">
+                        <div className="grid gap-2 md:grid-cols-[1fr_auto]">
+                          <select
+                            defaultValue={course.instructorId ?? ""}
+                            className="h-11 rounded-xl bg-slate-50 px-3 text-sm font-semibold text-ink outline-none ring-1 ring-slate-200"
+                            onChange={(event) => assignInstructor(course.id, event.target.value)}
+                            disabled={(organization?.instructors ?? []).length === 0 || assigningInstructor === course.id}
+                          >
+                            <option value="">Instructor: Unassigned</option>
+                            {(organization?.instructors ?? []).map((instructor) => (
+                              <option key={instructor.userId} value={instructor.userId}>{instructor.fullName || instructor.userName}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <Button variant="ghost" onClick={() => deleteCourse(course.id)}>
+                          <Trash2 size={17} />
+                          Delete
+                        </Button>
+                      </div>
                     </div>
                   </article>
                 ))}

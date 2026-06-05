@@ -25,7 +25,7 @@ namespace API.Controllers
         }
 
         [HttpGet("OrganizationsOverview")]
-        [Authorize(Roles = AppRoles.Admin)]
+        [Authorize(Roles = AppRoles.AdminAccess)]
         public async Task<IActionResult> GetOrganizationsOverview()
         {
             var result = await dashboardService.GetOrganizationsOverviewAsync();
@@ -33,7 +33,7 @@ namespace API.Controllers
         }
 
         [HttpGet("RecentEnrollments")]
-        [Authorize(Roles = AppRoles.Admin)]
+        [Authorize(Roles = AppRoles.AdminAccess)]
         public async Task<IActionResult> GetRecentEnrollments()
         {
             var result = await dashboardService.GetRecentEnrollmentsAsync();
@@ -41,7 +41,7 @@ namespace API.Controllers
         }
 
         [HttpGet("RecentPayments")]
-        [Authorize(Roles = AppRoles.Admin)]
+        [Authorize(Roles = AppRoles.AdminAccess)]
         public async Task<IActionResult> GetRecentPayments()
         {
             var result = await dashboardService.GetRecentPaymentsAsync();
@@ -49,7 +49,7 @@ namespace API.Controllers
         }
 
         [HttpGet("RecentCourses")]
-        [Authorize(Roles = AppRoles.Admin)]
+        [Authorize(Roles = AppRoles.AdminAccess)]
         public async Task<IActionResult> GetRecentCourses()
         {
             var result = await dashboardService.GetRecentCoursesAsync();
@@ -57,7 +57,7 @@ namespace API.Controllers
         }
 
         [HttpGet("TopCourses")]
-        [Authorize(Roles = AppRoles.Admin)]
+        [Authorize(Roles = AppRoles.AdminAccess)]
         public async Task<IActionResult> GetTopCourses()
         {
             var result = await dashboardService.GetTopCoursesAsync();
@@ -65,7 +65,7 @@ namespace API.Controllers
         }
 
         [HttpGet("TopOrganizations")]
-        [Authorize(Roles = AppRoles.Admin)]
+        [Authorize(Roles = AppRoles.AdminAccess)]
         public async Task<IActionResult> GetTopOrganizations()
         {
             var result = await dashboardService.GetTopOrganizationsAsync();
@@ -73,7 +73,7 @@ namespace API.Controllers
         }
 
         [HttpGet("TopInstructors")]
-        [Authorize(Roles = AppRoles.Admin)]
+        [Authorize(Roles = AppRoles.AdminAccess)]
         public async Task<IActionResult> GetTopInstructors()
         {
             var result = await dashboardService.GetTopInstructorsAsync();
@@ -81,7 +81,7 @@ namespace API.Controllers
         }
 
         [HttpGet("OrganizationDetails/{organizationAdminId}")]
-        [Authorize(Roles = AppRoles.Admin)]
+        [Authorize(Roles = AppRoles.AdminAccess)]
         public async Task<IActionResult> GetOrganizationDetails(string organizationAdminId)
         {
             var result = await dashboardService.GetOrganizationDetailsAsync(organizationAdminId);
@@ -89,7 +89,7 @@ namespace API.Controllers
         }
 
         [HttpGet("RecentActivities")]
-        [Authorize(Roles = AppRoles.Admin)]
+        [Authorize(Roles = AppRoles.AdminAccess)]
         public async Task<IActionResult> GetRecentActivities()
         {
             var result = await dashboardService.GetRecentActivitiesAsync();
@@ -97,7 +97,7 @@ namespace API.Controllers
         }
 
         [HttpGet("AdminStudents")]
-        [Authorize(Roles = AppRoles.Admin)]
+        [Authorize(Roles = AppRoles.AdminAccess)]
         public async Task<IActionResult> GetAdminStudents()
         {
             var result = await dashboardService.GetAdminStudentsAsync();
@@ -105,7 +105,7 @@ namespace API.Controllers
         }
 
         [HttpGet("AdminInstructors")]
-        [Authorize(Roles = AppRoles.Admin)]
+        [Authorize(Roles = AppRoles.AdminAccess)]
         public async Task<IActionResult> GetAdminInstructors()
         {
             var result = await dashboardService.GetAdminInstructorsAsync();
@@ -113,7 +113,7 @@ namespace API.Controllers
         }
 
         [HttpGet("RecentSessions")]
-        [Authorize(Roles = AppRoles.Admin)]
+        [Authorize(Roles = AppRoles.AdminAccess)]
         public async Task<IActionResult> GetRecentSessions()
         {
             var result = await dashboardService.GetRecentSessionsAsync();
@@ -121,7 +121,7 @@ namespace API.Controllers
         }
 
         [HttpGet("RecentAssignments")]
-        [Authorize(Roles = AppRoles.Admin)]
+        [Authorize(Roles = AppRoles.AdminAccess)]
         public async Task<IActionResult> GetRecentAssignments()
         {
             var result = await dashboardService.GetRecentAssignmentsAsync();
@@ -129,7 +129,7 @@ namespace API.Controllers
         }
 
         [HttpGet("TopRatedCourses")]
-        [Authorize(Roles = AppRoles.Admin)]
+        [Authorize(Roles = AppRoles.AdminAccess)]
         public async Task<IActionResult> GetTopRatedCourses()
         {
             var result = await dashboardService.GetTopRatedCoursesAsync();
@@ -137,7 +137,7 @@ namespace API.Controllers
         }
 
         [HttpGet("AdminUserDetails/{userId}")]
-        [Authorize(Roles = AppRoles.Admin)]
+        [Authorize(Roles = AppRoles.AdminAccess)]
         public async Task<IActionResult> GetAdminUserDetails(string userId)
         {
             var result = await dashboardService.GetAdminUserDetailsAsync(userId);
@@ -145,7 +145,7 @@ namespace API.Controllers
         }
 
         [HttpGet("RevenueTrend")]
-        [Authorize(Roles = AppRoles.Admin)]
+        [Authorize(Roles = AppRoles.AdminAccess)]
         public async Task<IActionResult> GetRevenueTrend([FromQuery] int days = 30)
         {
             var result = await dashboardService.GetRevenueTrendAsync(days);
@@ -153,7 +153,7 @@ namespace API.Controllers
         }
 
         [HttpGet("EnrollmentsTrend")]
-        [Authorize(Roles = AppRoles.Admin)]
+        [Authorize(Roles = AppRoles.AdminAccess)]
         public async Task<IActionResult> GetEnrollmentsTrend([FromQuery] int days = 30)
         {
             var result = await dashboardService.GetEnrollmentsTrendAsync(days);
@@ -161,7 +161,7 @@ namespace API.Controllers
         }
 
         [HttpGet("UsersByRole")]
-        [Authorize(Roles = AppRoles.Admin)]
+        [Authorize(Roles = AppRoles.AdminAccess)]
         public async Task<IActionResult> GetUsersByRole()
         {
             var result = await dashboardService.GetUsersByRoleAsync();
@@ -169,7 +169,7 @@ namespace API.Controllers
         }
 
         [HttpGet("TopCoursesChart")]
-        [Authorize(Roles = AppRoles.Admin)]
+        [Authorize(Roles = AppRoles.AdminAccess)]
         public async Task<IActionResult> GetTopCoursesChart()
         {
             var result = await dashboardService.GetTopCoursesChartAsync();
@@ -183,9 +183,9 @@ namespace API.Controllers
                 return Unauthorized(new { success = false, message = "You must be logged in" });
             }
 
-            if (!User.IsInRole(AppRoles.Admin) &&
-                !User.IsInRole(AppRoles.OrganizationAdmin) &&
-                !User.IsInRole(AppRoles.Instructor))
+            if (!User.HasRole(AppRoles.Admin) &&
+                !User.HasRole(AppRoles.OrganizationAdmin) &&
+                !User.HasRole(AppRoles.Instructor))
             {
                 return Forbid();
             }
@@ -195,9 +195,9 @@ namespace API.Controllers
                 var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 var result = await dashboardService.GetOrganizationStatsAsync(
                     currentUserId,
-                    User.IsInRole(AppRoles.Admin),
-                    User.IsInRole(AppRoles.OrganizationAdmin),
-                    User.IsInRole(AppRoles.Instructor));
+                    User.HasRole(AppRoles.Admin),
+                    User.HasRole(AppRoles.OrganizationAdmin),
+                    User.HasRole(AppRoles.Instructor));
 
                 if (!result.success)
                 {

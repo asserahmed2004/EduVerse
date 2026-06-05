@@ -47,6 +47,12 @@ namespace InfraStructure.DependencyInjection
             services.AddScoped<IGeneric<Assignment>, GenericRepository<Assignment>>();
             services.AddScoped<IGeneric<AssignmentSubmission>, GenericRepository<AssignmentSubmission>>();
             services.AddScoped<IGeneric<ActivityLog>, GenericRepository<ActivityLog>>();
+            services.AddScoped<IGeneric<Organization>, GenericRepository<Organization>>();
+            services.AddScoped<IGeneric<StudentSessionProgress>, GenericRepository<StudentSessionProgress>>();
+            services.AddScoped<IGeneric<CertificateRecord>, GenericRepository<CertificateRecord>>();
+            services.AddScoped<IGeneric<Notification>, GenericRepository<Notification>>();
+            services.AddScoped<IGeneric<AttendanceRecord>, GenericRepository<AttendanceRecord>>();
+            services.AddScoped<IGeneric<SessionMaterial>, GenericRepository<SessionMaterial>>();
 
 
 

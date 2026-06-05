@@ -1,6 +1,7 @@
-﻿using Application.DTOs.Auth;
+using Application.DTOs.Auth;
 using Application.DTOs.Course;
 using Application.DTOs.Enrollments;
+using Application.DTOs.Learning;
 using Application.DTOs.Responses;
 using Application.DTOs.Submission;
 using Application.Services.Interfaces;
@@ -57,7 +58,7 @@ namespace API.Controllers
                 return Unauthorized("User id was not found in token.");
             }
 
-            if (User.IsInRole(AppRoles.Student) || string.IsNullOrEmpty(userid))
+            if (User.HasRole(AppRoles.Student) || string.IsNullOrEmpty(userid))
             {
                 userid = tokenUserId;
             }
@@ -71,7 +72,7 @@ namespace API.Controllers
         }
 
         [HttpGet("my-enrolled-courses")]
-        [Authorize(Roles = AppRoles.Student)]
+        [Authorize(Roles = AppRoles.StudentAccess)]
         public async Task<IActionResult> myenrolledcourses()
         {
             var userId = GetUserId();
@@ -109,7 +110,7 @@ namespace API.Controllers
         }
 
         [HttpGet("my-certificate/{courseId}")]
-        [Authorize(Roles = AppRoles.Student)]
+        [Authorize(Roles = AppRoles.StudentAccess)]
         public async Task<IActionResult> mycertificatefile(Guid courseId)
         {
             var email = GetUserEmail();
@@ -142,17 +143,55 @@ namespace API.Controllers
         }
 
         [HttpGet("my-certificates")]
-        [Authorize(Roles = AppRoles.Student)]
+        [Authorize(Roles = AppRoles.StudentAccess)]
         public async Task<IActionResult> mycertificates()
         {
-            var email = GetUserEmail();
-            if (string.IsNullOrEmpty(email))
+            var userId = GetUserId();
+            if (string.IsNullOrEmpty(userId))
             {
-                return Unauthorized("Email was not found in token.");
+                return Unauthorized("User id was not found in token.");
             }
 
-            var certificates = await userService.GetUserCertificates(email);
+            var certificates = await userService.GetMyCertificates(userId, Request.Scheme + "://" + Request.Host);
             return Ok(certificates);
+        }
+
+        [HttpGet("my-assignments")]
+        [Authorize(Roles = AppRoles.StudentAccess)]
+        public async Task<IActionResult> myassignments()
+        {
+            var userId = GetUserId();
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized("User id was not found in token.");
+
+            return Ok(await userService.GetMyAssignments(userId));
+        }
+
+        [HttpGet("my-course-progress/{courseId}")]
+        [Authorize(Roles = AppRoles.StudentAccess)]
+        public async Task<IActionResult> mycourseprogress(Guid courseId)
+        {
+            var userId = GetUserId();
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized("User id was not found in token.");
+
+            var progress = await userService.GetCourseProgress(courseId, userId);
+            if (progress == null)
+                return NotFound(new { success = false, message = "Course progress not found or student is not enrolled" });
+
+            return Ok(new { success = true, message = "Course progress retrieved successfully", data = progress });
+        }
+
+        [HttpPost("mark-session-completed/{sessionId}")]
+        [Authorize(Roles = AppRoles.StudentAccess)]
+        public async Task<IActionResult> marksessioncompleted(Guid sessionId)
+        {
+            var userId = GetUserId();
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized("User id was not found in token.");
+
+            var result = await userService.MarkSessionCompleted(sessionId, userId);
+            return result.success ? Ok(result) : BadRequest(result);
         }
 
         [HttpGet("enrollmentdata/{courseId}/{Email?}")]
@@ -185,7 +224,7 @@ namespace API.Controllers
         }
 
         [HttpGet("my-enrollment/{courseId}")]
-        [Authorize(Roles = AppRoles.Student)]
+        [Authorize(Roles = AppRoles.StudentAccess)]
         public async Task<IActionResult> myenrollmentdata(Guid courseId)
         {
             var email = GetUserEmail();
@@ -204,7 +243,7 @@ namespace API.Controllers
         }
 
         [HttpPut("updateprogress")]
-        [Authorize(Roles = AppRoles.Student)]
+        [Authorize(Roles = AppRoles.StudentAccess)]
         public async Task<IActionResult> updateprogress([FromBody]Progression progression)
         {
             var email = GetUserEmail();
@@ -222,7 +261,7 @@ namespace API.Controllers
             return Ok(result.message);
         }
         [HttpPost("submitassignment")]
-        [Authorize(Roles = AppRoles.Student)]
+        [Authorize(Roles = AppRoles.StudentAccess)]
         public async Task<IActionResult> submitassignment([FromForm] CreateAssignmentSubmission submission)
         {
             var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
@@ -255,7 +294,7 @@ namespace API.Controllers
         }
 
         [HttpGet("my-submissions")]
-        [Authorize(Roles = AppRoles.Student)]
+        [Authorize(Roles = AppRoles.StudentAccess)]
         public async Task<IActionResult> mysubmissions()
         {
             var email = GetUserEmail();
@@ -294,7 +333,7 @@ namespace API.Controllers
         }
 
         [HttpGet("my-submission/{Id}")]
-        [Authorize(Roles = AppRoles.Student)]
+        [Authorize(Roles = AppRoles.StudentAccess)]
         public async Task<IActionResult> mysubmission(Guid Id)
         {
             var email = GetUserEmail();
@@ -313,7 +352,7 @@ namespace API.Controllers
         }
 
         [HttpPost("payment/{CourseId}/{Method}")]
-        [Authorize(Roles = AppRoles.Student)]
+        [Authorize(Roles = AppRoles.StudentAccess)]
         public async Task<IActionResult> payment(Guid CourseId, string Method)
         {
             var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
@@ -331,7 +370,7 @@ namespace API.Controllers
         }
 
         [HttpGet("payments")]
-        [Authorize(Roles = AppRoles.Student)]
+        [Authorize(Roles = AppRoles.StudentAccess)]
         public async Task<IActionResult> payments()
         {
             var userId = GetUserId();
@@ -345,7 +384,7 @@ namespace API.Controllers
         }
 
         [HttpGet("payments/{courseId}")]
-        [Authorize(Roles = AppRoles.Student)]
+        [Authorize(Roles = AppRoles.StudentAccess)]
         public async Task<IActionResult> paymentdetails(Guid courseId)
         {
             var userId = GetUserId();
@@ -398,7 +437,7 @@ namespace API.Controllers
         {
             var tokenEmail = GetUserEmail();
 
-            if (User.IsInRole(AppRoles.Student))
+            if (User.HasRole(AppRoles.Student))
             {
                 return tokenEmail;
             }

@@ -25,6 +25,7 @@ const navItems = [
   { href: "/admin/deleted-courses", label: "Deleted courses", icon: BookOpen, roles: ["Admin"] },
   { href: "/courses", label: "Courses", icon: BookOpen, roles: ["Student", "Instructor", "OrganizationAdmin", "Admin"] },
   { href: "/enrollments", label: "Enrollments", icon: GraduationCap, roles: ["Student"] },
+  { href: "/assignments", label: "Assignments", icon: FileText, roles: ["Student"] },
   { href: "/certificates", label: "Certificates", icon: Award, roles: ["Student"] },
   { href: "/payments", label: "Payments", icon: CreditCard, roles: ["Student", "OrganizationAdmin", "Admin"] },
   { href: "/profile", label: "Profile", icon: User, roles: ["Student", "Instructor", "OrganizationAdmin", "Admin"] }

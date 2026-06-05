@@ -2,9 +2,15 @@ namespace Application.DTOs.Dashboard
 {
     public class OrganizationOverviewDto
     {
+        public Guid? OrganizationId { get; set; }
+        public string OrganizationName { get; set; } = string.Empty;
         public string OrganizationAdminId { get; set; } = string.Empty;
         public string OrganizationAdminName { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
+        public string? PhoneNumber { get; set; }
+        public string? Description { get; set; }
+        public string? WebsiteUrl { get; set; }
+        public string Status { get; set; } = "Active";
         public int CoursesCount { get; set; }
         public int StudentsCount { get; set; }
         public int EnrollmentsCount { get; set; }

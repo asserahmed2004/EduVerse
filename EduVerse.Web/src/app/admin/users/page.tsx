@@ -5,11 +5,17 @@ import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
 import { useToast } from "@/components/toast-provider";
 import { Badge, Button, EmptyState, LoadingState, PageHeader } from "@/components/ui";
-import { adminService } from "@/lib/api";
-import type { AdminUserDetails, ManagedUser, UserRole } from "@/lib/types";
+import { adminService, organizationService } from "@/lib/api";
+import type { AdminUserDetails, ManagedUser, OrganizationOverview, UserRole } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 
 const roles: UserRole[] = ["Student", "Instructor", "OrganizationAdmin", "Admin"];
+const backendRoleNames: Record<UserRole, string> = {
+  Admin: "admin",
+  OrganizationAdmin: "organizationAdmin",
+  Instructor: "instructor",
+  Student: "student"
+};
 
 export default function AdminUsersPage() {
   const { showToast } = useToast();
@@ -18,6 +24,8 @@ export default function AdminUsersPage() {
   const [selectedUser, setSelectedUser] = useState<ManagedUser | null>(null);
   const [detailsUser, setDetailsUser] = useState<AdminUserDetails | null>(null);
   const [assignUser, setAssignUser] = useState<ManagedUser | null>(null);
+  const [organizations, setOrganizations] = useState<OrganizationOverview[]>([]);
+  const [assignRoleValue, setAssignRoleValue] = useState<UserRole>("Student");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -36,53 +44,62 @@ export default function AdminUsersPage() {
 
   useEffect(() => {
     loadUsers("");
+    organizationService.getAll().then(setOrganizations).catch(() => setOrganizations([]));
   }, []);
-
-  async function addRole(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const role = String(new FormData(event.currentTarget).get("role"));
-    try {
-      await adminService.addRole(role);
-      showToast({ title: "Role added", message: `${role} is now available.`, tone: "success" });
-      event.currentTarget.reset();
-    } catch {
-      showToast({ title: "Role action failed", message: "The role may already exist or your token is not Admin.", tone: "error" });
-    }
-  }
 
   async function assignRole(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const userId = String(form.get("userId"));
-    const role = String(form.get("role"));
+    const role = String(form.get("role")) as UserRole;
+    const backendRole = backendRoleNames[role] ?? role;
+    const organizationId = String(form.get("organizationId") ?? "");
+    const userAlreadyHasRole = assignUser?.role === role;
+    const shouldAssignOrganization = Boolean(organizationId) && (role === "OrganizationAdmin" || role === "Instructor");
+
     try {
-      await adminService.addUserToRole(userId, role);
-      showToast({ title: "User role updated", message: `${userId} assigned to ${role}.`, tone: "success" });
+      if (userAlreadyHasRole && shouldAssignOrganization) {
+        if (role === "OrganizationAdmin") {
+          await organizationService.assignAdmin(organizationId, userId);
+        }
+
+        if (role === "Instructor") {
+          await organizationService.assignInstructor(organizationId, userId);
+        }
+
+        showToast({
+          title: "Organization assignment updated",
+          message: "Organization assignment updated successfully",
+          tone: "success"
+        });
+        event.currentTarget.reset();
+        setAssignUser(null);
+        loadUsers().catch(() => undefined);
+        return;
+      }
+
+      if (!userAlreadyHasRole) {
+        await adminService.addUserToRole(userId, backendRole);
+      }
+
+      if (role === "OrganizationAdmin" && organizationId) {
+        await organizationService.assignAdmin(organizationId, userId);
+      }
+
+      if (role === "Instructor" && organizationId) {
+        await organizationService.assignInstructor(organizationId, userId);
+      }
+
+      showToast({
+        title: shouldAssignOrganization ? "Organization assignment updated" : "User role updated",
+        message: shouldAssignOrganization ? "Organization assignment updated successfully" : `${userId} assigned to ${role}.`,
+        tone: "success"
+      });
       event.currentTarget.reset();
       setAssignUser(null);
-      await loadUsers();
-    } catch {
-      showToast({ title: "Assign role failed", message: "Check user id, role name, and Admin permissions.", tone: "error" });
-    }
-  }
-
-  async function removeRole(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const role = String(new FormData(event.currentTarget).get("role"));
-    if (role.toLowerCase() === "admin") {
-      showToast({ title: "Admin role protected", message: "Do not remove the critical Admin role from the platform.", tone: "error" });
-      return;
-    }
-
-    if (!window.confirm(`Remove role ${role}?`)) return;
-
-    try {
-      await adminService.removeRole(role);
-      showToast({ title: "Role removed", message: `${role} was removed.`, tone: "success" });
-      event.currentTarget.reset();
-      await loadUsers();
-    } catch {
-      showToast({ title: "Remove role failed", message: "The role may still be assigned or backend rejected the request.", tone: "error" });
+      loadUsers().catch(() => undefined);
+    } catch (error) {
+      showToast({ title: "Assign role failed", message: getErrorMessage(error), tone: "error" });
     }
   }
 
@@ -91,25 +108,7 @@ export default function AdminUsersPage() {
       <AuthGuard roles={["Admin"]}>
         <PageHeader eyebrow="Admin" title="Users and roles" description="Manage role names, assign roles, and review users from real backend data." />
 
-        <section className="mt-8 grid gap-8 xl:grid-cols-[360px_1fr]">
-          <div className="space-y-6">
-            <form onSubmit={addRole} className="rounded-xl2 bg-white p-6 shadow-soft ring-1 ring-slate-100">
-              <h2 className="text-lg font-bold text-ink">Add role</h2>
-              <p className="mt-1 text-sm text-muted">Uses POST /Auth/AddRole/role</p>
-              <input name="role" placeholder="Role name" className="mt-5 h-12 w-full rounded-xl bg-slate-50 px-4 text-sm outline-none ring-1 ring-slate-200 focus:ring-teal-500" required />
-              <Button className="mt-4 w-full">Add role</Button>
-            </form>
-
-            <form onSubmit={removeRole} className="rounded-xl2 bg-white p-6 shadow-soft ring-1 ring-slate-100">
-              <h2 className="text-lg font-bold text-ink">Remove role</h2>
-              <p className="mt-1 text-sm text-muted">Global role removal is disabled for safety. User-level role removal needs a dedicated backend endpoint.</p>
-              <select name="role" className="mt-5 h-12 w-full rounded-xl bg-slate-50 px-4 text-sm outline-none ring-1 ring-slate-200 focus:ring-teal-500">
-                {roles.filter((role) => role !== "Admin").map((role) => <option key={role}>{role}</option>)}
-              </select>
-              <Button className="mt-4 w-full" variant="ghost" disabled>Remove role disabled</Button>
-            </form>
-          </div>
-
+        <section className="mt-8">
           <div className="rounded-xl2 bg-white p-6 shadow-soft ring-1 ring-slate-100">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
@@ -138,12 +137,13 @@ export default function AdminUsersPage() {
                 <EmptyState title="No users found" description="Try another role filter." />
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[680px] text-left">
+                  <table className="w-full min-w-[860px] text-left">
                     <thead>
                       <tr className="border-b border-slate-100 text-sm text-muted">
                         <th className="px-4 py-3 font-semibold">Name</th>
                         <th className="px-4 py-3 font-semibold">Email</th>
                         <th className="px-4 py-3 font-semibold">Role</th>
+                        <th className="px-4 py-3 font-semibold">Organization</th>
                         <th className="px-4 py-3 font-semibold">User id</th>
                         <th className="px-4 py-3 font-semibold">Actions</th>
                       </tr>
@@ -154,6 +154,7 @@ export default function AdminUsersPage() {
                           <td className="px-4 py-4 text-sm font-semibold text-ink">{user.fullName}</td>
                           <td className="px-4 py-4 text-sm text-muted">{user.email}</td>
                           <td className="px-4 py-4"><Badge>{user.role}</Badge></td>
+                          <td className="px-4 py-4 text-sm font-semibold text-muted">{user.organizationName ?? "EduVerseOrganization"}</td>
                           <td className="px-4 py-4 text-xs text-muted">{user.id ?? "-"}</td>
                           <td className="px-4 py-4">
                             <div className="flex flex-wrap gap-3">
@@ -164,8 +165,12 @@ export default function AdminUsersPage() {
                                   setDetailsUser(await adminService.getUserDetails(user.id));
                                 }
                               }} className="text-sm font-bold text-teal-600">View Details</button>
-                              <button onClick={() => setAssignUser(user)} className="text-sm font-bold text-amber-500">Assign Role</button>
-                              <button disabled className="text-sm font-bold text-muted opacity-50">Remove Role</button>
+                              <button onClick={() => {
+                                setAssignUser(user);
+                                setAssignRoleValue(user.role);
+                              }} className="text-sm font-bold text-amber-500">
+                                {user.role === "OrganizationAdmin" ? "Change Organization" : "Assign Role"}
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -195,6 +200,7 @@ export default function AdminUsersPage() {
                   <Info label="Email" value={detailsUser.email} />
                   <Info label="Username" value={detailsUser.userName || "Not available"} />
                   <Info label="Role" value={detailsUser.role} />
+                  <Info label="Organization" value={detailsUser.organizationName ?? "EduVerseOrganization"} />
                   <Info label="UserId" value={detailsUser.userId || "Not available"} />
                   <Info label="Phone" value={detailsUser.phone ?? "Not available"} />
                   <Info label="Created At" value={detailsUser.createdAt && detailsUser.createdAt !== "Not available" ? formatDate(detailsUser.createdAt) : "Not available"} />
@@ -230,9 +236,23 @@ export default function AdminUsersPage() {
               <h2 className="text-2xl font-black text-ink">Assign role</h2>
               <p className="mt-2 text-sm text-muted">{assignUser.fullName} - {assignUser.email}</p>
               <input type="hidden" name="userId" value={assignUser.id ?? ""} />
-              <select name="role" defaultValue={assignUser.role} className="mt-5 h-12 w-full rounded-xl bg-slate-50 px-4 text-sm outline-none ring-1 ring-slate-200 focus:ring-teal-500">
+              <select
+                name="role"
+                value={assignRoleValue}
+                onChange={(event) => setAssignRoleValue(event.target.value as UserRole)}
+                className="mt-5 h-12 w-full rounded-xl bg-slate-50 px-4 text-sm outline-none ring-1 ring-slate-200 focus:ring-teal-500"
+              >
                 {roles.map((role) => <option key={role}>{role}</option>)}
               </select>
+              {(assignRoleValue === "OrganizationAdmin" || assignRoleValue === "Instructor") && (
+                <select name="organizationId" className="mt-4 h-12 w-full rounded-xl bg-slate-50 px-4 text-sm outline-none ring-1 ring-slate-200 focus:ring-teal-500" required>
+                  <option value="">Select organization</option>
+                  {organizations.map((organization) => {
+                    const id = organization.organizationId ?? organization.organizationAdminId;
+                    return <option key={id} value={id}>{organization.organizationName ?? organization.organizationAdminName}</option>;
+                  })}
+                </select>
+              )}
               <div className="mt-5 flex gap-3">
                 <Button className="flex-1" disabled={!assignUser.id}>Save</Button>
                 <Button type="button" variant="ghost" onClick={() => setAssignUser(null)}>Cancel</Button>
@@ -252,4 +272,15 @@ function Info({ label, value }: { label: string; value: string }) {
       <p className="mt-2 break-words text-sm font-bold text-ink">{value}</p>
     </div>
   );
+}
+
+function getErrorMessage(error: unknown) {
+  const response = (error as { response?: { data?: any } })?.response?.data;
+  const errors = response?.errors ?? response?.Errors;
+
+  if (Array.isArray(errors) && errors.length > 0) {
+    return errors.join(", ");
+  }
+
+  return response?.message ?? response?.Message ?? "Check user id, role name, selected organization, and Admin permissions.";
 }

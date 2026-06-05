@@ -13,6 +13,9 @@ namespace Application.DTOs.Course
         public string? Category { get; set; }
         public string? OrganizationOwner { get; set; }
         public string? OrganizationOwnerEmail { get; set; }
+        public Guid? OrganizationId { get; set; }
+        public string? OrganizationName { get; set; }
+        public string? InstructorId { get; set; }
         public string? InstructorName { get; set; }
         public double Price { get; set; }
         public string? ImageUrl { get; set; }

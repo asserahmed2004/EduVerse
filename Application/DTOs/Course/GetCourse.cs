@@ -18,6 +18,9 @@ namespace Application.DTOs.Course
         public float Rating { get; set; }
         public float UserRating { get; set; }
         public string OrgId { get; set; }
+        public Guid? OrganizationId { get; set; }
+        public string? OrganizationName { get; set; }
+        public string? InstructorId { get; set; }
         public string ImageUrl { get; set; }
         public List<GetCategory> Categories { get; set; }
         public string? Category { get; set; }

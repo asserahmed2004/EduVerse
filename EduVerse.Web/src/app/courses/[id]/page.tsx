@@ -1,14 +1,14 @@
 "use client";
 
-import { Award, BookOpen, Clock, CreditCard, Star, Users } from "lucide-react";
+import { Award, BookOpen, CheckCircle2, Clock, CreditCard, ExternalLink, Link as LinkIcon, Star, Users } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { useToast } from "@/components/toast-provider";
-import { Badge, Button, EmptyState, LoadingState, PageHeader } from "@/components/ui";
+import { Badge, Button, EmptyState, LoadingState, PageHeader, ProgressBar } from "@/components/ui";
 import { courseService, studentService } from "@/lib/api";
 import { getStoredUser } from "@/lib/auth";
-import type { Course, CourseAdminDetails } from "@/lib/types";
+import type { Course, CourseAdminDetails, CourseProgress } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 export default function CourseDetailsPage() {
@@ -20,6 +20,10 @@ export default function CourseDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [paymentLoading, setPaymentLoading] = useState(false);
+  const [enrollLoading, setEnrollLoading] = useState(false);
+  const [progressLoading, setProgressLoading] = useState(false);
+  const [certificateLoading, setCertificateLoading] = useState(false);
+  const [progress, setProgress] = useState<CourseProgress | null>(null);
   const user = getStoredUser();
   const canViewAdminDetails = user?.role === "Admin" || user?.role === "OrganizationAdmin" || user?.role === "Instructor";
 
@@ -37,6 +41,8 @@ export default function CourseDetailsPage() {
           rating: details.averageRating,
           category: details.category,
           instructorName: details.instructorName,
+          organizationId: details.organizationId,
+          organizationName: details.organizationName,
           organizationOwnerName: details.organizationOwner,
           organizationOwnerEmail: details.organizationOwnerEmail,
           studentsCount: details.studentsCount,
@@ -55,6 +61,53 @@ export default function CourseDetailsPage() {
       .finally(() => setLoading(false));
   }, [params.id, canViewAdminDetails]);
 
+  useEffect(() => {
+    if (user?.role !== "Student") return;
+
+    setProgressLoading(true);
+    studentService.getCourseProgress(params.id)
+      .then(setProgress)
+      .catch(() => setProgress(null))
+      .finally(() => setProgressLoading(false));
+  }, [params.id, user?.role]);
+
+  async function enrollFree() {
+    setEnrollLoading(true);
+    try {
+      const result = await studentService.enrollFree(params.id);
+      showToast({ title: "Enrollment complete", message: result.message ?? "You are enrolled in this free course.", tone: "success" });
+      const refreshed = await studentService.getCourseProgress(params.id).catch(() => null);
+      if (refreshed) setProgress(refreshed);
+    } catch (error) {
+      showToast({ title: "Enrollment failed", message: error instanceof Error ? error.message : "Could not enroll in this course.", tone: "error" });
+    } finally {
+      setEnrollLoading(false);
+    }
+  }
+
+  async function markCompleted(sessionId: string) {
+    try {
+      const updated = await studentService.markSessionCompleted(sessionId);
+      setProgress(updated);
+      showToast({ title: "Session completed", message: "Your progress has been updated.", tone: "success" });
+    } catch (error) {
+      showToast({ title: "Progress update failed", message: error instanceof Error ? error.message : "Could not update this session.", tone: "error" });
+    }
+  }
+
+  async function generateCertificate() {
+    setCertificateLoading(true);
+    try {
+      const certificate = await studentService.generateCertificate(params.id);
+      showToast({ title: "Certificate ready", message: certificate.certificateCode ?? "Certificate generated successfully.", tone: "success" });
+      router.push("/certificates");
+    } catch (error) {
+      showToast({ title: "Certificate unavailable", message: error instanceof Error ? error.message : "Complete the course first to generate a certificate.", tone: "error" });
+    } finally {
+      setCertificateLoading(false);
+    }
+  }
+
   async function pay(method: "card" | "wallet") {
     setPaymentLoading(true);
     try {
@@ -63,8 +116,7 @@ export default function CourseDetailsPage() {
         window.location.href = redirectUrl;
       }
     } catch {
-      showToast({ title: "Payment API unavailable", message: "Opening the local payment page so the flow remains testable.", tone: "info" });
-      router.push(`/payments?courseId=${params.id}&method=${method}`);
+      showToast({ title: "Payment service unavailable", message: "Payment service is currently unavailable. Please try again later.", tone: "error" });
     } finally {
       setPaymentLoading(false);
     }
@@ -110,28 +162,127 @@ export default function CourseDetailsPage() {
 
         <aside className="h-fit rounded-xl2 bg-white p-6 shadow-soft ring-1 ring-slate-100">
           <p className="text-sm font-semibold text-muted">Course price</p>
-          <p className="mt-2 text-4xl font-bold text-ink">{formatCurrency(course.price)}</p>
+          <p className="mt-2 text-4xl font-bold text-ink">{course.price <= 0 ? "Free" : formatCurrency(course.price)}</p>
           <div className="mt-5 space-y-3 text-sm text-muted">
             <p><span className="font-bold text-ink">Course Id:</span> {course.id}</p>
-            <p><span className="font-bold text-ink">Organization:</span> {course.organizationOwnerName ?? "Not available"}</p>
+            <p><span className="font-bold text-ink">Organization:</span> {course.organizationName ?? course.organizationOwnerName ?? "EduVerseOrganization"}</p>
             <p><span className="font-bold text-ink">Instructor:</span> {course.instructorName ?? "Unassigned"}</p>
             {course.isDeleted && <p><span className="font-bold text-ink">Deleted:</span> {course.deletedAt ? formatDate(course.deletedAt) : "Not recorded"} by {course.deletedByName ?? "Unknown"}</p>}
             {adminDetails?.restoredAt && <p><span className="font-bold text-ink">Restored:</span> {formatDate(adminDetails.restoredAt)} by {adminDetails.restoredByName ?? "Unknown"}</p>}
           </div>
           {user?.role === "Student" && !course.isDeleted && (
             <div className="mt-6 grid gap-3">
-              <Button onClick={() => pay("card")} disabled={paymentLoading}>
-                <CreditCard size={18} />
-                Pay with card
-              </Button>
-              <Button variant="ghost" onClick={() => pay("wallet")} disabled={paymentLoading}>
-                <Award size={18} />
-                Pay with wallet
-              </Button>
+              {course.price <= 0 ? (
+                <Button onClick={enrollFree} disabled={enrollLoading || Boolean(progress)}>
+                  <CheckCircle2 size={18} />
+                  {progress ? "Already enrolled" : enrollLoading ? "Enrolling..." : "Enroll for free"}
+                </Button>
+              ) : (
+                <>
+                  <Button onClick={() => pay("card")} disabled={paymentLoading}>
+                    <CreditCard size={18} />
+                    Pay with card
+                  </Button>
+                  <Button variant="ghost" onClick={() => pay("wallet")} disabled={paymentLoading}>
+                    <Award size={18} />
+                    Pay with wallet
+                  </Button>
+                </>
+              )}
             </div>
           )}
         </aside>
       </div>
+
+      {user?.role === "Student" && (
+        <section className="mt-8 rounded-xl2 bg-white p-6 shadow-soft ring-1 ring-slate-100">
+          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+            <div>
+              <h2 className="text-xl font-bold text-ink">Learning progress</h2>
+              <p className="mt-1 text-sm text-muted">Sessions, materials, assignments, and completion status for this course.</p>
+            </div>
+            {progress?.isCompleted && (
+              <Button onClick={generateCertificate} disabled={certificateLoading}>
+                <Award size={18} />
+                {certificateLoading ? "Generating..." : "Generate certificate"}
+              </Button>
+            )}
+          </div>
+
+          {progressLoading ? (
+            <div className="mt-5">
+              <LoadingState label="Loading learning progress" />
+            </div>
+          ) : !progress ? (
+            <div className="mt-5">
+              <EmptyState title="Not enrolled yet" description={course.price <= 0 ? "Enroll for free to unlock sessions and progress tracking." : "Complete payment to unlock the learning workspace."} />
+            </div>
+          ) : (
+            <div className="mt-6">
+              <div className="flex items-center justify-between gap-4">
+                <p className="text-sm font-semibold text-muted">Overall progress</p>
+                <p className="text-sm font-bold text-teal-600">{Math.round(progress.progressPercentage)}%</p>
+              </div>
+              <div className="mt-2">
+                <ProgressBar value={progress.progressPercentage} />
+              </div>
+
+              <div className="mt-6 space-y-4">
+                {progress.sessions.length === 0 ? (
+                  <Muted>No sessions have been added to this course yet.</Muted>
+                ) : progress.sessions.map((session) => (
+                  <article key={session.id} className="rounded-xl bg-slate-50 p-4 ring-1 ring-slate-100">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge tone={session.isCompleted ? "teal" : "slate"}>{session.isCompleted ? "Completed" : `Session ${session.sessionNumber}`}</Badge>
+                          {session.date && <span className="text-xs font-semibold text-muted">{formatDate(session.date)}</span>}
+                        </div>
+                        <h3 className="mt-3 text-lg font-bold text-ink">{session.title}</h3>
+                        {session.description && <p className="mt-2 text-sm leading-6 text-muted">{session.description}</p>}
+                      </div>
+                      <Button variant="ghost" onClick={() => markCompleted(session.id)} disabled={session.isCompleted}>
+                        <CheckCircle2 size={17} />
+                        {session.isCompleted ? "Done" : "Mark completed"}
+                      </Button>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 md:grid-cols-2">
+                      {(session.materials ?? []).map((material) => (
+                        <a key={material.id} href={material.url ?? material.filePath ?? "#"} target="_blank" rel="noreferrer" className="rounded-xl bg-white p-3 text-sm font-semibold text-ink ring-1 ring-slate-100 transition hover:-translate-y-0.5 hover:shadow-soft">
+                          <span className="inline-flex items-center gap-2">
+                            <LinkIcon size={16} className="text-teal-600" />
+                            {material.title}
+                          </span>
+                        </a>
+                      ))}
+                      {session.videoUrl && <LearningLink href={session.videoUrl} label="Video material" />}
+                      {session.externalLink && <LearningLink href={session.externalLink} label="External link" />}
+                      {session.fileUrl && <LearningLink href={session.fileUrl} label="Session file" />}
+                    </div>
+
+                    {(session.assignments ?? []).length > 0 && (
+                      <div className="mt-4 space-y-2">
+                        {(session.assignments ?? []).map((assignment) => (
+                          <div key={assignment.assignmentId} className="rounded-xl bg-white p-3 ring-1 ring-slate-100">
+                            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                              <div>
+                                <p className="font-bold text-ink">{assignment.title}</p>
+                                <p className="mt-1 text-xs font-semibold text-muted">Due: {assignment.dueDate ? formatDate(assignment.dueDate) : "Not set"}</p>
+                              </div>
+                              <Badge tone={assignment.submissionStatus === "Graded" ? "teal" : assignment.submissionStatus === "Late" || assignment.submissionStatus === "Missing" ? "coral" : "amber"}>{assignment.submissionStatus}</Badge>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </article>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       {adminDetails && (
         <section className="mt-8 grid gap-6 xl:grid-cols-2">
@@ -197,4 +348,15 @@ function Row({ title, meta }: { title: string; meta: string }) {
 
 function Muted({ children }: { children: React.ReactNode }) {
   return <p className="rounded-xl bg-slate-50 p-4 text-sm font-semibold text-muted">{children}</p>;
+}
+
+function LearningLink({ href, label }: { href: string; label: string }) {
+  return (
+    <a href={href} target="_blank" rel="noreferrer" className="rounded-xl bg-white p-3 text-sm font-semibold text-ink ring-1 ring-slate-100 transition hover:-translate-y-0.5 hover:shadow-soft">
+      <span className="inline-flex items-center gap-2">
+        <ExternalLink size={16} className="text-teal-600" />
+        {label}
+      </span>
+    </a>
+  );
 }

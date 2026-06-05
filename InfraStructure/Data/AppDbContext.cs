@@ -37,6 +37,24 @@ namespace InfraStructure.Data
                 .HasForeignKey(c => c.OrgId)
                 .OnDelete(DeleteBehavior.NoAction);
 
+            modelBuilder.Entity<Course>()
+                .HasOne<Organization>()
+                .WithMany()
+                .HasForeignKey(c => c.OrganizationId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            modelBuilder.Entity<Course>()
+                .HasOne<AppUser>()
+                .WithMany()
+                .HasForeignKey(c => c.InstructorId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            modelBuilder.Entity<AppUser>()
+                .HasOne<Organization>()
+                .WithMany()
+                .HasForeignKey(u => u.OrganizationId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             modelBuilder.Entity<Session>()
                 .HasOne<AppUser>()
                 .WithMany()
@@ -66,6 +84,18 @@ namespace InfraStructure.Data
                 .WithMany()
                 .HasForeignKey(asub => asub.StudentId)
                 .OnDelete(DeleteBehavior.NoAction);
+
+            modelBuilder.Entity<StudentSessionProgress>()
+                .HasIndex(p => new { p.StudentId, p.SessionId })
+                .IsUnique();
+
+            modelBuilder.Entity<CertificateRecord>()
+                .HasIndex(c => c.CertificateCode)
+                .IsUnique();
+
+            modelBuilder.Entity<AttendanceRecord>()
+                .HasIndex(a => new { a.StudentId, a.SessionId })
+                .IsUnique();
 
 
         }
@@ -97,6 +127,12 @@ namespace InfraStructure.Data
         public DbSet<RefreshToken> RefreshTokens { get; set; }
         public DbSet<EmailConfirmation> EmailConfirmations { get; set; }
         public DbSet<ActivityLog> ActivityLogs { get; set; }
+        public DbSet<Organization> Organizations { get; set; }
+        public DbSet<StudentSessionProgress> StudentSessionProgresses { get; set; }
+        public DbSet<CertificateRecord> CertificateRecords { get; set; }
+        public DbSet<Notification> Notifications { get; set; }
+        public DbSet<AttendanceRecord> AttendanceRecords { get; set; }
+        public DbSet<SessionMaterial> SessionMaterials { get; set; }
         
         
         }

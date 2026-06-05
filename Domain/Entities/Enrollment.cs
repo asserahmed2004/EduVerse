@@ -10,7 +10,11 @@
         public string StudentId { get; set; }
         public DateTime EnrollmentDate { get; set; }
         public double Progression { get; set; }
+        public double ProgressPercentage { get; set; }
+        public bool IsCompleted { get; set; }
+        public DateTime? CompletedAt { get; set; }
         public DateTime? GraduationDate { get; set; }
         public string? FileUrl { get; set; }
+        public string? CertificateCode { get; set; }
     }
 }

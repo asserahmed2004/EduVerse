@@ -10,11 +10,17 @@ import type {
   ChangePasswordPayload,
   Course,
   CourseAdminDetails,
+  CourseProgress,
   CourseSession,
   DashboardStats,
   GlobalSearchResult,
+  InstructorOverview,
+  InstructorSession,
+  InstructorStudent,
+  InstructorSubmission,
   LoginPayload,
   ManagedUser,
+  NotificationItem,
   OrganizationOverview,
   OrganizationDetails,
   Payment,
@@ -26,6 +32,7 @@ import type {
   RegisterPayload,
   RoleCount,
   ServiceResult,
+  StudentAssignment,
   TopCourse,
   TopCourseChart,
   TopInstructor,
@@ -80,11 +87,14 @@ function normalizeCourse(course: any): Course {
     rating: course.rating ?? course.Rating ?? 0,
     userRating: course.userRating ?? course.UserRating ?? 0,
     orgId: course.orgId ?? course.OrgId,
+    organizationId: course.organizationId ?? course.OrganizationId,
+    organizationName: course.organizationName ?? course.OrganizationName ?? "EduVerseOrganization",
+    instructorId: course.instructorId ?? course.InstructorId,
     imageUrl: normalizeImageUrl(course.imageUrl ?? course.ImageUrl),
     categories: course.categories ?? course.Categories ?? [],
     category: course.category ?? course.Category ?? course.categories?.[0]?.name ?? course.Categories?.[0]?.Name,
     instructorName: course.instructorName ?? course.InstructorName,
-    organizationOwnerName: course.organizationOwnerName ?? course.OrganizationOwnerName,
+    organizationOwnerName: course.organizationOwnerName ?? course.OrganizationOwnerName ?? course.organizationName ?? course.OrganizationName ?? "EduVerseOrganization",
     organizationOwnerEmail: course.organizationOwnerEmail ?? course.OrganizationOwnerEmail,
     studentsCount: course.studentsCount ?? course.StudentsCount ?? 0,
     sessionsCount: course.sessionsCount ?? course.SessionsCount ?? 0,
@@ -107,7 +117,12 @@ function normalizeSession(session: any): CourseSession {
     trainerId: session.trainerId ?? session.TrainerId,
     date: session.date ?? session.Date,
     duration: session.duration ?? session.Duration,
-    sessionNumber: session.sessionNumber ?? session.SessionNumber ?? 0
+    sessionNumber: session.sessionNumber ?? session.SessionNumber ?? 0,
+    description: session.description ?? session.Description,
+    videoUrl: session.videoUrl ?? session.VideoUrl,
+    externalLink: session.externalLink ?? session.ExternalLink,
+    attendanceCode: session.attendanceCode ?? session.AttendanceCode,
+    attendanceCodeCreatedAt: session.attendanceCodeCreatedAt ?? session.AttendanceCodeCreatedAt
   };
 }
 
@@ -148,6 +163,15 @@ function unwrapData(data: any) {
   return data?.data ?? data?.Data ?? data;
 }
 
+function toBackendRole(role: string) {
+  const normalized = role.trim().toLowerCase();
+  if (normalized === "organizationadmin") return "organizationAdmin";
+  if (normalized === "admin") return "admin";
+  if (normalized === "instructor") return "instructor";
+  if (normalized === "student") return "student";
+  return role;
+}
+
 function normalizeStats(data: any): DashboardStats {
   const value = unwrapData(data);
   return {
@@ -168,10 +192,18 @@ function normalizeStats(data: any): DashboardStats {
 }
 
 function normalizeOrganizationOverview(item: any): OrganizationOverview {
+  const organizationId = item.organizationId ?? item.OrganizationId ?? item.id ?? item.Id ?? item.organizationAdminId ?? item.OrganizationAdminId ?? "";
+  const organizationName = item.organizationName ?? item.OrganizationName ?? item.name ?? item.Name ?? item.organizationAdminName ?? item.OrganizationAdminName ?? "Organization";
   return {
-    organizationAdminId: item.organizationAdminId ?? item.OrganizationAdminId ?? "",
-    organizationAdminName: item.organizationAdminName ?? item.OrganizationAdminName ?? "Organization admin",
+    organizationId,
+    organizationName,
+    organizationAdminId: item.organizationAdminId ?? item.OrganizationAdminId ?? organizationId,
+    organizationAdminName: item.organizationAdminName ?? item.OrganizationAdminName ?? organizationName,
     email: item.email ?? item.Email ?? "",
+    phoneNumber: item.phoneNumber ?? item.PhoneNumber,
+    description: item.description ?? item.Description,
+    websiteUrl: item.websiteUrl ?? item.WebsiteUrl,
+    status: item.status ?? item.Status,
     coursesCount: item.coursesCount ?? item.CoursesCount ?? 0,
     studentsCount: item.studentsCount ?? item.StudentsCount ?? 0,
     enrollmentsCount: item.enrollmentsCount ?? item.EnrollmentsCount ?? 0,
@@ -208,6 +240,22 @@ function normalizeOrganizationDetails(item: any): OrganizationDetails {
   const overview = normalizeOrganizationOverview(item);
   return {
     ...overview,
+    id: overview.organizationId,
+    name: overview.organizationName,
+    admins: (item.admins ?? item.Admins ?? []).map((user: any) => ({
+      userId: user.userId ?? user.UserId ?? "",
+      fullName: user.fullName ?? user.FullName ?? "",
+      userName: user.userName ?? user.UserName ?? "",
+      email: user.email ?? user.Email ?? "",
+      role: user.role ?? user.Role ?? ""
+    })),
+    instructors: (item.instructors ?? item.Instructors ?? []).map((user: any) => ({
+      userId: user.userId ?? user.UserId ?? "",
+      fullName: user.fullName ?? user.FullName ?? "",
+      userName: user.userName ?? user.UserName ?? "",
+      email: user.email ?? user.Email ?? "",
+      role: user.role ?? user.Role ?? ""
+    })),
     courses: (item.courses ?? item.Courses ?? []).map((course: any) => ({
       courseId: course.courseId ?? course.CourseId ?? "",
       name: course.name ?? course.Name ?? "",
@@ -230,8 +278,11 @@ function normalizeCourseAdminDetails(data: any): CourseAdminDetails {
     title: value.title ?? value.Title ?? "",
     description: value.description ?? value.Description ?? "",
     category: value.category ?? value.Category,
-    organizationOwner: value.organizationOwner ?? value.OrganizationOwner,
+    organizationOwner: value.organizationOwner ?? value.OrganizationOwner ?? value.organizationName ?? value.OrganizationName ?? "EduVerseOrganization",
     organizationOwnerEmail: value.organizationOwnerEmail ?? value.OrganizationOwnerEmail,
+    organizationId: value.organizationId ?? value.OrganizationId,
+    organizationName: value.organizationName ?? value.OrganizationName ?? "EduVerseOrganization",
+    instructorId: value.instructorId ?? value.InstructorId,
     instructorName: value.instructorName ?? value.InstructorName,
     price: value.price ?? value.Price ?? 0,
     imageUrl: normalizeImageUrl(value.imageUrl ?? value.ImageUrl),
@@ -258,7 +309,8 @@ function normalizeCourseAdminDetails(data: any): CourseAdminDetails {
       sessionId: assignment.sessionId ?? assignment.SessionId,
       subject: assignment.subject ?? assignment.Subject,
       description: assignment.description ?? assignment.Description,
-      content: assignment.content ?? assignment.Content
+      content: assignment.content ?? assignment.Content,
+      dueDate: assignment.dueDate ?? assignment.DueDate
     })),
     recentPayments: (value.recentPayments ?? value.RecentPayments ?? []).map(normalizePayment)
   };
@@ -307,6 +359,8 @@ function normalizeAdminUserDetails(item: any): AdminUserDetails {
     email: value.email ?? value.Email ?? "",
     role: inferRole(value.role ?? value.Role),
     phone: value.phone ?? value.Phone ?? value.phoneNumber ?? value.PhoneNumber,
+    organizationId: value.organizationId ?? value.OrganizationId,
+    organizationName: value.organizationName ?? value.OrganizationName ?? "EduVerseOrganization",
     coursesCount: value.coursesCount ?? value.CoursesCount ?? 0,
     sessionsCount: value.sessionsCount ?? value.SessionsCount ?? 0,
     enrollmentsCount: value.enrollmentsCount ?? value.EnrollmentsCount ?? 0,
@@ -399,6 +453,112 @@ function normalizeTopInstructor(item: any): TopInstructor {
   };
 }
 
+function normalizeStudentAssignment(item: any): StudentAssignment {
+  return {
+    assignmentId: item.assignmentId ?? item.AssignmentId ?? "",
+    title: item.title ?? item.Title ?? item.subject ?? item.Subject ?? "Assignment",
+    description: item.description ?? item.Description ?? "",
+    courseId: item.courseId ?? item.CourseId ?? "",
+    courseName: item.courseName ?? item.CourseName ?? "Course",
+    sessionId: item.sessionId ?? item.SessionId ?? "",
+    sessionTitle: item.sessionTitle ?? item.SessionTitle ?? "Session",
+    sessionNumber: item.sessionNumber ?? item.SessionNumber ?? 0,
+    dueDate: item.dueDate ?? item.DueDate,
+    submissionStatus: item.submissionStatus ?? item.SubmissionStatus ?? "Not Submitted",
+    submittedAt: item.submittedAt ?? item.SubmittedAt,
+    grade: item.grade ?? item.Grade,
+    feedback: item.feedback ?? item.Feedback,
+    fileUrl: item.fileUrl ?? item.FileUrl
+  };
+}
+
+function normalizeCourseProgress(data: any): CourseProgress {
+  const value = unwrapData(data);
+  return {
+    courseId: value.courseId ?? value.CourseId ?? "",
+    courseName: value.courseName ?? value.CourseName ?? "Course",
+    progressPercentage: value.progressPercentage ?? value.ProgressPercentage ?? 0,
+    isCompleted: value.isCompleted ?? value.IsCompleted ?? false,
+    completedAt: value.completedAt ?? value.CompletedAt,
+    sessions: (value.sessions ?? value.Sessions ?? []).map((session: any) => ({
+      ...normalizeSession(session),
+      isCompleted: session.isCompleted ?? session.IsCompleted ?? false,
+      completedAt: session.completedAt ?? session.CompletedAt,
+      materials: (session.materials ?? session.Materials ?? []).map((material: any) => ({
+        id: material.id ?? material.Id ?? "",
+        sessionId: material.sessionId ?? material.SessionId ?? "",
+        title: material.title ?? material.Title ?? "Material",
+        type: material.type ?? material.Type ?? "Link",
+        url: material.url ?? material.Url,
+        filePath: material.filePath ?? material.FilePath,
+        createdAt: material.createdAt ?? material.CreatedAt ?? new Date().toISOString()
+      })),
+      assignments: (session.assignments ?? session.Assignments ?? []).map(normalizeStudentAssignment)
+    }))
+  };
+}
+
+function normalizeNotification(item: any): NotificationItem {
+  return {
+    id: item.id ?? item.Id ?? "",
+    title: item.title ?? item.Title ?? "",
+    message: item.message ?? item.Message ?? "",
+    isRead: item.isRead ?? item.IsRead ?? false,
+    createdAt: item.createdAt ?? item.CreatedAt ?? new Date().toISOString()
+  };
+}
+
+function normalizeInstructorSession(item: any): InstructorSession {
+  return {
+    sessionId: item.sessionId ?? item.SessionId ?? "",
+    courseId: item.courseId ?? item.CourseId ?? "",
+    courseName: item.courseName ?? item.CourseName ?? "",
+    title: item.title ?? item.Title ?? "Session",
+    sessionNumber: item.sessionNumber ?? item.SessionNumber ?? 0,
+    date: item.date ?? item.Date ?? new Date().toISOString()
+  };
+}
+
+function normalizeInstructorSubmission(item: any): InstructorSubmission {
+  return {
+    studentId: item.studentId ?? item.StudentId ?? "",
+    studentName: item.studentName ?? item.StudentName ?? "",
+    assignmentId: item.assignmentId ?? item.AssignmentId ?? "",
+    assignmentTitle: item.assignmentTitle ?? item.AssignmentTitle ?? "Assignment",
+    courseId: item.courseId ?? item.CourseId ?? "",
+    courseName: item.courseName ?? item.CourseName ?? "",
+    submittedAt: item.submittedAt ?? item.SubmittedAt,
+    grade: item.grade ?? item.Grade,
+    feedback: item.feedback ?? item.Feedback,
+    fileUrl: item.fileUrl ?? item.FileUrl
+  };
+}
+
+function normalizeInstructorStudent(item: any): InstructorStudent {
+  return {
+    studentId: item.studentId ?? item.StudentId ?? "",
+    studentName: item.studentName ?? item.StudentName ?? "",
+    studentEmail: item.studentEmail ?? item.StudentEmail ?? "",
+    courseId: item.courseId ?? item.CourseId ?? "",
+    courseName: item.courseName ?? item.CourseName ?? "",
+    enrollmentDate: item.enrollmentDate ?? item.EnrollmentDate ?? new Date().toISOString(),
+    progressPercentage: item.progressPercentage ?? item.ProgressPercentage ?? 0,
+    submissionSummary: item.submissionSummary ?? item.SubmissionSummary ?? ""
+  };
+}
+
+function normalizeInstructorOverview(data: any): InstructorOverview {
+  const value = unwrapData(data);
+  return {
+    assignedCourses: value.assignedCourses ?? value.AssignedCourses ?? 0,
+    myStudents: value.myStudents ?? value.MyStudents ?? 0,
+    pendingSubmissions: value.pendingSubmissions ?? value.PendingSubmissions ?? 0,
+    totalAssignments: value.totalAssignments ?? value.TotalAssignments ?? 0,
+    upcomingSessions: (value.upcomingSessions ?? value.UpcomingSessions ?? []).map(normalizeInstructorSession),
+    recentSubmissions: (value.recentSubmissions ?? value.RecentSubmissions ?? []).map(normalizeInstructorSubmission)
+  };
+}
+
 function normalizeServiceResult(data: any): ServiceResult {
   if (typeof data === "string") {
     return { success: true, message: data };
@@ -433,6 +593,8 @@ function normalizeAuthProfile(data: any, fallbackRole?: AuthUser["role"]): AuthU
     email: profile.email ?? profile.Email ?? "",
     role: inferRole(profile.role ?? profile.Role ?? fallbackRole),
     phoneNumber: profile.phoneNumber ?? profile.PhoneNumber,
+    organizationId: profile.organizationId ?? profile.OrganizationId,
+    organizationName: profile.organizationName ?? profile.OrganizationName ?? "EduVerseOrganization",
     profilePicture: normalizeProfilePictureUrl(profile.profilePicture ?? profile.ProfilePicture)
   };
 }
@@ -449,9 +611,14 @@ function normalizeCertificate(certificate: any, index: number): Certificate {
 
   return {
     id: certificate.id ?? certificate.Id ?? `${certificate.courseId ?? certificate.CourseId ?? index}`,
+    courseId: certificate.courseId ?? certificate.CourseId,
     courseName: certificate.courseName ?? certificate.CourseName ?? certificate.name ?? certificate.Name ?? `Certificate ${index + 1}`,
+    studentName: certificate.studentName ?? certificate.StudentName,
+    certificateCode: certificate.certificateCode ?? certificate.CertificateCode,
     issuedAt: certificate.issuedAt ?? certificate.IssuedAt ?? certificate.graduationDate ?? certificate.GraduationDate ?? new Date().toISOString(),
-    fileUrl: normalizeCertificateUrl(certificate.fileUrl ?? certificate.FileUrl ?? certificate.certificateFile ?? certificate.CertificateFile) ?? ""
+    fileUrl: normalizeCertificateUrl(certificate.fileUrl ?? certificate.FileUrl ?? certificate.certificateFile ?? certificate.CertificateFile) ?? "",
+    status: certificate.status ?? certificate.Status,
+    verificationUrl: certificate.verificationUrl ?? certificate.VerificationUrl
   };
 }
 
@@ -463,7 +630,9 @@ function normalizeUser(user: any): ManagedUser {
     email: user.email ?? user.Email ?? "",
     role: inferRole(user.role ?? user.Role),
     phoneNumber: user.phoneNumber ?? user.PhoneNumber ?? user.phoneNumber,
-    profilePicture: normalizeProfilePictureUrl(user.profilePicture ?? user.ProfilePicture)
+    profilePicture: normalizeProfilePictureUrl(user.profilePicture ?? user.ProfilePicture),
+    organizationId: user.organizationId ?? user.OrganizationId,
+    organizationName: user.organizationName ?? user.OrganizationName ?? "EduVerseOrganization"
   };
 }
 
@@ -500,6 +669,8 @@ export const authService = {
       email: data.email ?? data.Email ?? profile.email ?? payload.email,
       role: inferRole(data.role ?? data.Role ?? profile.role ?? tokenRole),
       phoneNumber: profile.phoneNumber,
+      organizationId: profile.organizationId,
+      organizationName: profile.organizationName,
       profilePicture: profile.profilePicture,
       token
     };
@@ -620,6 +791,11 @@ export const courseService = {
   async addAssignment(formData: FormData): Promise<ServiceResult> {
     const response = await api.post("/Course/AddAssignment", formData);
     return ensureSuccessfulResult(response.data, "Assignment creation failed.");
+  },
+
+  async assignInstructor(courseId: string, instructorId: string): Promise<ServiceResult> {
+    const response = await api.post("/Course/AssignInstructor", { courseId, instructorId });
+    return ensureSuccessfulResult(response.data, "Instructor assignment failed.");
   }
 };
 
@@ -631,8 +807,12 @@ export const studentService = {
       courseName: item.courseName ?? item.CourseName ?? item.name ?? item.Name,
       enrollmentDate: item.enrollmentDate ?? item.EnrollmentDate ?? new Date().toISOString(),
       progression: item.progression ?? item.Progression ?? 0,
+      progressPercentage: item.progressPercentage ?? item.ProgressPercentage ?? item.progression ?? item.Progression ?? 0,
+      isCompleted: item.isCompleted ?? item.IsCompleted ?? Boolean(item.graduationDate ?? item.GraduationDate),
+      completedAt: item.completedAt ?? item.CompletedAt,
       graduationDate: item.graduationDate ?? item.GraduationDate,
-      fileUrl: item.fileUrl ?? item.FileUrl
+      fileUrl: item.fileUrl ?? item.FileUrl,
+      certificateCode: item.certificateCode ?? item.CertificateCode
     }));
   },
 
@@ -644,6 +824,61 @@ export const studentService = {
   async getSubmissions() {
     const response = await api.get("/User/my-submissions");
     return response.data;
+  },
+
+  async getAssignments(): Promise<StudentAssignment[]> {
+    const response = await api.get("/User/my-assignments");
+    return (response.data as any[]).map(normalizeStudentAssignment);
+  },
+
+  async submitAssignment(assignmentId: string, payload: { textAnswer?: string; file?: File | null }): Promise<ServiceResult> {
+    const formData = new FormData();
+    if (payload.textAnswer) formData.append("TextAnswer", payload.textAnswer);
+    if (payload.file) formData.append("File", payload.file);
+    const response = await api.post(`/Assignment/Submit/${assignmentId}`, formData);
+    return ensureSuccessfulResult(response.data, "Assignment submission failed.");
+  },
+
+  async getCourseProgress(courseId: string): Promise<CourseProgress> {
+    const response = await api.get(`/User/my-course-progress/${courseId}`);
+    return normalizeCourseProgress(response.data);
+  },
+
+  async markSessionCompleted(sessionId: string): Promise<CourseProgress> {
+    const response = await api.post(`/User/mark-session-completed/${sessionId}`);
+    ensureSuccessfulResult(response.data, "Session completion failed.");
+    return normalizeCourseProgress(response.data);
+  },
+
+  async enrollFree(courseId: string): Promise<ServiceResult> {
+    const response = await api.post(`/User/enroll/${courseId}`);
+    return ensureSuccessfulResult(response.data, "Free enrollment failed.");
+  },
+
+  async generateCertificate(courseId: string): Promise<Certificate> {
+    const response = await api.post(`/Certificate/Generate/${courseId}`);
+    ensureSuccessfulResult(response.data, "Certificate generation failed.");
+    return normalizeCertificate(unwrapData(response.data), 0);
+  },
+
+  async verifyCertificate(code: string) {
+    const response = await api.get(`/Certificate/Verify/${encodeURIComponent(code)}`);
+    return unwrapData(response.data);
+  },
+
+  async getNotifications(): Promise<NotificationItem[]> {
+    const response = await api.get("/Notification/MyNotifications");
+    return (unwrapData(response.data) ?? []).map(normalizeNotification);
+  },
+
+  async markNotificationAsRead(id: string): Promise<ServiceResult> {
+    const response = await api.post(`/Notification/MarkAsRead/${id}`);
+    return ensureSuccessfulResult(response.data, "Notification update failed.");
+  },
+
+  async markAttendance(sessionId: string, attendanceCode: string): Promise<ServiceResult> {
+    const response = await api.post(`/Attendance/Mark/${sessionId}`, { attendanceCode });
+    return ensureSuccessfulResult(response.data, "Attendance failed.");
   },
 
   async getPayments(): Promise<Payment[]> {
@@ -658,6 +893,46 @@ export const studentService = {
 };
 
 export const instructorService = {
+  async getOverview(): Promise<InstructorOverview> {
+    const response = await api.get("/Instructor/Overview");
+    return normalizeInstructorOverview(response.data);
+  },
+
+  async getSessions(): Promise<InstructorSession[]> {
+    const response = await api.get("/Instructor/Sessions");
+    return (unwrapData(response.data) ?? []).map(normalizeInstructorSession);
+  },
+
+  async getStudents(): Promise<InstructorStudent[]> {
+    const response = await api.get("/Instructor/Students");
+    return (unwrapData(response.data) ?? []).map(normalizeInstructorStudent);
+  },
+
+  async getSubmissions(): Promise<InstructorSubmission[]> {
+    const response = await api.get("/Instructor/Submissions");
+    return (unwrapData(response.data) ?? []).map(normalizeInstructorSubmission);
+  },
+
+  async gradeSubmission(assignmentId: string, studentId: string, grade: number, feedback?: string): Promise<ServiceResult> {
+    const response = await api.post(`/Instructor/GradeSubmission/${assignmentId}/${studentId}`, { grade, feedback });
+    return ensureSuccessfulResult(response.data, "Submission grading failed.");
+  },
+
+  async createSessionQr(sessionId: string): Promise<{ sessionId: string; attendanceCode: string; createdAt: string }> {
+    const response = await api.post(`/Attendance/CreateSessionQr/${sessionId}`);
+    const value = unwrapData(response.data);
+    return {
+      sessionId: value.sessionId ?? value.SessionId ?? sessionId,
+      attendanceCode: value.attendanceCode ?? value.AttendanceCode ?? "",
+      createdAt: value.createdAt ?? value.CreatedAt ?? new Date().toISOString()
+    };
+  },
+
+  async getSessionAttendance(sessionId: string) {
+    const response = await api.get(`/Attendance/Session/${sessionId}`);
+    return unwrapData(response.data) ?? [];
+  },
+
   async getCoursePayments(courseId: string) {
     const response = await api.get(`/User/payments/course/${courseId}`);
     return (response.data as any[]).map(normalizePayment);
@@ -779,6 +1054,61 @@ export const dashboardService = {
   }
 };
 
+export const organizationService = {
+  async getAll(): Promise<OrganizationOverview[]> {
+    const response = await api.get("/Organization/GetAll");
+    const data = unwrapData(response.data);
+    return (data ?? []).map(normalizeOrganizationOverview);
+  },
+
+  async getById(id: string): Promise<OrganizationDetails> {
+    const response = await api.get(`/Organization/GetById/${encodeURIComponent(id)}`);
+    return normalizeOrganizationDetails(unwrapData(response.data));
+  },
+
+  async create(payload: {
+    name: string;
+    description?: string;
+    email?: string;
+    phoneNumber?: string;
+    websiteUrl?: string;
+  }): Promise<OrganizationDetails> {
+    const response = await api.post("/Organization/Create", payload);
+    return normalizeOrganizationDetails(unwrapData(response.data));
+  },
+
+  async update(id: string, payload: {
+    name: string;
+    description?: string;
+    email?: string;
+    phoneNumber?: string;
+    websiteUrl?: string;
+  }): Promise<OrganizationDetails> {
+    const response = await api.put(`/Organization/Update/${encodeURIComponent(id)}`, payload);
+    return normalizeOrganizationDetails(unwrapData(response.data));
+  },
+
+  async suspend(id: string) {
+    const response = await api.post(`/Organization/Suspend/${encodeURIComponent(id)}`);
+    return normalizeOrganizationDetails(unwrapData(response.data));
+  },
+
+  async activate(id: string) {
+    const response = await api.post(`/Organization/Activate/${encodeURIComponent(id)}`);
+    return normalizeOrganizationDetails(unwrapData(response.data));
+  },
+
+  async assignAdmin(organizationId: string, userId: string) {
+    const response = await api.post("/Organization/AssignAdmin", { organizationId, userId });
+    return normalizeOrganizationDetails(unwrapData(response.data));
+  },
+
+  async assignInstructor(organizationId: string, userId: string) {
+    const response = await api.post("/Organization/AssignInstructor", { organizationId, userId });
+    return normalizeOrganizationDetails(unwrapData(response.data));
+  }
+};
+
 export const paymentService = {
   async getAdminSummary() {
     const response = await api.get("/Payment/AdminSummary");
@@ -828,23 +1158,23 @@ export const paymentService = {
 
 export const adminService = {
   async getUsers(role?: string): Promise<ManagedUser[]> {
-    const url = role ? `/Auth/GetAllUsers/${role}` : "/Auth/GetAllUsers";
+    const url = role ? `/Auth/GetAllUsers/${toBackendRole(role)}` : "/Auth/GetAllUsers";
     const response = await api.get(url);
     return (response.data as any[]).map(normalizeUser);
   },
 
   async addRole(role: string): Promise<ServiceResult> {
-    const response = await api.post(`/Auth/AddRole/${encodeURIComponent(role)}`);
+    const response = await api.post(`/Auth/AddRole/${encodeURIComponent(toBackendRole(role))}`);
     return response.data;
   },
 
   async removeRole(role: string): Promise<ServiceResult> {
-    const response = await api.delete(`/Auth/RemoveRole/${encodeURIComponent(role)}`);
+    const response = await api.delete(`/Auth/RemoveRole/${encodeURIComponent(toBackendRole(role))}`);
     return response.data;
   },
 
   async addUserToRole(userId: string, role: string): Promise<ServiceResult> {
-    const response = await api.post(`/Auth/AddUserToRole/${encodeURIComponent(userId)}/${encodeURIComponent(role)}`);
+    const response = await api.post(`/Auth/AddUserToRole/${encodeURIComponent(userId)}/${encodeURIComponent(toBackendRole(role))}`);
     return response.data;
   },
 

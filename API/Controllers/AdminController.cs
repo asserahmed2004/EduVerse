@@ -8,7 +8,7 @@ namespace API.Controllers
 {
     [Route("[controller]")]
     [ApiController]
-    [Authorize(Roles = AppRoles.Admin)]
+    [Authorize(Roles = AppRoles.AdminAccess)]
     public class AdminController(IActivityLogService activityLogService, IAdminService adminService) : ControllerBase
     {
         [HttpGet("ActivityLogs")]

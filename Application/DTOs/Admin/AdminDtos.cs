@@ -46,6 +46,8 @@ namespace Application.DTOs.Admin
         public string UserName { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
         public string Role { get; set; } = string.Empty;
+        public Guid? OrganizationId { get; set; }
+        public string OrganizationName { get; set; } = "EduVerseOrganization";
     }
 
     public class SearchCourseDto
@@ -66,6 +68,8 @@ namespace Application.DTOs.Admin
 
     public class UserActivityDetailsDto : AdminUserDetailsDto
     {
+        public Guid? OrganizationId { get; set; }
+        public string OrganizationName { get; set; } = "EduVerseOrganization";
         public string CreatedAt { get; set; } = "Not available";
         public string LastLogin { get; set; } = "Not available";
         public IEnumerable<ActivityLogDto> RecentActivityLogs { get; set; } = [];
