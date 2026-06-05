@@ -13,8 +13,8 @@ namespace Application.Services.Implementitions
 {
     public class CloudService : ICloudService
     {
-        private readonly string _account = "asseredu";
-        private readonly string _key = "tp8V1zuawd/Kul/ZbH7rnd+dnHA1NuILzmHcQ64Zsfg8w0oTrnii0ImVJ63vfQRf43PjE5oaNI4l+ASt7vmmmw==";
+        private readonly string _account = "eduverseblob";
+        private readonly string _key = "pi6dI16kBdtn522hQVerKhXSU0IcWhBoROhCnMCeXk4Tw+c1DVHwpu0q4rm5x2CtaGOEpVH92vRL+AStsmrvww==";
         private readonly BlobServiceClient _blobServiceClient;
         private readonly BlobContainerClient container;
 
