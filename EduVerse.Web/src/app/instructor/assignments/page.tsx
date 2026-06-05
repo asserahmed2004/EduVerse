@@ -1,27 +1,48 @@
 "use client";
 
-import { CheckCircle2, FileText } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
+import { CheckCircle2, FileText, Plus } from "lucide-react";
+import { FormEvent, type InputHTMLAttributes, useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
 import { useToast } from "@/components/toast-provider";
 import { Badge, Button, EmptyState, LoadingState, PageHeader, StatCard } from "@/components/ui";
-import { instructorService } from "@/lib/api";
-import type { InstructorSubmission } from "@/lib/types";
+import { courseService, instructorService } from "@/lib/api";
+import type { Course, CourseSession, InstructorSubmission } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 
 export default function InstructorAssignmentsPage() {
   const { showToast } = useToast();
   const [submissions, setSubmissions] = useState<InstructorSubmission[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [sessions, setSessions] = useState<CourseSession[]>([]);
+  const [selectedCourseId, setSelectedCourseId] = useState("");
   const [loading, setLoading] = useState(true);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    instructorService.getSubmissions()
-      .then(setSubmissions)
+    Promise.all([instructorService.getSubmissions(), courseService.getAll()])
+      .then(([submissionsData, coursesData]) => {
+        setSubmissions(submissionsData);
+        setCourses(coursesData);
+        setSelectedCourseId(coursesData[0]?.id ?? "");
+      })
       .catch(() => setError("Could not load assignment submissions from the API."))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!selectedCourseId) {
+      setSessions([]);
+      return;
+    }
+
+    setSessionsLoading(true);
+    courseService.getSessions(selectedCourseId)
+      .then(setSessions)
+      .catch(() => setSessions([]))
+      .finally(() => setSessionsLoading(false));
+  }, [selectedCourseId]);
 
   async function gradeSubmission(event: FormEvent<HTMLFormElement>, submission: InstructorSubmission) {
     event.preventDefault();
@@ -38,6 +59,18 @@ export default function InstructorAssignmentsPage() {
     }
   }
 
+  async function addAssignment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    try {
+      await courseService.addAssignment(form);
+      showToast({ title: "Assignment added", message: "The assignment is available under the selected session.", tone: "success" });
+      event.currentTarget.reset();
+    } catch (error) {
+      showToast({ title: "Assignment failed", message: error instanceof Error ? error.message : "Could not create assignment for this session.", tone: "error" });
+    }
+  }
+
   return (
     <AppShell>
       <AuthGuard roles={["Instructor"]}>
@@ -46,6 +79,48 @@ export default function InstructorAssignmentsPage() {
           <StatCard label="Submissions" value={`${submissions.length}`} icon={FileText} accent="coral" />
           <StatCard label="Pending grading" value={`${submissions.filter((submission) => submission.grade === undefined || submission.grade === null).length}`} icon={CheckCircle2} />
         </div>
+
+        <form onSubmit={addAssignment} className="mt-8 rounded-xl2 bg-white p-6 shadow-soft ring-1 ring-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="grid size-11 place-items-center rounded-xl bg-teal-50 text-teal-600">
+              <Plus size={20} />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-ink">Add assignment</h2>
+              <p className="text-sm text-muted">Create assignments only for your assigned course sessions.</p>
+            </div>
+          </div>
+          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            <label className="block">
+              <span className="text-sm font-semibold text-ink">Course</span>
+              <select value={selectedCourseId} onChange={(event) => setSelectedCourseId(event.target.value)} className="mt-2 h-12 w-full rounded-xl bg-slate-50 px-4 text-sm outline-none ring-1 ring-slate-200 focus:ring-teal-500" disabled={courses.length === 0}>
+                <option value="">Select course</option>
+                {courses.map((course) => <option key={course.id} value={course.id}>{course.name}</option>)}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-sm font-semibold text-ink">Session</span>
+              <select name="SessionId" className="mt-2 h-12 w-full rounded-xl bg-slate-50 px-4 text-sm outline-none ring-1 ring-slate-200 focus:ring-teal-500" required disabled={!selectedCourseId || sessionsLoading || sessions.length === 0}>
+                <option value="">{sessionsLoading ? "Loading sessions..." : "Select session"}</option>
+                {sessions.map((session) => <option key={session.id} value={session.id}>{session.sessionNumber ? `Session ${session.sessionNumber} - ` : ""}{session.title}</option>)}
+              </select>
+            </label>
+            <Field name="Subject" label="Assignment title" required />
+            <Field name="DueDate" label="Due date" type="date" />
+            <label className="block lg:col-span-2">
+              <span className="text-sm font-semibold text-ink">Description / instructions</span>
+              <textarea name="Description" className="mt-2 min-h-24 w-full rounded-xl bg-slate-50 px-4 py-3 text-sm outline-none ring-1 ring-slate-200 focus:ring-teal-500" required />
+            </label>
+            <label className="block lg:col-span-2">
+              <span className="text-sm font-semibold text-ink">Optional file</span>
+              <input name="File" type="file" className="mt-2 w-full rounded-xl bg-slate-50 px-4 py-3 text-sm ring-1 ring-slate-200" />
+            </label>
+          </div>
+          <Button className="mt-5" variant="ghost">
+            <Plus size={18} />
+            Add assignment
+          </Button>
+        </form>
 
         <section className="mt-8">
           {loading ? (
@@ -66,8 +141,18 @@ export default function InstructorAssignmentsPage() {
                       </div>
                       <h2 className="mt-3 text-lg font-bold text-ink">{submission.assignmentTitle}</h2>
                       <p className="mt-1 text-sm text-muted">Student: {submission.studentName || submission.studentId}</p>
+                      <p className="mt-1 text-sm text-muted">Session: {submission.sessionTitle || submission.sessionId || "Not available"}</p>
                       <p className="mt-1 text-sm text-muted">Submitted: {formatDate(submission.submittedAt)}</p>
-                      {submission.fileUrl && <a href={submission.fileUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-sm font-bold text-teal-600">Open submission file</a>}
+                      {submission.isLate && <Badge tone="coral">Late</Badge>}
+                      <div className="mt-4 rounded-xl bg-slate-50 p-4">
+                        <p className="text-xs font-bold uppercase text-muted">Text answer</p>
+                        <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-ink">{submission.textAnswer || "No text answer submitted."}</p>
+                      </div>
+                      {(submission.fileUrl || submission.filePath) ? (
+                        <a href={submission.fileUrl ?? submission.filePath} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-sm font-bold text-teal-600">Open submission file</a>
+                      ) : (
+                        <p className="mt-3 text-sm font-semibold text-muted">No file uploaded.</p>
+                      )}
                     </div>
 
                     <form onSubmit={(event) => gradeSubmission(event, submission)} className="rounded-xl bg-slate-50 p-4">
@@ -89,5 +174,15 @@ export default function InstructorAssignmentsPage() {
         </section>
       </AuthGuard>
     </AppShell>
+  );
+}
+
+function Field(props: InputHTMLAttributes<HTMLInputElement> & { label: string }) {
+  const { label, ...inputProps } = props;
+  return (
+    <label className="block">
+      <span className="text-sm font-semibold text-ink">{label}</span>
+      <input className="mt-2 h-12 w-full rounded-xl bg-slate-50 px-4 text-sm outline-none ring-1 ring-slate-200 focus:ring-teal-500" {...inputProps} />
+    </label>
   );
 }

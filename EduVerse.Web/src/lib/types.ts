@@ -469,6 +469,9 @@ export type SessionMaterial = {
   type: string;
   url?: string;
   filePath?: string;
+  fileUrl?: string;
+  materialUrl?: string;
+  link?: string;
   createdAt: string;
 };
 
@@ -510,13 +513,19 @@ export type InstructorStudent = {
 };
 
 export type InstructorSubmission = {
+  submissionId?: string;
   studentId: string;
   studentName: string;
   assignmentId: string;
   assignmentTitle: string;
+  sessionId?: string;
+  sessionTitle?: string;
   courseId: string;
   courseName: string;
+  textAnswer?: string;
+  filePath?: string;
   submittedAt?: string;
+  isLate?: boolean;
   grade?: number;
   feedback?: string;
   fileUrl?: string;

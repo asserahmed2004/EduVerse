@@ -1,28 +1,46 @@
 "use client";
 
-import { CalendarClock, QrCode } from "lucide-react";
-import { useEffect, useState } from "react";
+import { CalendarClock, Plus, QrCode } from "lucide-react";
+import { FormEvent, type InputHTMLAttributes, useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
 import { useToast } from "@/components/toast-provider";
 import { Button, EmptyState, LoadingState, PageHeader, StatCard } from "@/components/ui";
-import { instructorService } from "@/lib/api";
-import type { InstructorSession } from "@/lib/types";
+import { courseService, instructorService } from "@/lib/api";
+import type { Course, InstructorSession } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 
 export default function InstructorSessionsPage() {
   const { showToast } = useToast();
   const [sessions, setSessions] = useState<InstructorSession[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [qrCodes, setQrCodes] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    instructorService.getSessions()
-      .then(setSessions)
+    Promise.all([instructorService.getSessions(), courseService.getAll()])
+      .then(([sessionsData, coursesData]) => {
+        setSessions(sessionsData);
+        setCourses(coursesData);
+      })
       .catch(() => setError("Could not load assigned sessions from the API."))
       .finally(() => setLoading(false));
   }, []);
+
+  async function addSession(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    try {
+      await courseService.addSession(form);
+      showToast({ title: "Session added", message: "The session was added to your assigned course.", tone: "success" });
+      event.currentTarget.reset();
+      const rows = await instructorService.getSessions();
+      setSessions(rows);
+    } catch (error) {
+      showToast({ title: "Session failed", message: error instanceof Error ? error.message : "Could not add session to this course.", tone: "error" });
+    }
+  }
 
   async function generateQr(sessionId: string) {
     try {
@@ -41,6 +59,43 @@ export default function InstructorSessionsPage() {
         <div className="mt-8 grid gap-5 md:grid-cols-3">
           <StatCard label="Assigned sessions" value={`${sessions.length}`} icon={CalendarClock} />
         </div>
+
+        <form onSubmit={addSession} className="mt-8 rounded-xl2 bg-white p-6 shadow-soft ring-1 ring-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="grid size-11 place-items-center rounded-xl bg-teal-50 text-teal-600">
+              <Plus size={20} />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-ink">Add session</h2>
+              <p className="text-sm text-muted">Create sessions only for courses assigned to you.</p>
+            </div>
+          </div>
+          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            <label className="block">
+              <span className="text-sm font-semibold text-ink">Course</span>
+              <select name="Course" className="mt-2 h-12 w-full rounded-xl bg-slate-50 px-4 text-sm outline-none ring-1 ring-slate-200 focus:ring-teal-500" required disabled={courses.length === 0}>
+                <option value="">Select course</option>
+                {courses.map((course) => <option key={course.id} value={course.id}>{course.name}</option>)}
+              </select>
+            </label>
+            <Field name="SessionNumber" label="Session number" type="number" required />
+            <Field name="Title" label="Session title" required />
+            <Field name="VideoUrl" label="Video URL" />
+            <Field name="ExternalLink" label="External link" />
+            <label className="block lg:col-span-2">
+              <span className="text-sm font-semibold text-ink">Description</span>
+              <textarea name="Description" className="mt-2 min-h-24 w-full rounded-xl bg-slate-50 px-4 py-3 text-sm outline-none ring-1 ring-slate-200 focus:ring-teal-500" />
+            </label>
+            <label className="block lg:col-span-2">
+              <span className="text-sm font-semibold text-ink">Optional session file</span>
+              <input name="File" type="file" className="mt-2 w-full rounded-xl bg-slate-50 px-4 py-3 text-sm ring-1 ring-slate-200" />
+            </label>
+          </div>
+          <Button className="mt-5" variant="ghost">
+            <Plus size={18} />
+            Add session
+          </Button>
+        </form>
 
         <section className="mt-8">
           {loading ? (
@@ -72,5 +127,15 @@ export default function InstructorSessionsPage() {
         </section>
       </AuthGuard>
     </AppShell>
+  );
+}
+
+function Field(props: InputHTMLAttributes<HTMLInputElement> & { label: string }) {
+  const { label, ...inputProps } = props;
+  return (
+    <label className="block">
+      <span className="text-sm font-semibold text-ink">{label}</span>
+      <input className="mt-2 h-12 w-full rounded-xl bg-slate-50 px-4 text-sm outline-none ring-1 ring-slate-200 focus:ring-teal-500" {...inputProps} />
+    </label>
   );
 }

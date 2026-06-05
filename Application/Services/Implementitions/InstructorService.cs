@@ -102,13 +102,19 @@ namespace Application.Services.Implementitions
 
             return new ServiceResponse(true, "Submission retrieved successfully", new InstructorSubmissionDto
             {
+                SubmissionId = $"{assignmentId}:{studentId}",
                 StudentId = studentId,
                 StudentName = student?.FullName ?? string.Empty,
                 AssignmentId = assignmentId,
                 AssignmentTitle = assignment?.Subject ?? string.Empty,
+                SessionId = session?.Id ?? Guid.Empty,
+                SessionTitle = session?.Title ?? string.Empty,
                 CourseId = course?.Id ?? Guid.Empty,
                 CourseName = course?.Name ?? string.Empty,
+                TextAnswer = submission.TextAnswer,
+                FilePath = submission.FileUrl,
                 SubmittedAt = submission.SubmittedAt,
+                IsLate = submission.IsLate,
                 Grade = submission.Grade,
                 Feedback = submission.Feedback,
                 FileUrl = submission.FileUrl
@@ -228,13 +234,19 @@ namespace Application.Services.Implementitions
                 var student = await userManagement.GetUserById(submission.StudentId);
                 rows.Add(new InstructorSubmissionDto
                 {
+                    SubmissionId = $"{submission.AssignmentId}:{submission.StudentId}",
                     StudentId = submission.StudentId,
                     StudentName = student?.FullName ?? student?.Email ?? string.Empty,
                     AssignmentId = submission.AssignmentId,
                     AssignmentTitle = assignment?.Subject ?? string.Empty,
+                    SessionId = session?.Id ?? Guid.Empty,
+                    SessionTitle = session?.Title ?? string.Empty,
                     CourseId = course?.Id ?? Guid.Empty,
                     CourseName = course?.Name ?? string.Empty,
+                    TextAnswer = submission.TextAnswer,
+                    FilePath = submission.FileUrl,
                     SubmittedAt = submission.SubmittedAt,
+                    IsLate = submission.IsLate,
                     Grade = submission.Grade,
                     Feedback = submission.Feedback,
                     FileUrl = submission.FileUrl

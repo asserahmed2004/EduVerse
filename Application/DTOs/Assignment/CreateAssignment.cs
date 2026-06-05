@@ -7,7 +7,7 @@ namespace Application.DTOs.Assignment
         public Guid SessionId { get; set; }
         public string Subject { get; set; }
         public string Description { get; set; }
-        public IFormFile File { get; set; }
+        public IFormFile? File { get; set; }
         public DateTime? DueDate { get; set; }
     }
 }

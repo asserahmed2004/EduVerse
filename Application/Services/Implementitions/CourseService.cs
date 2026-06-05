@@ -236,6 +236,27 @@ namespace Application.Services.Implementitions
                 course.OrganizationId.Value == user.OrganizationId.Value;
         }
 
+        public async Task<bool> CanManageAssignedCourse(Guid courseId, string userId)
+        {
+            if (courseId == Guid.Empty || string.IsNullOrEmpty(userId))
+            {
+                return false;
+            }
+
+            var course = await CoursesManagment.GetByIdAsync(courseId);
+            if (course == null || course.IsDeleted)
+            {
+                return false;
+            }
+
+            if (course.InstructorId == userId)
+            {
+                return true;
+            }
+
+            return (await SessionManagment.GetAllAsync()).Any(s => s.CourseId == courseId && s.TrainerId == userId);
+        }
+
         public async Task<bool> CanManageSession(Guid sessionId, string userId)
         {
             if (sessionId == Guid.Empty || string.IsNullOrEmpty(userId))
@@ -799,12 +820,19 @@ namespace Application.Services.Implementitions
             var duration = GetVideoDuration(session.File);
             mappedSession.Duration = duration.TotalMinutes;
             await UpdateDuration(mappedSession.CourseId, duration.TotalMinutes);
-            var fileDetails = new FileDetails { FileName = $"{mappedSession.Id}-SessionMaterial", Folder = "sessions" };
-            var addCloudFile = new AddCloudFile { Details = fileDetails, File = session.File };
-            var uploadResult = await cloud.UploadFileAsync(addCloudFile);
-            if (!uploadResult.success)
-                return new ServiceResponse { success = false, message = "Failed to upload session material to cloud" };
-            mappedSession.FileUrl = fileDetails.FileName;
+            if (session.File != null && session.File.Length > 0)
+            {
+                var fileDetails = new FileDetails { FileName = $"{mappedSession.Id}-SessionMaterial", Folder = "sessions" };
+                var addCloudFile = new AddCloudFile { Details = fileDetails, File = session.File };
+                var uploadResult = await cloud.UploadFileAsync(addCloudFile);
+                if (!uploadResult.success)
+                    return new ServiceResponse { success = false, message = "Failed to upload session material to cloud" };
+                mappedSession.FileUrl = fileDetails.FileName;
+            }
+            else
+            {
+                mappedSession.FileUrl = string.Empty;
+            }
             var result = await SessionManagment.AddAsync(mappedSession);
             if (result == null)
                 return new ServiceResponse { success = false, message = "Failed to add session" };
@@ -964,12 +992,19 @@ namespace Application.Services.Implementitions
             if (assignment == null)
                 return new ServiceResponse { success = false, message = "Invalid assignment data" };
             var mappedAssignment = mapper.Map<Assignment>(assignment);
-            var fileDetails = new FileDetails { FileName = $"{mappedAssignment.Id}-AssignmentMaterial{Path.GetExtension(assignment.File.FileName)}", Folder = "assignments" };
-            var addCloudFile = new AddCloudFile { Details = fileDetails, File = assignment.File };
-            var uploadResult = await cloud.UploadFileAsync(addCloudFile);
-            if (!uploadResult.success)
-                return new ServiceResponse { success = false, message = "Failed to upload assignment material to cloud" };
-            mappedAssignment.Content = fileDetails.FileName;
+            if (assignment.File != null && assignment.File.Length > 0)
+            {
+                var fileDetails = new FileDetails { FileName = $"{mappedAssignment.Id}-AssignmentMaterial{Path.GetExtension(assignment.File.FileName)}", Folder = "assignments" };
+                var addCloudFile = new AddCloudFile { Details = fileDetails, File = assignment.File };
+                var uploadResult = await cloud.UploadFileAsync(addCloudFile);
+                if (!uploadResult.success)
+                    return new ServiceResponse { success = false, message = "Failed to upload assignment material to cloud" };
+                mappedAssignment.Content = fileDetails.FileName;
+            }
+            else
+            {
+                mappedAssignment.Content = string.Empty;
+            }
             var result = await AssignmentManagment.AddAsync(mappedAssignment);
             if (result == null)
                 return new ServiceResponse { success = false, message = "Failed to add assignment" };

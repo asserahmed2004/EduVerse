@@ -270,13 +270,13 @@ namespace API.Controllers
             return Ok(result);
         }
         [HttpPost("AddSession")]
-        [Authorize(Roles = AppRoles.AdminOrOrganizationAdmin)]
+        [Authorize(Roles = AppRoles.AdminOrganizationAdminOrInstructor)]
         public async Task<IActionResult> AddSession([FromForm]CreateSessionRequest session)
         {
             var sessionEntity = mapper.Map<CreateSession>(session);
             sessionEntity.CourseId = Guid.Parse(session.Course);
 
-            if (!await CanManageCourse(sessionEntity.CourseId))
+            if (!await CanManageCourseLearningContent(sessionEntity.CourseId))
                 return Forbid();
 
             var result = await courseService.AddSession(sessionEntity);
@@ -400,6 +400,21 @@ namespace API.Controllers
 
             var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
             return !string.IsNullOrEmpty(userId) && await courseService.CanManageCourse(courseId, userId);
+        }
+
+        private async Task<bool> CanManageCourseLearningContent(Guid courseId)
+        {
+            if (User.HasRole(AppRoles.Admin))
+                return true;
+
+            var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+                return false;
+
+            if (User.HasRole(AppRoles.OrganizationAdmin) && await courseService.CanManageCourse(courseId, userId))
+                return true;
+
+            return User.HasRole(AppRoles.Instructor) && await courseService.CanManageAssignedCourse(courseId, userId);
         }
 
         private async Task<bool> CanManageSession(Guid sessionId)

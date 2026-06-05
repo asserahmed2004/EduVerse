@@ -14,6 +14,7 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 export default function CourseDetailsPage() {
   const { showToast } = useToast();
   const params = useParams<{ id: string }>();
+  const courseId = params.id;
   const router = useRouter();
   const [course, setCourse] = useState<Course | null>(null);
   const [adminDetails, setAdminDetails] = useState<CourseAdminDetails | null>(null);
@@ -24,59 +25,117 @@ export default function CourseDetailsPage() {
   const [progressLoading, setProgressLoading] = useState(false);
   const [certificateLoading, setCertificateLoading] = useState(false);
   const [progress, setProgress] = useState<CourseProgress | null>(null);
+  const [progressError, setProgressError] = useState("");
   const user = getStoredUser();
   const canViewAdminDetails = user?.role === "Admin" || user?.role === "OrganizationAdmin" || user?.role === "Instructor";
 
   useEffect(() => {
-    const loader = canViewAdminDetails
-      ? courseService.getAdminDetails(params.id).then((details) => {
-        setAdminDetails(details);
-        setCourse({
-          id: details.courseId,
-          name: details.name,
-          title: details.title,
-          description: details.description,
-          price: details.price,
-          duration: 0,
-          rating: details.averageRating,
-          category: details.category,
-          instructorName: details.instructorName,
-          organizationId: details.organizationId,
-          organizationName: details.organizationName,
-          organizationOwnerName: details.organizationOwner,
-          organizationOwnerEmail: details.organizationOwnerEmail,
-          studentsCount: details.studentsCount,
-          sessionsCount: details.sessionsCount,
-          imageUrl: details.imageUrl,
-          isDeleted: details.isDeleted,
-          deletedAt: details.deletedAt,
-          deletedById: details.deletedById,
-          deletedByName: details.deletedByName
-        });
-      })
-      : courseService.getById(params.id).then(setCourse);
+    let cancelled = false;
 
-    loader
-      .catch(() => setError("Could not load this course from the API."))
-      .finally(() => setLoading(false));
-  }, [params.id, canViewAdminDetails]);
+    async function loadCourse() {
+      setLoading(true);
+      setError("");
+      setAdminDetails(null);
+      try {
+        const publicCourse = await courseService.getById(courseId);
+        if (!cancelled) setCourse(publicCourse);
+
+        if (canViewAdminDetails) {
+          courseService.getAdminDetails(courseId)
+            .then((details) => {
+              if (cancelled) return;
+              setAdminDetails(details);
+              setCourse({
+                id: details.courseId,
+                name: details.name,
+                title: details.title,
+                description: details.description,
+                price: details.price,
+                duration: 0,
+                rating: details.averageRating,
+                category: details.category,
+                instructorId: details.instructorId,
+                instructorName: details.instructorName,
+                organizationId: details.organizationId,
+                organizationName: details.organizationName,
+                organizationOwnerName: details.organizationOwner,
+                organizationOwnerEmail: details.organizationOwnerEmail,
+                studentsCount: details.studentsCount,
+                sessionsCount: details.sessionsCount,
+                imageUrl: details.imageUrl,
+                isDeleted: details.isDeleted,
+                deletedAt: details.deletedAt,
+                deletedById: details.deletedById,
+                deletedByName: details.deletedByName
+              });
+            })
+            .catch(() => undefined);
+        }
+      } catch {
+        if (!canViewAdminDetails) {
+          if (!cancelled) setError("Course not found or unavailable.");
+          return;
+        }
+
+        try {
+          const details = await courseService.getAdminDetails(courseId);
+          if (cancelled) return;
+          setAdminDetails(details);
+          setCourse({
+            id: details.courseId,
+            name: details.name,
+            title: details.title,
+            description: details.description,
+            price: details.price,
+            duration: 0,
+            rating: details.averageRating,
+            category: details.category,
+            instructorId: details.instructorId,
+            instructorName: details.instructorName,
+            organizationId: details.organizationId,
+            organizationName: details.organizationName,
+            organizationOwnerName: details.organizationOwner,
+            organizationOwnerEmail: details.organizationOwnerEmail,
+            studentsCount: details.studentsCount,
+            sessionsCount: details.sessionsCount,
+            imageUrl: details.imageUrl,
+            isDeleted: details.isDeleted,
+            deletedAt: details.deletedAt,
+            deletedById: details.deletedById,
+            deletedByName: details.deletedByName
+          });
+        } catch {
+          if (!cancelled) setError("Course not found or unavailable.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    loadCourse();
+    return () => { cancelled = true; };
+  }, [courseId, canViewAdminDetails]);
 
   useEffect(() => {
     if (user?.role !== "Student") return;
 
     setProgressLoading(true);
-    studentService.getCourseProgress(params.id)
+    setProgressError("");
+    studentService.getCourseProgress(courseId)
       .then(setProgress)
-      .catch(() => setProgress(null))
+      .catch(() => {
+        setProgress(null);
+        setProgressError("Progress is unavailable. Enroll in this course or try again later.");
+      })
       .finally(() => setProgressLoading(false));
-  }, [params.id, user?.role]);
+  }, [courseId, user?.role]);
 
   async function enrollFree() {
     setEnrollLoading(true);
     try {
-      const result = await studentService.enrollFree(params.id);
+      const result = await studentService.enrollFree(courseId);
       showToast({ title: "Enrollment complete", message: result.message ?? "You are enrolled in this free course.", tone: "success" });
-      const refreshed = await studentService.getCourseProgress(params.id).catch(() => null);
+      const refreshed = await studentService.getCourseProgress(courseId).catch(() => null);
       if (refreshed) setProgress(refreshed);
     } catch (error) {
       showToast({ title: "Enrollment failed", message: error instanceof Error ? error.message : "Could not enroll in this course.", tone: "error" });
@@ -98,7 +157,7 @@ export default function CourseDetailsPage() {
   async function generateCertificate() {
     setCertificateLoading(true);
     try {
-      const certificate = await studentService.generateCertificate(params.id);
+      const certificate = await studentService.generateCertificate(courseId);
       showToast({ title: "Certificate ready", message: certificate.certificateCode ?? "Certificate generated successfully.", tone: "success" });
       router.push("/certificates");
     } catch (error) {
@@ -111,7 +170,7 @@ export default function CourseDetailsPage() {
   async function pay(method: "card" | "wallet") {
     setPaymentLoading(true);
     try {
-      const redirectUrl = await studentService.createPayment(params.id, method);
+      const redirectUrl = await studentService.createPayment(courseId, method);
       if (redirectUrl) {
         window.location.href = redirectUrl;
       }
@@ -215,7 +274,7 @@ export default function CourseDetailsPage() {
             </div>
           ) : !progress ? (
             <div className="mt-5">
-              <EmptyState title="Not enrolled yet" description={course.price <= 0 ? "Enroll for free to unlock sessions and progress tracking." : "Complete payment to unlock the learning workspace."} />
+              <EmptyState title={progressError ? "Progress unavailable" : "Not enrolled yet"} description={progressError || (course.price <= 0 ? "Enroll for free to unlock sessions and progress tracking." : "Complete payment to unlock the learning workspace.")} />
             </div>
           ) : (
             <div className="mt-6">
@@ -248,17 +307,10 @@ export default function CourseDetailsPage() {
                     </div>
 
                     <div className="mt-4 grid gap-3 md:grid-cols-2">
-                      {(session.materials ?? []).map((material) => (
-                        <a key={material.id} href={material.url ?? material.filePath ?? "#"} target="_blank" rel="noreferrer" className="rounded-xl bg-white p-3 text-sm font-semibold text-ink ring-1 ring-slate-100 transition hover:-translate-y-0.5 hover:shadow-soft">
-                          <span className="inline-flex items-center gap-2">
-                            <LinkIcon size={16} className="text-teal-600" />
-                            {material.title}
-                          </span>
-                        </a>
-                      ))}
+                      {(session.materials ?? []).map((material) => <MaterialLink key={material.id} title={material.title} href={material.url ?? material.fileUrl ?? material.filePath ?? material.materialUrl ?? material.link} />)}
                       {session.videoUrl && <LearningLink href={session.videoUrl} label="Video material" />}
                       {session.externalLink && <LearningLink href={session.externalLink} label="External link" />}
-                      {session.fileUrl && <LearningLink href={session.fileUrl} label="Session file" />}
+                      {session.fileUrl ? <LearningLink href={session.fileUrl} label="Session file" /> : (session.materials ?? []).length === 0 && <NoMaterial />}
                     </div>
 
                     {(session.assignments ?? []).length > 0 && (
@@ -359,4 +411,21 @@ function LearningLink({ href, label }: { href: string; label: string }) {
       </span>
     </a>
   );
+}
+
+function MaterialLink({ href, title }: { href?: string; title: string }) {
+  if (!href) return <NoMaterial />;
+
+  return (
+    <a href={href} target="_blank" rel="noreferrer" className="rounded-xl bg-white p-3 text-sm font-semibold text-ink ring-1 ring-slate-100 transition hover:-translate-y-0.5 hover:shadow-soft">
+      <span className="inline-flex items-center gap-2">
+        <LinkIcon size={16} className="text-teal-600" />
+        {title}
+      </span>
+    </a>
+  );
+}
+
+function NoMaterial() {
+  return <div className="rounded-xl bg-white p-3 text-sm font-semibold text-muted ring-1 ring-slate-100">No material available</div>;
 }

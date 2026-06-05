@@ -22,6 +22,7 @@ namespace Application.Services.Interfaces
         Task<bool> CourseExists(Guid id);
         Task<bool> IsCourseDeleted(Guid id);
         Task<bool> CanManageCourse(Guid courseId, string userId);
+        Task<bool> CanManageAssignedCourse(Guid courseId, string userId);
         Task<bool> CanManageSession(Guid sessionId, string userId);
         Task<bool> CanManageAssignment(Guid assignmentId, string userId);
         Task<List<GetCourse>> GetAllCourses(string? userid, bool isAdmin = false, bool isOrganizationAdmin = false, bool isInstructor = false);

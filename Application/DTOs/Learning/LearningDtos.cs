@@ -118,13 +118,19 @@ namespace Application.DTOs.Learning
 
     public class InstructorSubmissionDto
     {
+        public string SubmissionId { get; set; } = string.Empty;
         public string StudentId { get; set; } = string.Empty;
         public string StudentName { get; set; } = string.Empty;
         public Guid AssignmentId { get; set; }
         public string AssignmentTitle { get; set; } = string.Empty;
+        public Guid SessionId { get; set; }
+        public string SessionTitle { get; set; } = string.Empty;
         public Guid CourseId { get; set; }
         public string CourseName { get; set; } = string.Empty;
+        public string? TextAnswer { get; set; }
+        public string? FilePath { get; set; }
         public DateTime? SubmittedAt { get; set; }
+        public bool IsLate { get; set; }
         public double? Grade { get; set; }
         public string? Feedback { get; set; }
         public string? FileUrl { get; set; }

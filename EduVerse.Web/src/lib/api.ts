@@ -69,6 +69,25 @@ function normalizeCertificateUrl(value?: string) {
   return `${API_BASE_URL}/Cloud/Get/certificates/${encodeURIComponent(value)}`;
 }
 
+function normalizeCloudFileUrl(folder: string, value?: string) {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.startsWith("http")) return trimmed;
+  if (trimmed.startsWith("/")) return `${API_BASE_URL}${trimmed}`;
+  if (trimmed.includes("/")) return `${API_BASE_URL}/${trimmed.replace(/^\/+/, "")}`;
+  return `${API_BASE_URL}/Cloud/Get/${folder}/${encodeURIComponent(trimmed)}`;
+}
+
+function normalizeExternalUrl(value?: string) {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.startsWith("http") || trimmed.startsWith("/")) return trimmed;
+  if (trimmed.startsWith("www.") || /^[\w-]+\.[\w.-]+/.test(trimmed)) return `https://${trimmed}`;
+  return trimmed;
+}
+
 function normalizeProfilePictureUrl(value?: string) {
   if (!value) return undefined;
   if (value.startsWith("http")) return value;
@@ -113,14 +132,14 @@ function normalizeSession(session: any): CourseSession {
     id: session.id ?? session.Id,
     courseId: session.courseId ?? session.CourseId,
     title: session.title ?? session.Title ?? `Session ${session.sessionNumber ?? session.SessionNumber ?? ""}`,
-    fileUrl: session.fileUrl ?? session.FileUrl,
+    fileUrl: normalizeCloudFileUrl("sessions", session.fileUrl ?? session.FileUrl ?? session.filePath ?? session.FilePath),
     trainerId: session.trainerId ?? session.TrainerId,
     date: session.date ?? session.Date,
     duration: session.duration ?? session.Duration,
     sessionNumber: session.sessionNumber ?? session.SessionNumber ?? 0,
     description: session.description ?? session.Description,
-    videoUrl: session.videoUrl ?? session.VideoUrl,
-    externalLink: session.externalLink ?? session.ExternalLink,
+    videoUrl: normalizeExternalUrl(session.videoUrl ?? session.VideoUrl),
+    externalLink: normalizeExternalUrl(session.externalLink ?? session.ExternalLink),
     attendanceCode: session.attendanceCode ?? session.AttendanceCode,
     attendanceCodeCreatedAt: session.attendanceCodeCreatedAt ?? session.AttendanceCodeCreatedAt
   };
@@ -489,8 +508,11 @@ function normalizeCourseProgress(data: any): CourseProgress {
         sessionId: material.sessionId ?? material.SessionId ?? "",
         title: material.title ?? material.Title ?? "Material",
         type: material.type ?? material.Type ?? "Link",
-        url: material.url ?? material.Url,
-        filePath: material.filePath ?? material.FilePath,
+        url: normalizeExternalUrl(material.url ?? material.Url ?? material.materialUrl ?? material.MaterialUrl ?? material.link ?? material.Link),
+        filePath: normalizeCloudFileUrl("sessions", material.filePath ?? material.FilePath),
+        fileUrl: normalizeCloudFileUrl("sessions", material.fileUrl ?? material.FileUrl),
+        materialUrl: normalizeExternalUrl(material.materialUrl ?? material.MaterialUrl),
+        link: normalizeExternalUrl(material.link ?? material.Link),
         createdAt: material.createdAt ?? material.CreatedAt ?? new Date().toISOString()
       })),
       assignments: (session.assignments ?? session.Assignments ?? []).map(normalizeStudentAssignment)
@@ -521,16 +543,22 @@ function normalizeInstructorSession(item: any): InstructorSession {
 
 function normalizeInstructorSubmission(item: any): InstructorSubmission {
   return {
+    submissionId: item.submissionId ?? item.SubmissionId,
     studentId: item.studentId ?? item.StudentId ?? "",
     studentName: item.studentName ?? item.StudentName ?? "",
     assignmentId: item.assignmentId ?? item.AssignmentId ?? "",
     assignmentTitle: item.assignmentTitle ?? item.AssignmentTitle ?? "Assignment",
+    sessionId: item.sessionId ?? item.SessionId,
+    sessionTitle: item.sessionTitle ?? item.SessionTitle,
     courseId: item.courseId ?? item.CourseId ?? "",
     courseName: item.courseName ?? item.CourseName ?? "",
+    textAnswer: item.textAnswer ?? item.TextAnswer,
+    filePath: normalizeCloudFileUrl("submissions", item.filePath ?? item.FilePath),
     submittedAt: item.submittedAt ?? item.SubmittedAt,
+    isLate: item.isLate ?? item.IsLate ?? false,
     grade: item.grade ?? item.Grade,
     feedback: item.feedback ?? item.Feedback,
-    fileUrl: item.fileUrl ?? item.FileUrl
+    fileUrl: normalizeCloudFileUrl("submissions", item.fileUrl ?? item.FileUrl)
   };
 }
 
