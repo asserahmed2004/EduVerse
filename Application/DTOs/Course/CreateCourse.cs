@@ -14,6 +14,7 @@ namespace Application.DTOs.Course
         public IFormFile Image { get; set; }
         public string Categories { get; set; }
         public Guid? OrganizationId { get; set; }
-
+        public string? Tags { get; set; }
+        public string? Level { get; set; }
     }
 }

@@ -763,6 +763,8 @@ namespace Application.Services.Implementitions
             existingCourse.Description = Course.Description;
             existingCourse.Title = Course.Title;
             existingCourse.Price = Course.Price;
+            existingCourse.Tags = Course.Tags;
+            existingCourse.Level = Course.Level;
 
             if (Course.Image != null)
             {

@@ -34,6 +34,7 @@ namespace Application.Dependencyinjection
             services.AddScoped<IUserService, UserService>();
             services.AddScoped<IOrganizationService, OrganizationService>();
             services.AddScoped<IInstructorService, InstructorService>();
+            services.AddScoped<IRecommendationService, RecommendationService>();
 
             services.AddFluentValidationAutoValidation();
            services.AddScoped<IAuthServices, AuthService>();
