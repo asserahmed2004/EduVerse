@@ -13,5 +13,7 @@ namespace Application.DTOs.Course
         public double Duration { get; set; }
         public IFormFile? Image { get; set; }
         public string Categories { get; set; }
+        public string? Tags { get; set; }
+        public string? Level { get; set; }
     }
 }

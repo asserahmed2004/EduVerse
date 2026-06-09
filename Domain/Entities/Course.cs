@@ -28,5 +28,7 @@ namespace Domain.Entities
         public string? InstructorId { get; set; }
         
         public string OrgId { get; set; }
+        public string? Tags { get; set; }
+        public string? Level { get; set; }
     }
 }

@@ -36,8 +36,7 @@ namespace Application.DTOs.Course
         public DateTime? RestoredAt { get; set; }
         public string? RestoredById { get; set; }
         public string? RestoredByName { get; set; }
-
-
-
+        public string? Tags { get; set; }
+        public string? Level { get; set; }
     }
 }
