@@ -1,6 +1,10 @@
 
 using Application.Dependencyinjection;
+<<<<<<< HEAD
 using InfraStructure.Data;
+=======
+using InfraStructure.Data.Seed;
+>>>>>>> 91e7896a3aab3ca9fe5de634ce21ed6a7ff64966
 using InfraStructure.DependencyInjection;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.OpenApi.Models;
@@ -10,7 +14,11 @@ namespace API
 {
     public class Program
     {
+<<<<<<< HEAD
         public  static async Task Main(string[] args)
+=======
+        public static async Task Main(string[] args)
+>>>>>>> 91e7896a3aab3ca9fe5de634ce21ed6a7ff64966
         {
             var builder = WebApplication.CreateBuilder(args);
             builder.Services.AddCors(options =>
@@ -109,10 +117,31 @@ namespace API
 
 
             app.MapControllers();
-            
+
+            await SeedDatabaseAsync(app);
 
             app.Run();
+        }
 
+        private static async Task SeedDatabaseAsync(WebApplication app)
+        {
+            var seedOptions = app.Configuration.GetSection(SeedOptions.SectionName).Get<SeedOptions>() ?? new SeedOptions();
+            if (!seedOptions.Enabled || !seedOptions.RunOnStartup)
+            {
+                return;
+            }
+
+            try
+            {
+                using var scope = app.Services.CreateScope();
+                var seeder = scope.ServiceProvider.GetRequiredService<RecommendationDataSeeder>();
+                await seeder.SeedAsync();
+            }
+            catch (Exception ex)
+            {
+                var logger = app.Services.GetRequiredService<ILogger<Program>>();
+                logger.LogError(ex, "Recommendation seed data failed to run on startup.");
+            }
         }
     }
 }

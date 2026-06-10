@@ -2,6 +2,7 @@
 using Domain.Interfaces;
 using EntityFramework.Exceptions.SqlServer;
 using InfraStructure.Data;
+using InfraStructure.Data.Seed;
 using InfraStructure.Repositories;
 using InfraStructure.Repositries;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -53,6 +54,8 @@ namespace InfraStructure.DependencyInjection
             services.AddScoped<IGeneric<Notification>, GenericRepository<Notification>>();
             services.AddScoped<IGeneric<AttendanceRecord>, GenericRepository<AttendanceRecord>>();
             services.AddScoped<IGeneric<SessionMaterial>, GenericRepository<SessionMaterial>>();
+            services.Configure<SeedOptions>(configuration.GetSection(SeedOptions.SectionName));
+            services.AddScoped<RecommendationDataSeeder>();
 
 
 
