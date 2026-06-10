@@ -1,5 +1,6 @@
 
 using Application.Dependencyinjection;
+using InfraStructure.Data.Seed;
 using InfraStructure.DependencyInjection;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.OpenApi.Models;
@@ -9,7 +10,7 @@ namespace API
 {
     public class Program
     {
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
             builder.Services.AddCors(options =>
@@ -107,10 +108,31 @@ namespace API
 
 
             app.MapControllers();
-            
+
+            await SeedDatabaseAsync(app);
 
             app.Run();
+        }
 
+        private static async Task SeedDatabaseAsync(WebApplication app)
+        {
+            var seedOptions = app.Configuration.GetSection(SeedOptions.SectionName).Get<SeedOptions>() ?? new SeedOptions();
+            if (!seedOptions.Enabled || !seedOptions.RunOnStartup)
+            {
+                return;
+            }
+
+            try
+            {
+                using var scope = app.Services.CreateScope();
+                var seeder = scope.ServiceProvider.GetRequiredService<RecommendationDataSeeder>();
+                await seeder.SeedAsync();
+            }
+            catch (Exception ex)
+            {
+                var logger = app.Services.GetRequiredService<ILogger<Program>>();
+                logger.LogError(ex, "Recommendation seed data failed to run on startup.");
+            }
         }
     }
 }
