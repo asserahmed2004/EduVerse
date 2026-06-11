@@ -546,33 +546,40 @@ namespace InfraStructure.Data.Seed
         }
 
         private async Task<List<Enrollment>> TopUpEnrollmentsAsync(
-            IReadOnlyList<AppUser> students,
-            IReadOnlyList<Course> courses,
-            IReadOnlyList<Enrollment> currentEnrollments,
-            SeedCreationCounters counters,
-            CancellationToken cancellationToken)
+    IReadOnlyList<AppUser> students,
+    IReadOnlyList<Course> courses,
+    IReadOnlyList<Enrollment> currentEnrollments,
+    SeedCreationCounters counters,
+    CancellationToken cancellationToken)
         {
             var added = new List<Enrollment>();
-            var existingPairs = currentEnrollments
-                .Select(enrollment => (enrollment.StudentId, enrollment.CourseId))
+
+            var existingPairsFromDb = await _context.Enrollments
+                .AsNoTracking()
+                .Select(e => new { e.StudentId, e.CourseId })
+                .ToListAsync(cancellationToken);
+
+            var existingPairs = existingPairsFromDb
+                .Select(e => (e.StudentId, e.CourseId))
                 .ToHashSet();
 
             foreach (var student in students)
             {
-                var studentEnrollmentCount = currentEnrollments.Count(enrollment => enrollment.StudentId == student.Id)
-                    + added.Count(enrollment => enrollment.StudentId == student.Id);
+                var studentEnrollmentCount = existingPairs
+                    .Count(pair => pair.StudentId == student.Id);
 
                 var attempts = 0;
+
                 while (studentEnrollmentCount < 8
-                       && currentEnrollments.Count + added.Count < SeedCatalog.MinEnrollmentCount + 200
+                       && existingPairs.Count < SeedCatalog.MinEnrollmentCount + 200
                        && attempts < courses.Count * 2)
                 {
                     attempts++;
+
                     var course = courses[_faker.Random.Int(0, courses.Count - 1)];
+
                     if (!existingPairs.Add((student.Id, course.Id)))
-                    {
                         continue;
-                    }
 
                     var enrollment = new Enrollment
                     {
