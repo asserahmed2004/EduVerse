@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Text.RegularExpressions;
 
 namespace InfraStructure.Data.Seed
 {
@@ -35,45 +36,133 @@ namespace InfraStructure.Data.Seed
         {
             if (!_options.Enabled)
             {
-                _logger.LogInformation("Data seeding is disabled.");
-                return SeedReport.Disabled();
+                _logger.LogInformation("Data seeding is disabled via configuration (DataSeeding:Enabled = false).");
+                return SeedReport.Disabled("Data seeding is disabled.");
             }
 
-            if (await IsAlreadySeededAsync(cancellationToken))
+            if (!_options.RunOnStartup)
             {
-                _logger.LogInformation("Recommendation seed data already exists. Skipping seeding.");
-                return await BuildExistingReportAsync(cancellationToken);
+                _logger.LogInformation("Data seeding is enabled but RunOnStartup is false. Skipping startup seed.");
+                return SeedReport.Disabled("RunOnStartup is false.");
             }
 
-            _logger.LogInformation("Starting recommendation seed data generation...");
+            if (string.IsNullOrWhiteSpace(_options.SeedPassword))
+            {
+                const string message = "Data seeding is enabled but SeedPassword is empty. Demo users cannot be created safely.";
+                _logger.LogError(message);
+                throw new InvalidOperationException(message);
+            }
+
+            var demoStatus = await GetDemoSeedStatusAsync(cancellationToken);
+            LogStartupContext(demoStatus);
+
+            if (demoStatus.IsFullySeeded)
+            {
+                _logger.LogInformation(
+                    "Existing demo seed markers found (marker user, demo users, and {DemoCourseCount} [SEED] courses). Skipping duplicate demo seeding.",
+                    demoStatus.DemoCourseCount);
+
+                var existingReport = await BuildReportAsync(cancellationToken);
+                existingReport.Seeded = false;
+                existingReport.Message = "Demo seed data already present. Skipped.";
+                LogReport(existingReport);
+                return existingReport;
+            }
+
+            if (demoStatus.HasPartialDemoData)
+            {
+                _logger.LogWarning(
+                    "Partial demo seed data detected (demo users: {DemoUserCount}, [SEED] courses: {DemoCourseCount}, marker: {MarkerExists}). Completing missing demo records only.",
+                    demoStatus.DemoUserCount,
+                    demoStatus.DemoCourseCount,
+                    demoStatus.MarkerExists);
+            }
+            else if (demoStatus.TotalUsers > 0 || demoStatus.TotalCourses > 0 || demoStatus.TotalCategories > 0)
+            {
+                _logger.LogInformation(
+                    "Existing normal project data detected (users: {TotalUsers}, courses: {TotalCourses}, categories: {TotalCategories}). This does NOT block demo seeding.",
+                    demoStatus.TotalUsers,
+                    demoStatus.TotalCourses,
+                    demoStatus.TotalCategories);
+            }
+
+            _logger.LogInformation("RecommendationDataSeeder started.");
+
+            var counters = new SeedCreationCounters();
 
             await EnsureRolesAsync();
-            var categories = await SeedCategoriesAsync(cancellationToken);
-            var organizations = await SeedOrganizationsAsync(cancellationToken);
-            var admins = await SeedAdminsAsync(cancellationToken);
-            var instructors = await SeedInstructorsAsync(organizations, cancellationToken);
-            var students = await SeedStudentsAsync(cancellationToken);
-            var courses = await SeedCoursesAsync(categories, organizations, admins, instructors, cancellationToken);
-            var enrollments = await SeedEnrollmentsAsync(students, courses, cancellationToken);
-            var ratings = await SeedRatingsAsync(enrollments, cancellationToken);
-            await EnsureMarkerUserAsync(admins.First().Id, cancellationToken);
+            var categories = await SeedCategoriesAsync(counters, cancellationToken);
+            var organizations = await SeedOrganizationsAsync(counters, cancellationToken);
+            var admins = await SeedAdminsAsync(counters, cancellationToken);
+            var instructors = await SeedInstructorsAsync(organizations, counters, cancellationToken);
+            var students = await SeedStudentsAsync(counters, cancellationToken);
+            var courses = await SeedCoursesAsync(categories, organizations, admins, instructors, counters, cancellationToken);
+            var enrollments = await SeedEnrollmentsAsync(students, courses, counters, cancellationToken);
+            var ratingsCreated = await SeedRatingsAsync(counters, cancellationToken);
+            await EnsureMarkerUserAsync(counters, cancellationToken);
 
             var report = await BuildReportAsync(cancellationToken);
+            report.Seeded = true;
+            report.Message = demoStatus.HasPartialDemoData
+                ? "Partial demo seed completed. Missing demo records were added."
+                : "Demo seed completed successfully.";
+            report.UsersCreated = counters.UsersCreated;
+            report.OrganizationsCreated = counters.OrganizationsCreated;
+            report.CategoriesCreated = counters.CategoriesCreated;
+            report.CoursesCreated = counters.CoursesCreated;
+            report.EnrollmentsCreated = counters.EnrollmentsCreated;
+            report.RatingsCreated = counters.RatingsCreated;
+
+            _logger.LogInformation(
+                "Seed completed successfully. Created: users={UsersCreated}, organizations={OrganizationsCreated}, categories={CategoriesCreated}, courses={CoursesCreated}, enrollments={EnrollmentsCreated}, ratings={RatingsCreated}, total demo ratings now={RatingCount}",
+                counters.UsersCreated,
+                counters.OrganizationsCreated,
+                counters.CategoriesCreated,
+                counters.CoursesCreated,
+                counters.EnrollmentsCreated,
+                ratingsCreated,
+                report.RatingCount);
+
             LogReport(report);
             return report;
         }
 
-        private async Task<bool> IsAlreadySeededAsync(CancellationToken cancellationToken)
+        private void LogStartupContext(SeedDemoStatus demoStatus)
         {
-            var markerExists = await _context.Users
-                .AsNoTracking()
-                .AnyAsync(user => user.Email == SeedCatalog.MarkerEmail, cancellationToken);
+            var connectionString = _context.Database.GetConnectionString();
+            _logger.LogInformation("RecommendationDataSeeder using database: {Database}", _context.Database.GetDbConnection().Database);
+            _logger.LogInformation("Connection string (masked): {ConnectionString}", MaskConnectionString(connectionString));
+            _logger.LogInformation(
+                "Database snapshot before seed decision -> total users: {TotalUsers}, total courses: {TotalCourses}, total categories: {TotalCategories}, demo users: {DemoUserCount}, demo courses: {DemoCourseCount}",
+                demoStatus.TotalUsers,
+                demoStatus.TotalCourses,
+                demoStatus.TotalCategories,
+                demoStatus.DemoUserCount,
+                demoStatus.DemoCourseCount);
+        }
 
-            var seededCourseCount = await _context.Courses
-                .AsNoTracking()
-                .CountAsync(course => course.Name.StartsWith("[SEED]"), cancellationToken);
+        private async Task<SeedDemoStatus> GetDemoSeedStatusAsync(CancellationToken cancellationToken)
+        {
+            var demoEmailSuffix = $"@{SeedCatalog.EmailDomain}";
 
-            return markerExists && seededCourseCount >= SeedCatalog.CourseCount;
+            return new SeedDemoStatus
+            {
+                TotalUsers = await _context.Users.CountAsync(cancellationToken),
+                TotalCourses = await _context.Courses.CountAsync(cancellationToken),
+                TotalCategories = await _context.Categories.CountAsync(cancellationToken),
+                DemoUserCount = await _context.Users.CountAsync(
+                    user => user.Email != null && user.Email.EndsWith(demoEmailSuffix),
+                    cancellationToken),
+                DemoCourseCount = await _context.Courses.CountAsync(
+                    course => course.Name.StartsWith("[SEED]"),
+                    cancellationToken),
+                MarkerExists = await _context.Users.AnyAsync(
+                    user => user.Email == SeedCatalog.MarkerEmail,
+                    cancellationToken),
+                PrimaryDemoStudentExists = await _context.Users.AnyAsync(
+                    user => user.Email == $"student.001@{SeedCatalog.EmailDomain}",
+                    cancellationToken)
+            };
         }
 
         private async Task EnsureRolesAsync()
@@ -82,12 +171,25 @@ namespace InfraStructure.Data.Seed
             {
                 if (!await _roleManager.RoleExistsAsync(role))
                 {
-                    await _roleManager.CreateAsync(new IdentityRole(role));
+                    var result = await _roleManager.CreateAsync(new IdentityRole(role));
+                    if (!result.Succeeded)
+                    {
+                        _logger.LogError(
+                            "Failed to ensure role '{Role}': {Errors}",
+                            role,
+                            string.Join(", ", result.Errors.Select(error => error.Description)));
+                    }
+                    else
+                    {
+                        _logger.LogInformation("Created missing role '{Role}'.", role);
+                    }
                 }
             }
         }
 
-        private async Task<Dictionary<string, Category>> SeedCategoriesAsync(CancellationToken cancellationToken)
+        private async Task<Dictionary<string, Category>> SeedCategoriesAsync(
+            SeedCreationCounters counters,
+            CancellationToken cancellationToken)
         {
             var map = new Dictionary<string, Category>(StringComparer.OrdinalIgnoreCase);
             var existing = await _context.Categories.ToListAsync(cancellationToken);
@@ -106,6 +208,7 @@ namespace InfraStructure.Data.Seed
                         Description = description
                     };
                     _context.Categories.Add(category);
+                    counters.CategoriesCreated++;
                 }
 
                 map[name] = category;
@@ -115,7 +218,9 @@ namespace InfraStructure.Data.Seed
             return map;
         }
 
-        private async Task<List<Organization>> SeedOrganizationsAsync(CancellationToken cancellationToken)
+        private async Task<List<Organization>> SeedOrganizationsAsync(
+            SeedCreationCounters counters,
+            CancellationToken cancellationToken)
         {
             var organizations = new List<Organization>();
 
@@ -141,6 +246,7 @@ namespace InfraStructure.Data.Seed
                         CreatedByName = "Seed System"
                     };
                     _context.Organizations.Add(organization);
+                    counters.OrganizationsCreated++;
                 }
 
                 organizations.Add(organization);
@@ -150,7 +256,9 @@ namespace InfraStructure.Data.Seed
             return organizations;
         }
 
-        private async Task<List<AppUser>> SeedAdminsAsync(CancellationToken cancellationToken)
+        private async Task<List<AppUser>> SeedAdminsAsync(
+            SeedCreationCounters counters,
+            CancellationToken cancellationToken)
         {
             var admins = new List<AppUser>();
 
@@ -163,6 +271,7 @@ namespace InfraStructure.Data.Seed
                     _faker.Name.FullName(),
                     "admin",
                     null,
+                    counters,
                     cancellationToken);
                 admins.Add(user);
             }
@@ -172,6 +281,7 @@ namespace InfraStructure.Data.Seed
 
         private async Task<List<AppUser>> SeedInstructorsAsync(
             IReadOnlyList<Organization> organizations,
+            SeedCreationCounters counters,
             CancellationToken cancellationToken)
         {
             var instructors = new List<AppUser>();
@@ -186,6 +296,7 @@ namespace InfraStructure.Data.Seed
                     _faker.Name.FullName(),
                     "instructor",
                     organization.Id,
+                    counters,
                     cancellationToken);
                 instructors.Add(user);
             }
@@ -193,7 +304,9 @@ namespace InfraStructure.Data.Seed
             return instructors;
         }
 
-        private async Task<List<AppUser>> SeedStudentsAsync(CancellationToken cancellationToken)
+        private async Task<List<AppUser>> SeedStudentsAsync(
+            SeedCreationCounters counters,
+            CancellationToken cancellationToken)
         {
             var students = new List<AppUser>();
 
@@ -206,6 +319,7 @@ namespace InfraStructure.Data.Seed
                     _faker.Name.FullName(),
                     "student",
                     null,
+                    counters,
                     cancellationToken);
                 students.Add(user);
             }
@@ -219,38 +333,56 @@ namespace InfraStructure.Data.Seed
             string fullName,
             string role,
             Guid? organizationId,
+            SeedCreationCounters counters,
             CancellationToken cancellationToken)
         {
             var user = await _userManager.FindByEmailAsync(email);
-            if (user != null)
+            if (user == null)
             {
-                return user;
+                user = new AppUser
+                {
+                    Id = SeedCatalog.CreateDeterministicGuid($"user-{email}").ToString(),
+                    Email = email,
+                    UserName = userName,
+                    NormalizedEmail = email.ToUpperInvariant(),
+                    NormalizedUserName = userName.ToUpperInvariant(),
+                    FullName = fullName,
+                    Birthdate = DateOnly.FromDateTime(_faker.Date.Between(DateTime.UtcNow.AddYears(-45), DateTime.UtcNow.AddYears(-18))),
+                    EmailConfirmed = true,
+                    PhoneNumber = _faker.Phone.PhoneNumber(),
+                    PhoneNumberConfirmed = false,
+                    OrganizationId = organizationId,
+                    SecurityStamp = Guid.NewGuid().ToString()
+                };
+
+                var result = await _userManager.CreateAsync(user, _options.SeedPassword);
+                if (!result.Succeeded)
+                {
+                    var errors = string.Join(", ", result.Errors.Select(error => error.Description));
+                    _logger.LogError("Identity error creating demo user '{Email}': {Errors}", email, errors);
+                    throw new InvalidOperationException($"Failed to create seed user '{email}': {errors}");
+                }
+
+                counters.UsersCreated++;
+                _logger.LogInformation("Created demo user '{Email}' with role '{Role}'.", email, role);
+            }
+            else if (organizationId.HasValue && user.OrganizationId != organizationId)
+            {
+                user.OrganizationId = organizationId;
+                await _userManager.UpdateAsync(user);
             }
 
-            user = new AppUser
+            if (!await _userManager.IsInRoleAsync(user, role))
             {
-                Id = SeedCatalog.CreateDeterministicGuid($"user-{email}").ToString(),
-                Email = email,
-                UserName = userName,
-                NormalizedEmail = email.ToUpperInvariant(),
-                NormalizedUserName = userName.ToUpperInvariant(),
-                FullName = fullName,
-                Birthdate = DateOnly.FromDateTime(_faker.Date.Between(DateTime.UtcNow.AddYears(-45), DateTime.UtcNow.AddYears(-18))),
-                EmailConfirmed = true,
-                PhoneNumber = _faker.Phone.PhoneNumber(),
-                PhoneNumberConfirmed = false,
-                OrganizationId = organizationId,
-                SecurityStamp = Guid.NewGuid().ToString()
-            };
-
-            var result = await _userManager.CreateAsync(user, _options.SeedPassword);
-            if (!result.Succeeded)
-            {
-                throw new InvalidOperationException(
-                    $"Failed to create seed user '{email}': {string.Join(", ", result.Errors.Select(error => error.Description))}");
+                var roleResult = await _userManager.AddToRoleAsync(user, role);
+                if (!roleResult.Succeeded)
+                {
+                    var errors = string.Join(", ", roleResult.Errors.Select(error => error.Description));
+                    _logger.LogError("Identity error assigning role '{Role}' to '{Email}': {Errors}", role, email, errors);
+                    throw new InvalidOperationException($"Failed to assign role '{role}' to '{email}': {errors}");
+                }
             }
 
-            await _userManager.AddToRoleAsync(user, role);
             return user;
         }
 
@@ -259,6 +391,7 @@ namespace InfraStructure.Data.Seed
             IReadOnlyList<Organization> organizations,
             IReadOnlyList<AppUser> admins,
             IReadOnlyList<AppUser> instructors,
+            SeedCreationCounters counters,
             CancellationToken cancellationToken)
         {
             var courses = new List<Course>();
@@ -293,13 +426,22 @@ namespace InfraStructure.Data.Seed
                     };
 
                     _context.Courses.Add(course);
+                    counters.CoursesCreated++;
+                }
 
-                    var category = categories[template.Category];
+                var category = categories[template.Category];
+                var categoryLinkExists = await _context.CourseCategories.AnyAsync(
+                    link => link.CourseId == course.Id && link.CategoryId == category.Id,
+                    cancellationToken);
+
+                if (!categoryLinkExists)
+                {
                     _context.CourseCategories.Add(new CourseCategory
                     {
                         CourseId = course.Id,
                         CategoryId = category.Id
                     });
+                    counters.CourseCategoriesCreated++;
                 }
 
                 courses.Add(course);
@@ -312,6 +454,7 @@ namespace InfraStructure.Data.Seed
         private async Task<List<Enrollment>> SeedEnrollmentsAsync(
             IReadOnlyList<AppUser> students,
             IReadOnlyList<Course> courses,
+            SeedCreationCounters counters,
             CancellationToken cancellationToken)
         {
             var enrollments = new List<Enrollment>();
@@ -388,6 +531,7 @@ namespace InfraStructure.Data.Seed
 
                     _context.Enrollments.Add(enrollment);
                     enrollments.Add(enrollment);
+                    counters.EnrollmentsCreated++;
                 }
             }
 
@@ -395,7 +539,7 @@ namespace InfraStructure.Data.Seed
 
             if (enrollments.Count < SeedCatalog.MinEnrollmentCount)
             {
-                enrollments.AddRange(await TopUpEnrollmentsAsync(students, courses, enrollments, cancellationToken));
+                enrollments.AddRange(await TopUpEnrollmentsAsync(students, courses, enrollments, counters, cancellationToken));
             }
 
             return enrollments;
@@ -405,6 +549,7 @@ namespace InfraStructure.Data.Seed
             IReadOnlyList<AppUser> students,
             IReadOnlyList<Course> courses,
             IReadOnlyList<Enrollment> currentEnrollments,
+            SeedCreationCounters counters,
             CancellationToken cancellationToken)
         {
             var added = new List<Enrollment>();
@@ -417,9 +562,12 @@ namespace InfraStructure.Data.Seed
                 var studentEnrollmentCount = currentEnrollments.Count(enrollment => enrollment.StudentId == student.Id)
                     + added.Count(enrollment => enrollment.StudentId == student.Id);
 
+                var attempts = 0;
                 while (studentEnrollmentCount < 8
-                       && currentEnrollments.Count + added.Count < SeedCatalog.MinEnrollmentCount + 200)
+                       && currentEnrollments.Count + added.Count < SeedCatalog.MinEnrollmentCount + 200
+                       && attempts < courses.Count * 2)
                 {
+                    attempts++;
                     var course = courses[_faker.Random.Int(0, courses.Count - 1)];
                     if (!existingPairs.Add((student.Id, course.Id)))
                     {
@@ -438,6 +586,7 @@ namespace InfraStructure.Data.Seed
 
                     _context.Enrollments.Add(enrollment);
                     added.Add(enrollment);
+                    counters.EnrollmentsCreated++;
                     studentEnrollmentCount++;
                 }
             }
@@ -447,7 +596,7 @@ namespace InfraStructure.Data.Seed
         }
 
         private async Task<int> SeedRatingsAsync(
-            IReadOnlyList<Enrollment> newEnrollments,
+            SeedCreationCounters counters,
             CancellationToken cancellationToken)
         {
             var seededStudentIds = (await _context.Users
@@ -499,6 +648,7 @@ namespace InfraStructure.Data.Seed
                 });
 
                 ratingCount++;
+                counters.RatingsCreated++;
             }
 
             if (ratingCount < SeedCatalog.TargetRatingCount)
@@ -527,6 +677,7 @@ namespace InfraStructure.Data.Seed
                     });
 
                     ratingCount++;
+                    counters.RatingsCreated++;
                 }
             }
 
@@ -549,7 +700,9 @@ namespace InfraStructure.Data.Seed
             return 1;
         }
 
-        private async Task EnsureMarkerUserAsync(string adminId, CancellationToken cancellationToken)
+        private async Task EnsureMarkerUserAsync(
+            SeedCreationCounters counters,
+            CancellationToken cancellationToken)
         {
             if (await _context.Users.AnyAsync(user => user.Email == SeedCatalog.MarkerEmail, cancellationToken))
             {
@@ -572,11 +725,14 @@ namespace InfraStructure.Data.Seed
             var result = await _userManager.CreateAsync(marker, _options.SeedPassword);
             if (!result.Succeeded)
             {
-                throw new InvalidOperationException(
-                    $"Failed to create seed marker user: {string.Join(", ", result.Errors.Select(error => error.Description))}");
+                var errors = string.Join(", ", result.Errors.Select(error => error.Description));
+                _logger.LogError("Identity error creating marker user: {Errors}", errors);
+                throw new InvalidOperationException($"Failed to create seed marker user: {errors}");
             }
 
             await _userManager.AddToRoleAsync(marker, "admin");
+            counters.UsersCreated++;
+            _logger.LogInformation("Created demo marker user '{Email}'.", SeedCatalog.MarkerEmail);
         }
 
         private async Task<SeedReport> BuildReportAsync(CancellationToken cancellationToken)
@@ -618,7 +774,6 @@ namespace InfraStructure.Data.Seed
 
             return new SeedReport
             {
-                Seeded = true,
                 StudentCount = seededStudentIds.Count,
                 InstructorCount = await _context.Users.CountAsync(
                     user => user.Email!.StartsWith("instructor.") && user.Email.EndsWith($"@{SeedCatalog.EmailDomain}"),
@@ -626,7 +781,9 @@ namespace InfraStructure.Data.Seed
                 AdminCount = await _context.Users.CountAsync(
                     user => user.Email!.StartsWith("admin.") && user.Email.EndsWith($"@{SeedCatalog.EmailDomain}"),
                     cancellationToken),
-                OrganizationCount = SeedCatalog.OrganizationCount,
+                OrganizationCount = await _context.Organizations.CountAsync(
+                    organization => organization.Email != null && organization.Email.EndsWith($"@{SeedCatalog.EmailDomain}"),
+                    cancellationToken),
                 CourseCount = await _context.Courses.CountAsync(course => course.Name.StartsWith("[SEED]"), cancellationToken),
                 TechnologyCourseCount = techCourseCount,
                 NonTechnologyCourseCount = nonTechCourseCount,
@@ -640,23 +797,27 @@ namespace InfraStructure.Data.Seed
             };
         }
 
-        private async Task<SeedReport> BuildExistingReportAsync(CancellationToken cancellationToken)
-        {
-            var report = await BuildReportAsync(cancellationToken);
-            report.Seeded = false;
-            report.Message = "Seed data already present.";
-            return report;
-        }
-
         private void LogReport(SeedReport report)
         {
-            _logger.LogInformation("Recommendation seed completed.");
-            _logger.LogInformation("Students: {StudentCount}, Instructors: {InstructorCount}, Admins: {AdminCount}, Organizations: {OrganizationCount}",
+            _logger.LogInformation("Recommendation seed summary: {Message}", report.Message);
+            _logger.LogInformation("Demo users -> students: {StudentCount}, instructors: {InstructorCount}, admins: {AdminCount}, organizations: {OrganizationCount}",
                 report.StudentCount, report.InstructorCount, report.AdminCount, report.OrganizationCount);
-            _logger.LogInformation("Courses: {CourseCount} (Tech: {TechCount}, Non-Tech: {NonTechCount})",
+            _logger.LogInformation("Demo courses: {CourseCount} (catalog tech: {TechCount}, non-tech: {NonTechCount})",
                 report.CourseCount, report.TechnologyCourseCount, report.NonTechnologyCourseCount);
-            _logger.LogInformation("Enrollments: {EnrollmentCount}, Completed: {CompletedEnrollmentCount}, Ratings: {RatingCount}",
+            _logger.LogInformation("Demo enrollments: {EnrollmentCount}, completed: {CompletedEnrollmentCount}, demo ratings: {RatingCount}",
                 report.EnrollmentCount, report.CompletedEnrollmentCount, report.RatingCount);
+        }
+
+        private static string MaskConnectionString(string? connectionString)
+        {
+            if (string.IsNullOrWhiteSpace(connectionString))
+            {
+                return "(not configured)";
+            }
+
+            var masked = Regex.Replace(connectionString, "Password=[^;]+", "Password=***", RegexOptions.IgnoreCase);
+            masked = Regex.Replace(masked, "User ID=[^;]+", "User ID=***", RegexOptions.IgnoreCase);
+            return masked;
         }
 
         private static string Slugify(string value)
@@ -683,11 +844,17 @@ namespace InfraStructure.Data.Seed
         public int EnrollmentCount { get; set; }
         public int CompletedEnrollmentCount { get; set; }
         public int RatingCount { get; set; }
+        public int UsersCreated { get; set; }
+        public int OrganizationsCreated { get; set; }
+        public int CategoriesCreated { get; set; }
+        public int CoursesCreated { get; set; }
+        public int EnrollmentsCreated { get; set; }
+        public int RatingsCreated { get; set; }
         public string SeedPassword { get; set; } = string.Empty;
         public List<string> SampleStudentEmails { get; set; } = [];
         public List<string> SampleCourses { get; set; } = [];
         public Dictionary<string, int> StudentInterestDistribution { get; set; } = new();
 
-        public static SeedReport Disabled() => new() { Message = "Seeding disabled." };
+        public static SeedReport Disabled(string message) => new() { Message = message };
     }
 }

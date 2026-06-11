@@ -1,9 +1,6 @@
 
 using Application.Dependencyinjection;
-using InfraStructure.Data;
-
 using InfraStructure.Data.Seed;
-
 using InfraStructure.DependencyInjection;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.OpenApi.Models;
@@ -13,9 +10,7 @@ namespace API
 {
     public class Program
     {
-
         public static async Task Main(string[] args)
-
         {
             var builder = WebApplication.CreateBuilder(args);
             builder.Services.AddCors(options =>
@@ -33,12 +28,8 @@ namespace API
                 });
             });
 
-
-            // Add services to the container.
-
             builder.Services.AddControllers();
             builder.Services.AddSwaggerGen();
-            // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddOpenApi(options =>
             {
@@ -86,59 +77,52 @@ namespace API
             builder.Services.AddInfraStructureServices(builder.Configuration);
             builder.Services.AddApplicationServices();
 
-
-
-            // Add services to the container.
-
-            builder.Services.AddControllers();
-            // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-
             var app = builder.Build();
-            //await SeedData.SeedAsync(app.Services);
-
-            // Configure the HTTP request pipeline.
-
 
             app.MapScalarApiReference();
-                app.MapOpenApi();
-            
+            app.MapOpenApi();
+
             app.UseInfraStructureService();
-            
             app.UseCors();
-            
-
             app.UseHttpsRedirection();
-
             app.UseAuthentication();
             app.UseAuthorization();
-
-
             app.MapControllers();
 
-            //await SeedDatabaseAsync(app);
+            await SeedDatabaseAsync(app);
 
             app.Run();
         }
 
-        //private static async Task SeedDatabaseAsync(WebApplication app)
-        //{
-        //    var seedOptions = app.Configuration.GetSection(SeedOptions.SectionName).Get<SeedOptions>() ?? new SeedOptions();
-        //    if (!seedOptions.Enabled || !seedOptions.RunOnStartup)
-        //    {
-        //        return;
-        //    }
+        private static async Task SeedDatabaseAsync(WebApplication app)
+        {
+            var logger = app.Services.GetRequiredService<ILogger<Program>>();
+            var environmentName = app.Environment.EnvironmentName;
+            var seedOptions = app.Configuration.GetSection(SeedOptions.SectionName).Get<SeedOptions>() ?? new SeedOptions();
 
-        //    try
-        //    {
-        //        using var scope = app.Services.CreateScope();
-        //        var seeder = scope.ServiceProvider.GetRequiredService<RecommendationDataSeeder>();
-        //        await seeder.SeedAsync();
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        var logger = app.Services.GetRequiredService<ILogger<Program>>();
-        //        logger.LogError(ex, "Recommendation seed data failed to run on startup.");
-        //    }
-        //}
+            logger.LogInformation("Application environment: {EnvironmentName}", environmentName);
+            logger.LogInformation(
+                "Data seeding configuration -> Enabled: {Enabled}, RunOnStartup: {RunOnStartup}",
+                seedOptions.Enabled,
+                seedOptions.RunOnStartup);
+
+            if (!seedOptions.Enabled || !seedOptions.RunOnStartup)
+            {
+                logger.LogInformation("RecommendationDataSeeder skipped because seeding is disabled in configuration.");
+                return;
+            }
+
+            try
+            {
+                using var scope = app.Services.CreateScope();
+                var seeder = scope.ServiceProvider.GetRequiredService<RecommendationDataSeeder>();
+                await seeder.SeedAsync();
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "RecommendationDataSeeder failed during startup.");
+                throw;
+            }
+        }
     }
 }
