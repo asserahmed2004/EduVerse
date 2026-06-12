@@ -15,8 +15,8 @@ namespace InfraStructure.Repositries
     {
         public async Task<TEntity> AddAsync(TEntity entity)
         {
-            var result=context.Set<TEntity>().Add(entity);
-             await context.SaveChangesAsync();
+            var result = context.Set<TEntity>().Add(entity);
+            await context.SaveChangesAsync();
             return result.Entity;
         }
 
@@ -53,9 +53,15 @@ namespace InfraStructure.Repositries
 
         public async Task<TEntity> UpdateAsync(TEntity entity)
         {
-            var result =context.Set<TEntity>().Update(entity);
+            var result = context.Set<TEntity>().Update(entity);
             await context.SaveChangesAsync();
             return result.Entity;
+        }
+        public async Task<int> MassAdd(IEnumerable<TEntity> entities)
+        {
+            context.Set<TEntity>().AddRange(entities);
+            var result = await context.SaveChangesAsync();
+            return result;
         }
     }
 }

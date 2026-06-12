@@ -14,5 +14,6 @@ namespace Domain.Interfaces
         Task<TEntity> UpdateAsync(TEntity entity);
         Task<int> DeleteAsync(TEntity entity);
         Task<int> DeleteAsync(Guid id);
+        Task<int> MassAdd(IEnumerable<TEntity> entities);
     }
 }
