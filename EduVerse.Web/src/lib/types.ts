@@ -35,7 +35,10 @@ export type Course = {
   restoredById?: string;
   restoredByName?: string;
   level?: string;
+  tags?: string;
   students?: number;
+  ratingCount?: number;
+  recommendationScore?: number;
 };
 
 export type CourseSession = {

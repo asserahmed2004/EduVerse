@@ -4,6 +4,7 @@ import { Award, BookOpen, CreditCard, TrendingUp } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
+import { RecommendationSection } from "@/components/recommendation-section";
 import { EmptyState, LoadingState, PageHeader, ProgressBar, StatCard } from "@/components/ui";
 import { studentService } from "@/lib/api";
 import type { Certificate, Enrollment, Payment } from "@/lib/types";
@@ -31,6 +32,12 @@ export default function StudentDashboardPage() {
     <AppShell>
       <AuthGuard roles={["Student"]}>
         <PageHeader eyebrow="Student dashboard" title="Your learning workspace" description="Track progress, payments, submissions, and certificates from one place." />
+        <RecommendationSection
+          title="Recommended For You"
+          description="Personalized course suggestions based on your enrollments, categories, tags, and learning level."
+          type="forMe"
+        />
+
         <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Enrolled" value={`${enrollments.length}`} icon={BookOpen} />
           <StatCard label="Average progress" value={`${Math.round(enrollments.reduce((sum, item) => sum + (item.progressPercentage ?? item.progression), 0) / Math.max(enrollments.length, 1))}%`} icon={TrendingUp} accent="amber" />

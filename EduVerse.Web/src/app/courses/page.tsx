@@ -3,6 +3,7 @@
 import { Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
+import { RecommendationSection } from "@/components/recommendation-section";
 import { CourseCard, EmptyState, LoadingState, PageHeader } from "@/components/ui";
 import { courseService } from "@/lib/api";
 import type { Course } from "@/lib/types";
@@ -45,6 +46,12 @@ export default function CoursesPage() {
   return (
     <AppShell>
       <PageHeader eyebrow="Catalog" title="Courses" description="Explore learning paths, compare prices and ratings, then enroll from the course details page." />
+
+      <RecommendationSection
+        title="Trending Courses"
+        description="Popular courses ranked by enrollments, ratings, and learner activity."
+        type="trending"
+      />
 
       <div className="mt-8 grid gap-3 rounded-xl2 bg-white p-4 shadow-soft ring-1 ring-slate-100 lg:grid-cols-[1fr_220px_180px]">
         <label className="flex items-center gap-3 rounded-xl bg-slate-50 px-4 py-3 ring-1 ring-slate-200">

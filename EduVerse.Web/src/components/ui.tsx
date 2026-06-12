@@ -131,7 +131,7 @@ export function CourseCard({ course, compact = false }: { course: Course; compac
             <p className="text-xs font-semibold uppercase text-teal-600">{course.category ?? course.name}</p>
             <h3 className="mt-2 text-lg font-bold leading-snug text-ink">{course.title}</h3>
           </div>
-          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-ink shadow-sm">{course.rating.toFixed(1)}</span>
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-ink shadow-sm">{(course.rating ?? 0).toFixed(1)}</span>
         </div>
         <p className="mt-3 line-clamp-2 text-sm leading-6 text-muted">{course.description}</p>
         <div className="mt-4 grid grid-cols-3 gap-2 text-xs font-semibold text-muted">

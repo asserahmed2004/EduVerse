@@ -123,8 +123,25 @@ function normalizeCourse(course: any): Course {
     deletedByName: course.deletedByName ?? course.DeletedByName,
     restoredAt: course.restoredAt ?? course.RestoredAt,
     restoredById: course.restoredById ?? course.RestoredById,
-    restoredByName: course.restoredByName ?? course.RestoredByName
+    restoredByName: course.restoredByName ?? course.RestoredByName,
+    level: course.level ?? course.Level,
+    tags: course.tags ?? course.Tags,
+    ratingCount: course.ratingCount ?? course.RatingCount ?? 0,
+    recommendationScore: course.recommendationScore ?? course.RecommendationScore
   };
+}
+
+function normalizeRecommendedCourses(data: any): Course[] {
+  if (data?.success === false) {
+    throw new Error(data.message ?? data.Message ?? "Recommendation request failed.");
+  }
+
+  const items = unwrapData(data);
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  return items.map(normalizeCourse);
 }
 
 function normalizeSession(session: any): CourseSession {
@@ -1233,5 +1250,22 @@ export const adminService = {
   async getUserDetails(userId: string): Promise<AdminUserDetails> {
     const response = await api.get(`/Admin/UserDetails/${encodeURIComponent(userId)}`);
     return normalizeAdminUserDetails(response.data);
+  }
+};
+
+export const recommendationService = {
+  async getPersonalizedRecommendations() {
+    const response = await api.get("/Recommendation/ForMe");
+    return normalizeRecommendedCourses(response.data);
+  },
+
+  async getSimilarCourses(courseId: string) {
+    const response = await api.get(`/Recommendation/Similar/${courseId}`);
+    return normalizeRecommendedCourses(response.data);
+  },
+
+  async getTrendingCourses() {
+    const response = await api.get("/Recommendation/Trending");
+    return normalizeRecommendedCourses(response.data);
   }
 };

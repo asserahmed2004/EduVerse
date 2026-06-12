@@ -1,7 +1,7 @@
 import { ArrowRight, BookOpen, CheckCircle2, GraduationCap, ShieldCheck, Sparkles } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { CourseCard, LinkButton, StatCard } from "@/components/ui";
-import { mockCourses } from "@/lib/mock-data";
+import { TrendingCoursesSection } from "@/components/trending-courses-section";
+import { LinkButton, StatCard } from "@/components/ui";
 
 export default function LandingPage() {
   return (
@@ -72,20 +72,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="courses" className="mx-auto max-w-7xl px-5 py-12 lg:px-8">
-        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-          <div>
-            <p className="text-sm font-semibold text-teal-600">Featured learning paths</p>
-            <h2 className="mt-2 text-3xl font-bold text-ink">Courses ready for web and mobile</h2>
-          </div>
-          <LinkButton href="/courses" variant="ghost">View all</LinkButton>
-        </div>
-        <div className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {mockCourses.map((course) => (
-            <CourseCard key={course.id} course={course} />
-          ))}
-        </div>
-      </section>
+      <TrendingCoursesSection />
 
       <section id="platform" className="mx-auto max-w-7xl px-5 py-12 lg:px-8">
         <div className="grid gap-6 lg:grid-cols-3">

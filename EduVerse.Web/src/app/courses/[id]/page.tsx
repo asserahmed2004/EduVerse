@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { useToast } from "@/components/toast-provider";
+import { RecommendationSection } from "@/components/recommendation-section";
 import { Badge, Button, EmptyState, LoadingState, PageHeader, ProgressBar } from "@/components/ui";
 import { courseService, studentService } from "@/lib/api";
 import { getStoredUser } from "@/lib/auth";
@@ -335,6 +336,13 @@ export default function CourseDetailsPage() {
           )}
         </section>
       )}
+
+      <RecommendationSection
+        title="Similar Courses"
+        description="Courses with matching tags, categories, and level."
+        type="similar"
+        courseId={courseId}
+      />
 
       {adminDetails && (
         <section className="mt-8 grid gap-6 xl:grid-cols-2">
