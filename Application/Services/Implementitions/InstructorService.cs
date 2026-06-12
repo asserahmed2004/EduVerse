@@ -174,13 +174,36 @@ namespace Application.Services.Implementitions
                     SessionId = record.SessionId,
                     StudentId = record.StudentId,
                     StudentName = student?.FullName ?? student?.Email ?? string.Empty,
-                    MarkedAt = record.MarkedAt
+                    Attended = record.Attended
+                    
                 });
             }
 
             return new ServiceResponse(true, "Session attendance retrieved successfully", rows);
         }
+        public async Task<ServiceResponse> MarkAttendance(Guid sessionId, string userId)
+        {
+            var attendance = (await attendanceRecords.GetAllAsync()).FirstOrDefault(a => a.SessionId == sessionId && a.StudentId == userId);
+            if (attendance.Attended)
+            {
+                attendance.Attended = false;
+                var result = await attendanceRecords.UpdateAsync(attendance);
 
+            }
+            else
+            {
+                attendance.Attended = true;
+                var result = await attendanceRecords.UpdateAsync(attendance);
+            }
+            return new ServiceResponse(true, "Attendance status updated.");
+
+
+        }
+        public async Task<IEnumerable<AttendanceRecord>> GetAttendanceRecords(Guid sessionId)
+        {
+            var result = await attendanceRecords.GetAllAsync();
+            return result;
+        }
         private async Task<List<Course>> GetAssignedCourses(string instructorId)
         {
             var activeCourses = (await courses.GetAllAsync()).Where(c => !c.IsDeleted).ToList();

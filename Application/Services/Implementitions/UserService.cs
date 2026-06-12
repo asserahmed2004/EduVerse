@@ -106,11 +106,7 @@ namespace Application.Services.Implementitions
                 return new ServiceResponse(false, "Student is already enrolled in this course.");
             }
 
-            if (course.Price > 0)
-            {
-                return new ServiceResponse(false, "Paid course enrollment requires payment.");
-            }
-
+            
             var enrollment = new Enrollment
             {
                 CourseId = courseId,
@@ -813,36 +809,30 @@ namespace Application.Services.Implementitions
             return new ServiceResponse(true, "Notification marked as read.");
         }
 
-        public async Task<ServiceResponse> MarkAttendance(Guid sessionId, string userId, string attendanceCode)
+        public async Task<ServiceResponse> MarkAttendance(Guid sessionId, string userId)
         {
-            var session = await Sessions.GetByIdAsync(sessionId);
-            if (session == null)
-                return new ServiceResponse(false, "Session not found.");
-
-            var enrolled = (await Enrollment.GetAllAsync()).Any(e => e.CourseId == session.CourseId && e.StudentId == userId);
-            if (!enrolled)
-                return new ServiceResponse(false, "You must enroll in this course before marking attendance.");
-
-            if (!string.IsNullOrWhiteSpace(session.AttendanceCode) &&
-                !string.Equals(session.AttendanceCode, attendanceCode, StringComparison.OrdinalIgnoreCase))
+           var attendance = (await AttendanceRecords.GetAllAsync()).FirstOrDefault(a => a.SessionId == sessionId && a.StudentId == userId);
+            if ( attendance.Attended)
             {
-                return new ServiceResponse(false, "Invalid attendance code.");
+                attendance.Attended = false;
+                var result = await AttendanceRecords.UpdateAsync(attendance);
+
             }
-
-            var existing = (await AttendanceRecords.GetAllAsync()).FirstOrDefault(a => a.SessionId == sessionId && a.StudentId == userId);
-            if (existing != null)
-                return new ServiceResponse(false, "Attendance already marked.");
-
-            await AttendanceRecords.AddAsync(new AttendanceRecord
+            else
             {
-                SessionId = sessionId,
-                StudentId = userId,
-                AttendanceCode = attendanceCode,
-                MarkedAt = DateTime.UtcNow
-            });
+                attendance.Attended = true;
+                var result = await AttendanceRecords.UpdateAsync(attendance);
+            }
+            return new ServiceResponse(true, "Attendance status updated.");
 
-            return new ServiceResponse(true, "Attendance marked successfully.");
+
         }
+        public async Task <IEnumerable<AttendanceRecord>> GetAttendanceRecords(Guid sessionId)
+        {
+            var result = await AttendanceRecords.GetAllAsync();
+            return result;
+        }
+
 
         private async Task CreateNotification(string userId, string title, string message)
         {

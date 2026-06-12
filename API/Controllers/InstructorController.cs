@@ -1,5 +1,6 @@
 using API.Authorization;
 using Application.DTOs.Learning;
+using Application.Services.Implementitions;
 using Application.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -18,6 +19,18 @@ namespace API.Controllers
             var result = await instructorService.GetOverviewAsync(CurrentUserId());
             return result.success ? Ok(result) : BadRequest(result);
         }
+        [HttpPost("Mark")]
+        [Authorize(Roles = AppRoles.All)]
+        public async Task<IActionResult> Mark(Guid sessionId, string userId)
+        {
+
+
+
+            var result = await instructorService.MarkAttendance(sessionId, userId);
+            return result.success ? Ok(result) : BadRequest(result);
+        }
+
+
 
         [HttpGet("Sessions")]
         public async Task<IActionResult> Sessions()

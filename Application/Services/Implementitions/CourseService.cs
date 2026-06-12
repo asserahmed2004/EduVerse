@@ -25,7 +25,7 @@ namespace Application.Services.Implementitions
         IGeneric<CourseCategory> CoursesCatManagment,IGeneric<Category> CategoryManagment,
         IMapper mapper ,ICloudService cloud,IGeneric<Rating> RatingManagment ,IGeneric<Session> SessionManagment,IGeneric<Assignment> AssignmentManagment,
         IGeneric<Enrollment> EnrollmentManagment, IGeneric<Payment> PaymentManagment, IUserManagment UserManagment,
-        IActivityLogService activityLogService,
+        IActivityLogService activityLogService,IGeneric<AttendanceRecord> attendencemanagment,
         IGeneric<Organization> OrganizationManagment) : ICourseService
     {
         public async Task<ServiceResponse> AddRating(CreateRating rating, string userid)
@@ -835,6 +835,21 @@ namespace Application.Services.Implementitions
             {
                 mappedSession.FileUrl = string.Empty;
             }
+            List<AttendanceRecord> attendances=new List<AttendanceRecord>();
+            var enrolled = await EnrollmentManagment.GetAllAsync();
+            enrolled = enrolled.Where(c=>c.CourseId== mappedSession.CourseId);
+            var added = new AttendanceRecord
+            {
+                SessionId = mappedSession.Id,
+
+                Attended = false
+            };
+            foreach (var attendance in enrolled)
+            {
+                added.StudentId = attendance.StudentId;
+                attendances.Add(added);
+            }
+            var addattendance = attendencemanagment.MassAdd(attendances);
             var result = await SessionManagment.AddAsync(mappedSession);
             if (result == null)
                 return new ServiceResponse { success = false, message = "Failed to add session" };

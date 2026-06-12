@@ -1,5 +1,6 @@
 using Application.DTOs.Learning;
 using Application.DTOs.Responses;
+using Domain.Entities;
 
 namespace Application.Services.Interfaces
 {
@@ -13,5 +14,7 @@ namespace Application.Services.Interfaces
         Task<ServiceResponse> GradeSubmissionAsync(Guid assignmentId, string studentId, GradeSubmissionRequest request, string instructorId);
         Task<ServiceResponse> CreateSessionQrAsync(Guid sessionId, string userId, bool isAdminOrOrganizationAdmin);
         Task<ServiceResponse> GetSessionAttendanceAsync(Guid sessionId, string userId, bool isAdminOrOrganizationAdmin);
+        Task<ServiceResponse> MarkAttendance(Guid sessionId, string userId);
+        Task<IEnumerable<AttendanceRecord>> GetAttendanceRecords(Guid sessionId);
     }
 }

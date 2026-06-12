@@ -285,10 +285,11 @@ namespace API.Controllers
                 //    return Forbid();
             }
 
-            //if (!await CanManageCourseLearningContent(sessionEntity.CourseId))
-            //    return Forbid();
+            if (!await CanManageCourseLearningContent(sessionEntity.CourseId))
+                return Forbid();
 
             var result = await courseService.AddSession(sessionEntity);
+            
             if (!result.success)
                 return BadRequest(result);
             return Ok(result);
