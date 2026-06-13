@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, Lock, Mail } from "lucide-react";
+import { Eye, EyeOff, Lock, Mail } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
@@ -11,6 +11,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("mohamed@test.com");
   const [password, setPassword] = useState("Admin123!");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -57,8 +58,16 @@ export default function LoginPage() {
             <span className="text-sm font-semibold text-ink">Password</span>
             <span className="mt-2 flex items-center gap-3 rounded-xl bg-slate-50 px-4 py-3 ring-1 ring-slate-200">
               <Lock size={18} className="text-muted" />
-              <input value={password} onChange={(event) => setPassword(event.target.value)} className="w-full bg-transparent text-sm outline-none" type="password" required />
-              <Eye size={18} className="text-muted" />
+              <input value={password} onChange={(event) => setPassword(event.target.value)} className="w-full bg-transparent text-sm outline-none" type={showPassword ? "text" : "password"} required />
+              <button
+                type="button"
+                onClick={() => setShowPassword((visible) => !visible)}
+                className="grid size-8 shrink-0 place-items-center rounded-lg text-muted hover:bg-white hover:text-ink"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                aria-pressed={showPassword}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
             </span>
           </label>
 

@@ -379,7 +379,8 @@ namespace Application.Services.Implementitions
             var enrollments = (await Enrollment.GetAllAsync()).Where(e => e.StudentId == userId).ToList();
             var courseIds = enrollments.Select(e => e.CourseId).ToHashSet();
             var courses = (await Courses.GetAllAsync()).Where(c => !c.IsDeleted && courseIds.Contains(c.Id)).ToDictionary(c => c.Id, c => c);
-            var sessions = (await Sessions.GetAllAsync()).Where(s => courseIds.Contains(s.CourseId)).ToList();
+            var activeCourseIds = courses.Keys.ToHashSet();
+            var sessions = (await Sessions.GetAllAsync()).Where(s => activeCourseIds.Contains(s.CourseId)).ToList();
             var sessionById = sessions.ToDictionary(s => s.Id, s => s);
             var assignments = (await Assignments.GetAllAsync()).Where(a => sessionById.ContainsKey(a.SessionId)).ToList();
             var submissions = (await AssignmentSubmission.GetAllAsync()).Where(s => s.StudentId == userId).ToList();
@@ -396,6 +397,13 @@ namespace Application.Services.Implementitions
         {
             if (submission == null || submission.AssignmentId == Guid.Empty)
                 return new ServiceResponse(false, "Invalid submission data.");
+            if (string.IsNullOrWhiteSpace(userId))
+                return new ServiceResponse(false, "Student id is required.");
+
+            var textAnswer = string.IsNullOrWhiteSpace(submission.TextAnswer) ? null : submission.TextAnswer.Trim();
+            var file = submission.File?.Length > 0 ? submission.File : null;
+            if (textAnswer == null && file == null)
+                return new ServiceResponse(false, "Add a text answer or upload a file before submitting.");
 
             var assignment = await Assignments.GetByIdAsync(submission.AssignmentId);
             if (assignment == null)
@@ -413,8 +421,8 @@ namespace Application.Services.Implementitions
             {
                 AssignmentId = submission.AssignmentId,
                 StudentId = userId,
-                File = submission.File,
-                TextAnswer = submission.TextAnswer
+                File = file,
+                TextAnswer = textAnswer
             };
 
             return await SubmitAssignment(create);
@@ -496,70 +504,82 @@ namespace Application.Services.Implementitions
 
         public async Task<ServiceResponse> SubmitAssignment(CreateAssignmentSubmission submission)
         {
-            if (submission == null)
-            {
+            if (submission == null || submission.AssignmentId == Guid.Empty || string.IsNullOrWhiteSpace(submission.StudentId))
                 return new ServiceResponse(false, "Invalid submission data.");
 
-            }
+            var textAnswer = string.IsNullOrWhiteSpace(submission.TextAnswer) ? null : submission.TextAnswer.Trim();
+            var submittedFile = submission.File?.Length > 0 ? submission.File : null;
+            if (textAnswer == null && submittedFile == null)
+                return new ServiceResponse(false, "Add a text answer or upload a file before submitting.");
+
+            var assignment = await Assignments.GetByIdAsync(submission.AssignmentId);
+            if (assignment == null)
+                return new ServiceResponse(false, "Assignment not found.");
+
             var existingSubmission = (await AssignmentSubmission.GetAllAsync()).FirstOrDefault(s => s.AssignmentId == submission.AssignmentId && s.StudentId == submission.StudentId);
             if (existingSubmission != null)
             {
-                var mapped = mapper.Map<AssignmentSubmission>(submission);
-                if (submission.File != null)
+                var previousFileName = existingSubmission.FileUrl;
+                string? uploadedFileName = null;
+                if (submittedFile != null)
                 {
                     var fileDetails = new FileDetails
                     {
-                        FileName = $"{submission.StudentId}_{submission.AssignmentId}_Submission.pdf",
+                        FileName = $"{submission.AssignmentId}_{Guid.NewGuid():N}_Submission{Path.GetExtension(submittedFile.FileName)}",
                         Folder = "submissions"
                     };
                     var file = new AddCloudFile
                     {
-                        File = submission.File,
+                        File = submittedFile,
                         Details = fileDetails
                     };
-                    var deletefile = new FileDetails
-                    {
-                        FileName = existingSubmission.FileUrl,
-                        Folder = "submissions"
-                    };
-                    var deleteResult = await cloud.DeleteFileAsync(deletefile);
                     var uploadResult = await cloud.UploadFileAsync(file);
                     if (!uploadResult.success)
-                    {
                         return new ServiceResponse(false, "File upload failed.");
-                    }
-                    mapped.FileUrl = fileDetails.FileName;
+
+                    uploadedFileName = fileDetails.FileName;
                     existingSubmission.FileUrl = fileDetails.FileName;
                 }
-                existingSubmission.TextAnswer = submission.TextAnswer ?? existingSubmission.TextAnswer;
+
+                existingSubmission.TextAnswer = textAnswer ?? existingSubmission.TextAnswer;
                 existingSubmission.SubmittedAt = DateTime.UtcNow;
-                var assignment = await Assignments.GetByIdAsync(submission.AssignmentId);
-                existingSubmission.IsLate = assignment?.DueDate.HasValue == true && DateTime.UtcNow > assignment.DueDate.Value;
-                var updateResult = await AssignmentSubmission.UpdateAsync(existingSubmission);
-                if (updateResult != null)
+                existingSubmission.IsLate = assignment.DueDate.HasValue && DateTime.UtcNow > assignment.DueDate.Value;
+                existingSubmission.Grade = null;
+                existingSubmission.Feedback = null;
+
+                try
                 {
-                    return new ServiceResponse(true, "Assignment submission updated successfully.");
+                    var updateResult = await AssignmentSubmission.UpdateAsync(existingSubmission);
+                    if (updateResult == null)
+                    {
+                        await DeleteUploadedSubmissionFile(uploadedFileName);
+                        return new ServiceResponse(false, "Failed to update assignment submission.");
+                    }
                 }
-                else
+                catch
                 {
+                    await DeleteUploadedSubmissionFile(uploadedFileName);
                     return new ServiceResponse(false, "Failed to update assignment submission.");
                 }
 
-
+                if (!string.IsNullOrWhiteSpace(uploadedFileName) && previousFileName != uploadedFileName)
+                    await DeleteUploadedSubmissionFile(previousFileName);
+                return new ServiceResponse(true, "Assignment submission updated successfully.");
             }
             else
             {
                 var mapped = mapper.Map<AssignmentSubmission>(submission);
-                if (submission.File != null)
+                string? uploadedFileName = null;
+                if (submittedFile != null)
                 {
                     var fileDetails = new FileDetails
                     {
-                        FileName = $"{submission.StudentId}_{submission.AssignmentId}_Submission{Path.GetExtension(submission.File.FileName)}",
+                        FileName = $"{submission.AssignmentId}_{Guid.NewGuid():N}_Submission{Path.GetExtension(submittedFile.FileName)}",
                         Folder = "submissions"
                     };
                     var file = new AddCloudFile
                     {
-                        File = submission.File,
+                        File = submittedFile,
                         Details = fileDetails
                     };
                     var uploadResult = await cloud.UploadFileAsync(file);
@@ -568,27 +588,48 @@ namespace Application.Services.Implementitions
                         return new ServiceResponse(false, "File upload failed.");
                     }
                     mapped.FileUrl = fileDetails.FileName;
+                    uploadedFileName = fileDetails.FileName;
                 }
                 else
                 {
                     mapped.FileUrl = string.Empty;
                 }
-                mapped.TextAnswer = submission.TextAnswer;
+                mapped.TextAnswer = textAnswer;
                 mapped.SubmittedAt = DateTime.UtcNow;
-                var assignment = await Assignments.GetByIdAsync(submission.AssignmentId);
-                mapped.IsLate = assignment?.DueDate.HasValue == true && DateTime.UtcNow > assignment.DueDate.Value;
-                var result = await AssignmentSubmission.AddAsync(mapped);
-                if (result != null)
+                mapped.IsLate = assignment.DueDate.HasValue && DateTime.UtcNow > assignment.DueDate.Value;
+
+                try
                 {
+                    var result = await AssignmentSubmission.AddAsync(mapped);
+                    if (result == null)
+                    {
+                        await DeleteUploadedSubmissionFile(uploadedFileName);
+                        return new ServiceResponse(false, "Failed to submit assignment.");
+                    }
                     return new ServiceResponse(true, "Assignment submitted successfully.");
                 }
-                else
+                catch
                 {
+                    await DeleteUploadedSubmissionFile(uploadedFileName);
                     return new ServiceResponse(false, "Failed to submit assignment.");
                 }
             }
         }
 
+        private async Task DeleteUploadedSubmissionFile(string? fileName)
+        {
+            if (string.IsNullOrWhiteSpace(fileName))
+                return;
+
+            try
+            {
+                await cloud.DeleteFileAsync(new FileDetails { FileName = fileName, Folder = "submissions" });
+            }
+            catch
+            {
+                // File cleanup should not replace the submission persistence result.
+            }
+        }
 
         public async Task<GetAssignmentSubmission> GetSubmission(Guid Id, string Email)
         {

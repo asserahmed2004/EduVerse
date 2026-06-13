@@ -5,7 +5,7 @@ import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
 import { useToast } from "@/components/toast-provider";
 import { Badge, Button, EmptyState, LoadingState, PageHeader } from "@/components/ui";
-import { adminService, organizationService } from "@/lib/api";
+import { adminService, getApiErrorMessage, organizationService } from "@/lib/api";
 import type { AdminUserDetails, ManagedUser, OrganizationOverview, UserRole } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 
@@ -29,14 +29,17 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  async function loadUsers(role = roleFilter) {
+  async function loadUsers(role = roleFilter, showPageError = true) {
     setLoading(true);
-    setError("");
+    if (showPageError) setError("");
     try {
       setUsers(await adminService.getUsers(role || undefined));
+      setError("");
     } catch {
-      setUsers([]);
-      setError("Could not load users from the API.");
+      if (showPageError) {
+        setUsers([]);
+        setError("Could not load users from the API.");
+      }
     } finally {
       setLoading(false);
     }
@@ -74,7 +77,7 @@ export default function AdminUsersPage() {
         });
         event.currentTarget.reset();
         setAssignUser(null);
-        loadUsers().catch(() => undefined);
+        loadUsers(roleFilter, false).catch(() => undefined);
         return;
       }
 
@@ -97,7 +100,7 @@ export default function AdminUsersPage() {
       });
       event.currentTarget.reset();
       setAssignUser(null);
-      loadUsers().catch(() => undefined);
+      loadUsers(roleFilter, false).catch(() => undefined);
     } catch (error) {
       showToast({ title: "Assign role failed", message: getErrorMessage(error), tone: "error" });
     }
@@ -275,12 +278,5 @@ function Info({ label, value }: { label: string; value: string }) {
 }
 
 function getErrorMessage(error: unknown) {
-  const response = (error as { response?: { data?: any } })?.response?.data;
-  const errors = response?.errors ?? response?.Errors;
-
-  if (Array.isArray(errors) && errors.length > 0) {
-    return errors.join(", ");
-  }
-
-  return response?.message ?? response?.Message ?? "Check user id, role name, selected organization, and Admin permissions.";
+  return getApiErrorMessage(error, "Check user id, role name, selected organization, and Admin permissions.");
 }

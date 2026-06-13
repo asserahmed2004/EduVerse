@@ -41,16 +41,17 @@ export default function OrganizationsPage() {
     const form = new FormData(event.currentTarget);
     setSaving(true);
     try {
-      await organizationService.create({
+      const organization = await organizationService.create({
         name: String(form.get("name") ?? ""),
         description: String(form.get("description") ?? ""),
         email: String(form.get("email") ?? ""),
         phoneNumber: String(form.get("phoneNumber") ?? ""),
         websiteUrl: String(form.get("websiteUrl") ?? "")
       });
+      setOrganizations((current) => [...current, organization]);
+      setError("");
       showToast({ title: "Organization created", message: "The organization is now available.", tone: "success" });
       setShowCreate(false);
-      await loadOrganizations();
     } catch {
       showToast({ title: "Create failed", message: "Check required fields and Admin permissions.", tone: "error" });
     } finally {
@@ -62,13 +63,15 @@ export default function OrganizationsPage() {
     const id = organization.organizationId ?? organization.organizationAdminId;
     const isSuspended = organization.status?.toLowerCase() === "suspended";
     try {
-      if (isSuspended) {
-        await organizationService.activate(id);
-      } else {
-        await organizationService.suspend(id);
-      }
+      const updated = isSuspended
+        ? await organizationService.activate(id)
+        : await organizationService.suspend(id);
+      setOrganizations((current) => current.map((item) => {
+        const itemId = item.organizationId ?? item.organizationAdminId;
+        return itemId === id ? updated : item;
+      }));
+      setError("");
       showToast({ title: isSuspended ? "Organization activated" : "Organization suspended", message: organization.organizationName ?? organization.organizationAdminName, tone: "success" });
-      await loadOrganizations();
     } catch {
       showToast({ title: "Status update failed", message: "The backend rejected the organization status update.", tone: "error" });
     }

@@ -5,10 +5,10 @@ import { FormEvent, useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
 import { useToast } from "@/components/toast-provider";
-import { Badge, Button, EmptyState, LoadingState, PageHeader, StatCard } from "@/components/ui";
+import { Badge, Button, EmptyState, LinkButton, LoadingState, PageHeader, StatCard } from "@/components/ui";
 import { studentService } from "@/lib/api";
 import type { StudentAssignment } from "@/lib/types";
-import { formatDate } from "@/lib/utils";
+import { cn, formatDate, gradeTextColor } from "@/lib/utils";
 
 export default function StudentAssignmentsPage() {
   const { showToast } = useToast();
@@ -18,13 +18,15 @@ export default function StudentAssignmentsPage() {
   const [saving, setSaving] = useState(false);
   const pending = assignments.filter((item) => item.submissionStatus === "Not Submitted" || item.submissionStatus === "Missing").length;
 
-  async function load() {
+  async function load(notifyOnError = true) {
     setLoading(true);
     try {
       setAssignments(await studentService.getAssignments());
     } catch {
-      setAssignments([]);
-      showToast({ title: "Assignments unavailable", message: "Could not load your assignments from the backend.", tone: "error" });
+      if (notifyOnError) {
+        setAssignments([]);
+        showToast({ title: "Assignments unavailable", message: "Could not load your assignments from the backend.", tone: "error" });
+      }
     } finally {
       setLoading(false);
     }
@@ -35,16 +37,21 @@ export default function StudentAssignmentsPage() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selected) return;
-    setSaving(true);
     const form = new FormData(event.currentTarget);
+    const textAnswer = String(form.get("textAnswer") ?? "").trim();
+    const rawFile = form.get("file");
+    const file = rawFile instanceof File && rawFile.size > 0 ? rawFile : null;
+    if (!textAnswer && !file) {
+      showToast({ title: "Submission required", message: "Add a text answer or upload a file before submitting.", tone: "error" });
+      return;
+    }
+
+    setSaving(true);
     try {
-      await studentService.submitAssignment(selected.assignmentId, {
-        textAnswer: String(form.get("textAnswer") ?? ""),
-        file: form.get("file") as File | null
-      });
-      showToast({ title: "Submitted", message: "Assignment submitted successfully.", tone: "success" });
+      const result = await studentService.submitAssignment(selected.assignmentId, { textAnswer, file });
+      showToast({ title: "Submitted", message: result.message ?? "Assignment submitted successfully.", tone: "success" });
       setSelected(null);
-      await load();
+      await load(false);
     } catch (error) {
       showToast({ title: "Submit failed", message: error instanceof Error ? error.message : "Could not submit assignment.", tone: "error" });
     } finally {
@@ -77,10 +84,17 @@ export default function StudentAssignmentsPage() {
                   <p className="mt-1 text-sm text-muted">{assignment.sessionTitle} - Session {assignment.sessionNumber}</p>
                   <p className="mt-2 text-sm text-muted">{assignment.description}</p>
                   <p className="mt-2 text-xs font-semibold text-muted">Due: {assignment.dueDate ? formatDate(assignment.dueDate) : "Not set"}</p>
-                  {assignment.grade !== undefined && <p className="mt-2 text-sm font-bold text-teal-600">Grade: {assignment.grade}</p>}
-                  {assignment.feedback && <p className="mt-1 text-sm text-muted">Feedback: {assignment.feedback}</p>}
+                  {assignment.submissionStatus === "Graded" && (
+                    <div className="mt-3 rounded-xl bg-teal-50 p-3 ring-1 ring-teal-100">
+                      <p className={cn("text-sm font-bold", gradeTextColor(assignment.grade))}>Grade: {assignment.grade ?? "Not available"} / 100</p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm text-muted">Feedback: {assignment.feedback?.trim() || "No feedback provided."}</p>
+                    </div>
+                  )}
                 </div>
-                <Button onClick={() => setSelected(assignment)} variant="ghost">{assignment.submittedAt ? "View / Resubmit" : "Submit"}</Button>
+                <div className="flex flex-wrap gap-2">
+                  {assignment.submittedAt && <LinkButton href={`/assignments/${assignment.assignmentId}`} variant="ghost">View details</LinkButton>}
+                  <Button onClick={() => setSelected(assignment)} variant="ghost">{assignment.submittedAt ? "Resubmit" : "Submit"}</Button>
+                </div>
               </div>
             </article>
           ))}
@@ -91,6 +105,12 @@ export default function StudentAssignmentsPage() {
             <form onSubmit={submit} className="w-full max-w-xl rounded-xl2 bg-white p-6 shadow-xl ring-1 ring-slate-100" onClick={(event) => event.stopPropagation()}>
               <h2 className="text-2xl font-black text-ink">{selected.title}</h2>
               <p className="mt-2 text-sm text-muted">{selected.courseName}</p>
+              {selected.submissionStatus === "Graded" && (
+                <div className="mt-5 rounded-xl bg-teal-50 p-4 ring-1 ring-teal-100">
+                  <p className={cn("font-bold", gradeTextColor(selected.grade))}>Grade: {selected.grade ?? "Not available"} / 100</p>
+                  <p className="mt-2 whitespace-pre-wrap text-sm text-muted">Feedback: {selected.feedback?.trim() || "No feedback provided."}</p>
+                </div>
+              )}
               <textarea name="textAnswer" rows={5} placeholder="Write your answer" className="mt-5 w-full rounded-xl bg-slate-50 p-4 text-sm outline-none ring-1 ring-slate-200 focus:ring-teal-500" />
               <input name="file" type="file" className="mt-4 block w-full rounded-xl bg-slate-50 p-3 text-sm ring-1 ring-slate-200" />
               <div className="mt-5 flex gap-3">

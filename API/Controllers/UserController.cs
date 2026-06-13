@@ -270,17 +270,17 @@ namespace API.Controllers
                 return Unauthorized("User id was not found in token.");
             }
 
-            submission.StudentId = userId;
-            var result = await userService.SubmitAssignment(submission);
-            if (!result.success)
+            var result = await userService.SubmitAssignment(new SubmitAssignmentRequest
             {
-                return BadRequest(result.message);
-            }
-            return Ok(result.message);
+                AssignmentId = submission.AssignmentId,
+                File = submission.File,
+                TextAnswer = submission.TextAnswer
+            }, userId);
+            return result.success ? Ok(result) : BadRequest(result);
         }
         
         [HttpGet("usersubmissions/{Email?}")]
-        [Authorize(Roles = AppRoles.All)]
+        [Authorize(Roles = AppRoles.AdminAccess + "," + AppRoles.StudentAccess)]
         public async Task<IActionResult> usersubmissions(string? Email)
         {
             Email = ResolveRequestedEmail(Email);
@@ -308,14 +308,14 @@ namespace API.Controllers
         }
 
         [HttpGet("assignmentsubmissions/{Id}")]
-        [Authorize(Roles = AppRoles.AdminOrInstructor)]
+        [Authorize(Roles = AppRoles.AdminAccess)]
         public async Task<IActionResult> assignmentsubmissions(Guid Id)
         {
             var submissions = await userService.GetAssignmentSubmissions(Id);
             return Ok(submissions);
         }
         [HttpGet("submission/{Id}/{Email?}")]
-        [Authorize(Roles = AppRoles.All)]
+        [Authorize(Roles = AppRoles.AdminAccess + "," + AppRoles.StudentAccess)]
         public async Task<IActionResult> submission(Guid Id, string? Email)
         {
             Email = ResolveRequestedEmail(Email);

@@ -20,19 +20,21 @@ export default function InstructorCoursesPage() {
   const [assignmentCourseId, setAssignmentCourseId] = useState("");
   const [sessions, setSessions] = useState<CourseSession[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [assignmentSaving, setAssignmentSaving] = useState(false);
   const [organization, setOrganization] = useState<OrganizationDetails | null>(null);
   const [assigningInstructor, setAssigningInstructor] = useState("");
 
-  async function loadCourses() {
+  async function loadCourses(showPageError = true) {
     setLoading(true);
-    setError("");
+    if (showPageError) setError("");
     try {
       const data = await courseService.getAll();
       setCourses(data);
+      setError("");
       setAssignmentCourseId((current) => current || data[0]?.id || "");
       return true;
     } catch {
-      setError("Could not load courses.");
+      if (showPageError) setError("Could not load courses.");
       return false;
     } finally {
       setLoading(false);
@@ -76,10 +78,7 @@ export default function InstructorCoursesPage() {
       showToast({ title: "Course created", message: result.message ?? "The course was sent to the backend successfully.", tone: "success" });
       formElement.reset();
 
-      const refreshed = await loadCourses();
-      if (!refreshed) {
-        showToast({ title: "Course created, but failed to refresh list", message: "Refresh the page to see the latest course list.", tone: "info" });
-      }
+      await loadCourses(false);
     } catch (error) {
       showToast({
         title: "Course creation failed",
@@ -145,13 +144,17 @@ export default function InstructorCoursesPage() {
 
   async function addAssignment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    setAssignmentSaving(true);
     try {
-      await courseService.addAssignment(form);
-      showToast({ title: "Assignment added", message: "The assignment was sent to the backend successfully.", tone: "success" });
-      event.currentTarget.reset();
-    } catch {
-      showToast({ title: "Assignment failed", message: "Check session id, file, and ownership permissions.", tone: "error" });
+      const result = await courseService.addAssignment(form);
+      showToast({ title: "Assignment added", message: result.message ?? "The assignment was sent to the backend successfully.", tone: "success" });
+      formElement.reset();
+    } catch (error) {
+      showToast({ title: "Assignment failed", message: error instanceof Error ? error.message : "Check session id, file, and ownership permissions.", tone: "error" });
+    } finally {
+      setAssignmentSaving(false);
     }
   }
 
@@ -255,11 +258,11 @@ export default function InstructorCoursesPage() {
                   <textarea name="Description" className="mt-2 min-h-20 w-full rounded-xl bg-slate-50 px-4 py-3 text-sm outline-none ring-1 ring-slate-200 focus:ring-teal-500" required />
                 </label>
                 <label className="block">
-                  <span className="text-sm font-semibold text-ink">Assignment file</span>
-                  <input name="File" type="file" className="mt-2 w-full rounded-xl bg-slate-50 px-4 py-3 text-sm ring-1 ring-slate-200" required />
+                  <span className="text-sm font-semibold text-ink">Optional assignment file</span>
+                  <input name="File" type="file" className="mt-2 w-full rounded-xl bg-slate-50 px-4 py-3 text-sm ring-1 ring-slate-200" />
                 </label>
               </div>
-              <Button className="mt-5 w-full" variant="ghost">Add assignment</Button>
+              <Button className="mt-5 w-full" variant="ghost" disabled={assignmentSaving}>{assignmentSaving ? "Adding..." : "Add assignment"}</Button>
             </form>
           </div>
 

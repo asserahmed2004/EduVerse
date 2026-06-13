@@ -35,11 +35,12 @@ export default function InstructorSessionsPage() {
       await courseService.addSession(form);
       showToast({ title: "Session added", message: "The session was added to your assigned course.", tone: "success" });
       event.currentTarget.reset();
-      const rows = await instructorService.getSessions();
-      setSessions(rows);
     } catch (error) {
       showToast({ title: "Session failed", message: error instanceof Error ? error.message : "Could not add session to this course.", tone: "error" });
+      return;
     }
+
+    instructorService.getSessions().then(setSessions).catch(() => undefined);
   }
 
   async function generateQr(sessionId: string) {

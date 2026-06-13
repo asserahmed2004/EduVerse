@@ -20,3 +20,10 @@ export function formatDate(value?: string) {
     year: "numeric"
   }).format(new Date(value));
 }
+
+export function gradeTextColor(grade?: number) {
+  if (grade === undefined || grade === null) return "text-muted";
+  if (grade < 50) return "text-coral-500";
+  if (grade >= 75) return "text-teal-600";
+  return "text-amber-500";
+}

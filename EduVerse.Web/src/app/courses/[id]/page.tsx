@@ -10,7 +10,7 @@ import { Badge, Button, EmptyState, LoadingState, PageHeader, ProgressBar } from
 import { courseService, studentService } from "@/lib/api";
 import { getStoredUser } from "@/lib/auth";
 import type { Course, CourseAdminDetails, CourseProgress } from "@/lib/types";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { cn, formatCurrency, formatDate, gradeTextColor } from "@/lib/utils";
 
 export default function CourseDetailsPage() {
   const { showToast } = useToast();
@@ -322,6 +322,12 @@ export default function CourseDetailsPage() {
                               <div>
                                 <p className="font-bold text-ink">{assignment.title}</p>
                                 <p className="mt-1 text-xs font-semibold text-muted">Due: {assignment.dueDate ? formatDate(assignment.dueDate) : "Not set"}</p>
+                                {assignment.submissionStatus === "Graded" && (
+                                  <div className="mt-2 rounded-lg bg-teal-50 p-2 ring-1 ring-teal-100">
+                                    <p className={cn("text-sm font-bold", gradeTextColor(assignment.grade))}>Grade: {assignment.grade ?? "Not available"} / 100</p>
+                                    <p className="mt-1 whitespace-pre-wrap text-xs text-muted">Feedback: {assignment.feedback?.trim() || "No feedback provided."}</p>
+                                  </div>
+                                )}
                               </div>
                               <Badge tone={assignment.submissionStatus === "Graded" ? "teal" : assignment.submissionStatus === "Late" || assignment.submissionStatus === "Missing" ? "coral" : "amber"}>{assignment.submissionStatus}</Badge>
                             </div>

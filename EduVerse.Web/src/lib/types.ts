@@ -451,6 +451,17 @@ export type StudentAssignment = {
   fileUrl?: string;
 };
 
+export type StudentSubmission = {
+  studentId?: string;
+  assignmentId: string;
+  textAnswer?: string;
+  submittedAt?: string;
+  fileUrl?: string;
+  grade?: number;
+  feedback?: string;
+  isLate?: boolean;
+};
+
 export type CourseProgress = {
   courseId: string;
   courseName: string;

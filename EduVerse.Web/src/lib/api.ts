@@ -33,6 +33,7 @@ import type {
   RoleCount,
   ServiceResult,
   StudentAssignment,
+  StudentSubmission,
   TopCourse,
   TopCourseChart,
   TopInstructor,
@@ -42,6 +43,39 @@ import type {
 } from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5153";
+
+function readSuccessFlag(data: any): boolean | undefined {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return undefined;
+
+  const value = data.success ?? data.Success ?? data.succeed ?? data.Succeed;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    if (value.toLowerCase() === "true") return true;
+    if (value.toLowerCase() === "false") return false;
+  }
+
+  return undefined;
+}
+
+function readResponseMessage(data: any): string | undefined {
+  if (typeof data === "string" && data.trim()) return data;
+
+  const errors = data?.errors ?? data?.Errors;
+  if (Array.isArray(errors) && errors.length > 0) {
+    return errors.map(String).join("\n");
+  }
+  if (errors && typeof errors === "object") {
+    const messages = Object.values(errors).flatMap((value) => Array.isArray(value) ? value.map(String) : [String(value)]);
+    if (messages.length > 0) return messages.join("\n");
+  }
+
+  return data?.message ?? data?.Message ?? data?.detail ?? data?.Detail ?? data?.title ?? data?.Title;
+}
+
+export function getApiErrorMessage(error: unknown, fallbackMessage = "Request failed."): string {
+  const responseData = (error as { response?: { data?: any } })?.response?.data;
+  return readResponseMessage(responseData) ?? (error instanceof Error ? error.message : fallbackMessage);
+}
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -55,6 +89,23 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
+
+api.interceptors.response.use(
+  (response) => {
+    if (readSuccessFlag(response.data) === false) {
+      const error = new Error(readResponseMessage(response.data) ?? "The API reported that the request failed.");
+      Object.assign(error, { response });
+      return Promise.reject(error);
+    }
+    return response;
+  },
+  (error) => {
+    if (error instanceof Error) {
+      error.message = getApiErrorMessage(error, error.message);
+    }
+    return Promise.reject(error);
+  }
+);
 
 function normalizeImageUrl(value?: string) {
   if (!value) return undefined;
@@ -146,7 +197,7 @@ function normalizeRecommendedCourses(data: any): Course[] {
 
 function normalizeSession(session: any): CourseSession {
   return {
-    id: session.id ?? session.Id,
+    id: session.id ?? session.Id ?? session.sessionId ?? session.SessionId ?? "",
     courseId: session.courseId ?? session.CourseId,
     title: session.title ?? session.Title ?? `Session ${session.sessionNumber ?? session.SessionNumber ?? ""}`,
     fileUrl: normalizeCloudFileUrl("sessions", session.fileUrl ?? session.FileUrl ?? session.filePath ?? session.FilePath),
@@ -504,7 +555,20 @@ function normalizeStudentAssignment(item: any): StudentAssignment {
     submittedAt: item.submittedAt ?? item.SubmittedAt,
     grade: item.grade ?? item.Grade,
     feedback: item.feedback ?? item.Feedback,
-    fileUrl: item.fileUrl ?? item.FileUrl
+    fileUrl: normalizeCloudFileUrl("submissions", item.fileUrl ?? item.FileUrl)
+  };
+}
+
+function normalizeStudentSubmission(item: any): StudentSubmission {
+  return {
+    studentId: item.studentId ?? item.StudentId,
+    assignmentId: item.assignmentId ?? item.AssignmentId ?? "",
+    textAnswer: item.textAnswer ?? item.TextAnswer,
+    submittedAt: item.submittedAt ?? item.SubmittedAt,
+    fileUrl: normalizeCloudFileUrl("submissions", item.fileUrl ?? item.FileUrl),
+    grade: item.grade ?? item.Grade,
+    feedback: item.feedback ?? item.Feedback,
+    isLate: item.isLate ?? item.IsLate ?? false
   };
 }
 
@@ -609,10 +673,11 @@ function normalizeServiceResult(data: any): ServiceResult {
     return { success: true, message: data };
   }
 
+  const success = readSuccessFlag(data);
   return {
-    success: data?.success ?? data?.Success ?? data?.succeed ?? data?.Succeed ?? true,
+    success: success ?? true,
     succeed: data?.succeed ?? data?.Succeed,
-    message: data?.message ?? data?.Message
+    message: readResponseMessage(data)
   };
 }
 
@@ -876,10 +941,21 @@ export const studentService = {
     return (response.data as any[]).map(normalizeStudentAssignment);
   },
 
+  async getSubmission(assignmentId: string): Promise<StudentSubmission> {
+    const response = await api.get(`/User/my-submission/${assignmentId}`);
+    return normalizeStudentSubmission(response.data);
+  },
+
   async submitAssignment(assignmentId: string, payload: { textAnswer?: string; file?: File | null }): Promise<ServiceResult> {
+    const textAnswer = payload.textAnswer?.trim();
+    const file = payload.file && payload.file.size > 0 ? payload.file : null;
+    if (!textAnswer && !file) {
+      throw new Error("Add a text answer or upload a file before submitting.");
+    }
+
     const formData = new FormData();
-    if (payload.textAnswer) formData.append("TextAnswer", payload.textAnswer);
-    if (payload.file) formData.append("File", payload.file);
+    if (textAnswer) formData.append("TextAnswer", textAnswer);
+    if (file) formData.append("File", file);
     const response = await api.post(`/Assignment/Submit/${assignmentId}`, formData);
     return ensureSuccessfulResult(response.data, "Assignment submission failed.");
   },
@@ -1210,17 +1286,17 @@ export const adminService = {
 
   async addRole(role: string): Promise<ServiceResult> {
     const response = await api.post(`/Auth/AddRole/${encodeURIComponent(toBackendRole(role))}`);
-    return response.data;
+    return ensureSuccessfulResult(response.data, "Role creation failed.");
   },
 
   async removeRole(role: string): Promise<ServiceResult> {
     const response = await api.delete(`/Auth/RemoveRole/${encodeURIComponent(toBackendRole(role))}`);
-    return response.data;
+    return ensureSuccessfulResult(response.data, "Role removal failed.");
   },
 
   async addUserToRole(userId: string, role: string): Promise<ServiceResult> {
     const response = await api.post(`/Auth/AddUserToRole/${encodeURIComponent(userId)}/${encodeURIComponent(toBackendRole(role))}`);
-    return response.data;
+    return ensureSuccessfulResult(response.data, "Role assignment failed.");
   },
 
   async getActivityLogs(filters: { page?: number; pageSize?: number; action?: string; entityType?: string; search?: string } = {}): Promise<PaginatedResponse<ActivityLog>> {

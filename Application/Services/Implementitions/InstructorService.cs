@@ -18,10 +18,11 @@ namespace Application.Services.Implementitions
         public async Task<ServiceResponse> GetOverviewAsync(string instructorId)
         {
             var assignedCourses = await GetAssignedCourses(instructorId);
-            var courseIds = assignedCourses.Select(c => c.Id).ToHashSet();
-            var courseSessions = (await sessions.GetAllAsync()).Where(s => courseIds.Contains(s.CourseId)).OrderBy(s => s.Date).ToList();
-            var assignmentRows = await GetAssignmentsForCourses(courseIds);
+            var courseSessions = (await GetManagedSessions(instructorId)).OrderBy(s => s.Date).ToList();
+            var managedSessionIds = courseSessions.Select(s => s.Id).ToHashSet();
+            var assignmentRows = (await assignments.GetAllAsync()).Where(a => managedSessionIds.Contains(a.SessionId)).ToList();
             var submissionRows = (await submissions.GetAllAsync()).Where(s => assignmentRows.Any(a => a.Id == s.AssignmentId)).ToList();
+            var courseIds = assignedCourses.Select(c => c.Id).ToHashSet();
             var studentCount = (await enrollments.GetAllAsync()).Where(e => courseIds.Contains(e.CourseId)).Select(e => e.StudentId).Distinct().Count();
 
             var overview = new InstructorOverviewDto
@@ -40,8 +41,7 @@ namespace Application.Services.Implementitions
         public async Task<ServiceResponse> GetSessionsAsync(string instructorId)
         {
             var assignedCourses = await GetAssignedCourses(instructorId);
-            var courseIds = assignedCourses.Select(c => c.Id).ToHashSet();
-            var rows = (await sessions.GetAllAsync()).Where(s => courseIds.Contains(s.CourseId)).OrderBy(s => s.Date).Select(s => ToSessionDto(s, assignedCourses)).ToList();
+            var rows = (await GetManagedSessions(instructorId)).OrderBy(s => s.Date).Select(s => ToSessionDto(s, assignedCourses)).ToList();
             return new ServiceResponse(true, "Instructor sessions retrieved successfully", rows);
         }
 
@@ -50,8 +50,9 @@ namespace Application.Services.Implementitions
             var assignedCourses = await GetAssignedCourses(instructorId);
             var courseIds = assignedCourses.Select(c => c.Id).ToHashSet();
             var submissionRows = (await submissions.GetAllAsync()).ToList();
-            var sessionRows = (await sessions.GetAllAsync()).Where(s => courseIds.Contains(s.CourseId)).ToList();
-            var assignmentRows = await GetAssignmentsForCourses(courseIds);
+            var sessionRows = await GetManagedSessions(instructorId);
+            var managedSessionIds = sessionRows.Select(s => s.Id).ToHashSet();
+            var assignmentRows = (await assignments.GetAllAsync()).Where(a => managedSessionIds.Contains(a.SessionId)).ToList();
             var rows = new List<InstructorStudentDto>();
 
             foreach (var enrollment in (await enrollments.GetAllAsync()).Where(e => courseIds.Contains(e.CourseId)))
@@ -79,21 +80,21 @@ namespace Application.Services.Implementitions
         public async Task<ServiceResponse> GetSubmissionsAsync(string instructorId)
         {
             var assignedCourses = await GetAssignedCourses(instructorId);
-            var courseIds = assignedCourses.Select(c => c.Id).ToHashSet();
-            var courseSessions = (await sessions.GetAllAsync()).Where(s => courseIds.Contains(s.CourseId)).ToList();
-            var assignmentRows = await GetAssignmentsForCourses(courseIds);
+            var courseSessions = await GetManagedSessions(instructorId);
+            var managedSessionIds = courseSessions.Select(s => s.Id).ToHashSet();
+            var assignmentRows = (await assignments.GetAllAsync()).Where(a => managedSessionIds.Contains(a.SessionId)).ToList();
             var submissionRows = (await submissions.GetAllAsync()).Where(s => assignmentRows.Any(a => a.Id == s.AssignmentId)).ToList();
             return new ServiceResponse(true, "Instructor submissions retrieved successfully", await BuildSubmissionDtos(submissionRows, assignmentRows, courseSessions, assignedCourses));
         }
 
         public async Task<ServiceResponse> GetSubmissionAsync(Guid assignmentId, string studentId, string instructorId)
         {
+            if (!await CanAccessAssignment(assignmentId, instructorId))
+                return new ServiceResponse(false, "You cannot access this submission");
+
             var submission = (await submissions.GetAllAsync()).FirstOrDefault(s => s.AssignmentId == assignmentId && s.StudentId == studentId);
             if (submission == null)
                 return new ServiceResponse(false, "Submission not found");
-
-            if (!await CanAccessAssignment(assignmentId, instructorId))
-                return new ServiceResponse(false, "You cannot access this submission");
 
             var assignment = await assignments.GetByIdAsync(assignmentId);
             var session = assignment == null ? null : await sessions.GetByIdAsync(assignment.SessionId);
@@ -125,15 +126,19 @@ namespace Application.Services.Implementitions
         {
             if (!await CanAccessAssignment(assignmentId, instructorId))
                 return new ServiceResponse(false, "You can grade only submissions for assigned courses");
+            if (request == null || double.IsNaN(request.Grade) || double.IsInfinity(request.Grade) || request.Grade < 0 || request.Grade > 100)
+                return new ServiceResponse(false, "Grade must be between 0 and 100");
 
             var submission = (await submissions.GetAllAsync()).FirstOrDefault(s => s.AssignmentId == assignmentId && s.StudentId == studentId);
             if (submission == null)
                 return new ServiceResponse(false, "Submission not found");
 
-            submission.Grade = Math.Clamp(request.Grade, 0, 100);
+            submission.Grade = request.Grade;
             submission.Feedback = request.Feedback;
-            await submissions.UpdateAsync(submission);
-            return new ServiceResponse(true, "Submission graded successfully");
+            var result = await submissions.UpdateAsync(submission);
+            return result == null
+                ? new ServiceResponse(false, "Failed to save submission grade")
+                : new ServiceResponse(true, "Submission graded successfully", new { grade = submission.Grade, feedback = submission.Feedback });
         }
 
         public async Task<ServiceResponse> CreateSessionQrAsync(Guid sessionId, string userId, bool isAdminOrOrganizationAdmin)
@@ -211,6 +216,16 @@ namespace Application.Services.Implementitions
             return activeCourses.Where(c => c.InstructorId == instructorId || fallbackCourseIds.Contains(c.Id)).ToList();
         }
 
+        private async Task<List<Session>> GetManagedSessions(string instructorId)
+        {
+            var activeCourses = (await courses.GetAllAsync()).Where(c => !c.IsDeleted).ToList();
+            var ownedCourseIds = activeCourses.Where(c => c.InstructorId == instructorId).Select(c => c.Id).ToHashSet();
+            var activeCourseIds = activeCourses.Select(c => c.Id).ToHashSet();
+            return (await sessions.GetAllAsync())
+                .Where(s => activeCourseIds.Contains(s.CourseId) && (ownedCourseIds.Contains(s.CourseId) || s.TrainerId == instructorId))
+                .ToList();
+        }
+
         private async Task<List<Assignment>> GetAssignmentsForCourses(HashSet<Guid> courseIds)
         {
             var sessionIds = (await sessions.GetAllAsync()).Where(s => courseIds.Contains(s.CourseId)).Select(s => s.Id).ToHashSet();
@@ -221,7 +236,9 @@ namespace Application.Services.Implementitions
         {
             var assignment = await assignments.GetByIdAsync(assignmentId);
             var session = assignment == null ? null : await sessions.GetByIdAsync(assignment.SessionId);
-            return session != null && await CanAccessCourse(session.CourseId, instructorId);
+            var course = session == null ? null : await courses.GetByIdAsync(session.CourseId);
+            return session != null && course != null && !course.IsDeleted &&
+                (course.InstructorId == instructorId || session.TrainerId == instructorId);
         }
 
         private async Task<bool> CanAccessCourse(Guid courseId, string instructorId)

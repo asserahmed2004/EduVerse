@@ -1006,9 +1006,15 @@ namespace Application.Services.Implementitions
 
         public async Task<ServiceResponse> AddAssignment(CreateAssignment assignment)
         {
-            if (assignment == null)
+            if (assignment == null || assignment.SessionId == Guid.Empty)
                 return new ServiceResponse { success = false, message = "Invalid assignment data" };
+            if (string.IsNullOrWhiteSpace(assignment.Subject) || string.IsNullOrWhiteSpace(assignment.Description))
+                return new ServiceResponse { success = false, message = "Assignment subject and description are required" };
+            if (await SessionManagment.GetByIdAsync(assignment.SessionId) == null)
+                return new ServiceResponse { success = false, message = "Session not found" };
+
             var mappedAssignment = mapper.Map<Assignment>(assignment);
+            string? uploadedFileName = null;
             if (assignment.File != null && assignment.File.Length > 0)
             {
                 var fileDetails = new FileDetails { FileName = $"{mappedAssignment.Id}-AssignmentMaterial{Path.GetExtension(assignment.File.FileName)}", Folder = "assignments" };
@@ -1017,16 +1023,44 @@ namespace Application.Services.Implementitions
                 if (!uploadResult.success)
                     return new ServiceResponse { success = false, message = "Failed to upload assignment material to cloud" };
                 mappedAssignment.Content = fileDetails.FileName;
+                uploadedFileName = fileDetails.FileName;
             }
             else
             {
                 mappedAssignment.Content = string.Empty;
             }
-            var result = await AssignmentManagment.AddAsync(mappedAssignment);
-            if (result == null)
-                return new ServiceResponse { success = false, message = "Failed to add assignment" };
-            return new ServiceResponse { success = true, message = "Assignment added successfully" };
 
+            try
+            {
+                var result = await AssignmentManagment.AddAsync(mappedAssignment);
+                if (result == null)
+                {
+                    await DeleteUploadedAssignmentFile(uploadedFileName);
+                    return new ServiceResponse { success = false, message = "Failed to add assignment" };
+                }
+
+                return new ServiceResponse { success = true, message = "Assignment added successfully", data = new { assignmentId = result.Id } };
+            }
+            catch
+            {
+                await DeleteUploadedAssignmentFile(uploadedFileName);
+                return new ServiceResponse { success = false, message = "Failed to save assignment" };
+            }
+        }
+
+        private async Task DeleteUploadedAssignmentFile(string? fileName)
+        {
+            if (string.IsNullOrWhiteSpace(fileName))
+                return;
+
+            try
+            {
+                await cloud.DeleteFileAsync(new FileDetails { FileName = fileName, Folder = "assignments" });
+            }
+            catch
+            {
+                // The database operation already failed; cloud cleanup must not hide that response.
+            }
         }
 
         public async Task<ServiceResponse> UpdateAssignment(UpdateAssignment assignment)

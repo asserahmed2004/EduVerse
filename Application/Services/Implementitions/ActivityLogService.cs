@@ -3,24 +3,37 @@ using Application.DTOs.Responses;
 using Application.Services.Interfaces;
 using Domain.Entities;
 using Domain.Interfaces;
+using Microsoft.Extensions.Logging;
 
 namespace Application.Services.Implementitions
 {
-    public class ActivityLogService(IGeneric<ActivityLog> activityLogs) : IActivityLogService
+    public class ActivityLogService(IGeneric<ActivityLog> activityLogs, ILogger<ActivityLogService> logger) : IActivityLogService
     {
         public async Task LogAsync(string? userId, string userName, string action, string entityType, string? entityId, string description)
         {
-            await activityLogs.AddAsync(new ActivityLog
+            try
             {
-                Id = Guid.NewGuid(),
-                UserId = userId,
-                UserName = string.IsNullOrWhiteSpace(userName) ? "Unknown" : userName,
-                Action = action,
-                EntityType = entityType,
-                EntityId = entityId,
-                Description = description,
-                CreatedAt = DateTime.UtcNow
-            });
+                await activityLogs.AddAsync(new ActivityLog
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = userId,
+                    UserName = string.IsNullOrWhiteSpace(userName) ? "Unknown" : userName,
+                    Action = action,
+                    EntityType = entityType,
+                    EntityId = entityId,
+                    Description = description,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+            catch (Exception exception)
+            {
+                logger.LogWarning(
+                    exception,
+                    "Failed to write activity log {Action} for {EntityType} {EntityId} after the primary operation completed.",
+                    action,
+                    entityType,
+                    entityId);
+            }
         }
 
         public async Task<ServiceResponse> GetLogsAsync(ActivityLogQuery query)
