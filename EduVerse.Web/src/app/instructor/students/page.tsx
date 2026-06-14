@@ -55,7 +55,7 @@ export default function InstructorStudentsPage() {
                       <div className="mt-2">
                         <ProgressBar value={student.progressPercentage} />
                       </div>
-                      <p className="mt-2 text-xs font-semibold text-muted">{student.submissionSummary || "No submission summary yet"}</p>
+                      <p className="mt-2 text-xs font-semibold text-muted">Course progress based on completed sessions</p>
                     </div>
                   </div>
                 </article>

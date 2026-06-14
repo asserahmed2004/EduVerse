@@ -37,6 +37,7 @@ export default function InstructorAssignmentsPage() {
     const form = new FormData(event.currentTarget);
     const grade = Number(form.get("grade") ?? 0);
     const feedback = String(form.get("feedback") ?? "");
+    const isRegrade = submission.grade !== undefined && submission.grade !== null;
     if (!Number.isFinite(grade) || grade < 0 || grade > 100) {
       showToast({ title: "Invalid grade", message: "Grade must be a number from 0 to 100.", tone: "error" });
       return;
@@ -45,9 +46,13 @@ export default function InstructorAssignmentsPage() {
     try {
       const result = await instructorService.gradeSubmission(submission.assignmentId, submission.studentId, grade, feedback);
       setSubmissions((current) => current.map((item) => item.assignmentId === submission.assignmentId && item.studentId === submission.studentId ? { ...item, grade, feedback } : item));
-      showToast({ title: "Submission graded", message: result.message ?? "Grade and feedback were saved.", tone: "success" });
+      showToast({
+        title: isRegrade ? "Submission regraded" : "Submission graded",
+        message: result.message ?? (isRegrade ? "Grade and feedback were updated." : "Grade and feedback were saved."),
+        tone: "success"
+      });
     } catch (error) {
-      showToast({ title: "Grading failed", message: error instanceof Error ? error.message : "Could not grade this submission.", tone: "error" });
+      showToast({ title: isRegrade ? "Regrade failed" : "Grading failed", message: error instanceof Error ? error.message : "Could not save this submission grade.", tone: "error" });
     }
   }
 
@@ -160,7 +165,9 @@ export default function InstructorAssignmentsPage() {
                         <span className="text-sm font-semibold text-ink">Feedback</span>
                         <textarea name="feedback" defaultValue={submission.feedback ?? ""} className="mt-2 min-h-20 w-full rounded-xl bg-white px-4 py-3 text-sm outline-none ring-1 ring-slate-200 focus:ring-teal-500" />
                       </label>
-                      <Button className="mt-4 w-full" variant="ghost">Save grade</Button>
+                      <Button className="mt-4 w-full" variant="ghost">
+                        {submission.grade !== undefined && submission.grade !== null ? "Regrade" : "Save grade"}
+                      </Button>
                     </form>
                   </div>
                 </article>

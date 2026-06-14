@@ -871,6 +871,12 @@ export const courseService = {
     return (response.data as any[]).map(normalizeSession);
   },
 
+  async getAssignmentsCount(courseId: string) {
+    const response = await api.get(`/Course/GetAllAssignments/${courseId}`);
+    const data = response.data;
+    return Array.isArray(data) ? data.length : 0;
+  },
+
   async search(query: string) {
     const response = await api.get(`/Course/search/${encodeURIComponent(query)}`);
     return (response.data as any[]).map(normalizeCourse);
