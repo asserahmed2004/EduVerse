@@ -29,6 +29,16 @@ export function getStoredUser(): AuthUser | null {
   }
 }
 
+export function isAuthenticatedStudent() {
+  const token = getToken();
+  const user = getStoredUser();
+
+  if (!token || user?.role !== "Student") return false;
+
+  const tokenRole = getRoleFromToken(token);
+  return !tokenRole || tokenRole === "Student";
+}
+
 export function setStoredUser(user: AuthUser) {
   localStorage.setItem(USER_KEY, JSON.stringify(user));
 }

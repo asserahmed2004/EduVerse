@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { recommendationService } from "@/lib/api";
+import { isAuthenticatedStudent } from "@/lib/auth";
 import type { Course } from "@/lib/types";
 import { CourseCard, EmptyState, LoadingState } from "./ui";
 
@@ -45,6 +46,11 @@ export function RecommendationSection({
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [canLoadRecommendations, setCanLoadRecommendations] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    setCanLoadRecommendations(isAuthenticatedStudent());
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,7 +62,14 @@ export function RecommendationSection({
       try {
         const data = await loadRecommendations(type, courseId);
         if (!cancelled) {
-          setCourses(Array.isArray(data) ? data.filter((course) => Boolean(course?.id)) : []);
+          const uniqueCourses = Array.from(
+            new Map(
+              (Array.isArray(data) ? data : [])
+                .filter((course) => Boolean(course?.id))
+                .map((course) => [course.id, course])
+            ).values()
+          );
+          setCourses(uniqueCourses);
         }
       } catch {
         if (!cancelled) {
@@ -68,6 +81,15 @@ export function RecommendationSection({
           setLoading(false);
         }
       }
+    }
+
+    if (!canLoadRecommendations) {
+      setCourses([]);
+      setError("");
+      setLoading(false);
+      return () => {
+        cancelled = true;
+      };
     }
 
     if (type === "similar" && !courseId) {
@@ -84,7 +106,9 @@ export function RecommendationSection({
     return () => {
       cancelled = true;
     };
-  }, [type, courseId]);
+  }, [canLoadRecommendations, type, courseId]);
+
+  if (canLoadRecommendations !== true) return null;
 
   return (
     <section className={className}>

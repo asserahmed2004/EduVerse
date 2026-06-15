@@ -18,34 +18,45 @@ export default function CoursesPage() {
 
   useEffect(() => {
     courseService.getAll()
-      .then(setCourses)
+      .then((data) => {
+        setCourses(Array.from(new Map(data.filter((course) => Boolean(course.id)).map((course) => [course.id, course])).values()));
+        setError("");
+      })
       .catch(() => setError("Could not load courses from the API."))
       .finally(() => setLoading(false));
   }, []);
 
   const categories = useMemo(() => {
     const values = courses
-      .map((course) => course.category ?? course.categories?.[0]?.name)
+      .flatMap((course) => [course.category, ...(course.categories?.map((item) => item.name) ?? [])])
       .filter((value): value is string => Boolean(value));
 
     return ["All", ...Array.from(new Set(values))];
   }, [courses]);
 
   const filteredCourses = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+
     return courses.filter((course) => {
-      const haystack = `${course.name} ${course.title} ${course.description} ${course.category ?? ""}`.toLowerCase();
-      const matchesQuery = haystack.includes(query.toLowerCase());
-      const courseCategory = course.category ?? course.categories?.[0]?.name ?? "";
-      const matchesCategory = category === "All" || courseCategory === category;
+      const nameAndTitle = `${course.name ?? ""} ${course.title ?? ""}`.toLowerCase();
+      const matchesQuery = !normalizedQuery || nameAndTitle.includes(normalizedQuery);
+      const courseCategories = [course.category, ...(course.categories?.map((item) => item.name) ?? [])].filter(Boolean);
+      const matchesCategory = category === "All" || courseCategories.includes(category);
       const matchesPrice = priceFilter === "All" || (priceFilter === "Free" ? course.price <= 0 : course.price > 0);
 
-      return matchesQuery && matchesCategory && matchesPrice;
+      return normalizedQuery ? matchesQuery : matchesCategory && matchesPrice;
     });
   }, [courses, query, category, priceFilter]);
 
   return (
     <AppShell>
       <PageHeader eyebrow="Catalog" title="Courses" description="Explore learning paths, compare prices and ratings, then enroll from the course details page." />
+
+      <RecommendationSection
+        title="Recommended For You"
+        description="Personalized course suggestions based on your enrollments and interests."
+        type="forMe"
+      />
 
       <RecommendationSection
         title="Trending Courses"
@@ -68,25 +79,30 @@ export default function CoursesPage() {
         </select>
       </div>
 
+      {error && (
+        <div role="alert" className="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+          The course catalog is temporarily unavailable. Please try again shortly.
+        </div>
+      )}
+
       {loading ? (
         <div className="mt-8">
           <LoadingState label="Loading courses" />
         </div>
-      ) : error ? (
+      ) : !error && filteredCourses.length === 0 ? (
         <div className="mt-8">
-          <EmptyState title="Courses unavailable" description={error} />
+          <EmptyState
+            title="No courses found"
+            description={query.trim() ? `No course names or titles match "${query.trim()}".` : "Try another filter or check again later."}
+          />
         </div>
-      ) : filteredCourses.length === 0 ? (
-        <div className="mt-8">
-          <EmptyState title="No courses found" description="Try another search term or check again later." />
-        </div>
-      ) : (
+      ) : !error ? (
         <div className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           {filteredCourses.map((course) => (
             <CourseCard key={course.id} course={course} />
           ))}
         </div>
-      )}
+      ) : null}
     </AppShell>
   );
 }

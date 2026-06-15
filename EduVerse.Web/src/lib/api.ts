@@ -1,5 +1,5 @@
 import axios from "axios";
-import { clearAuth, getCurrentUserId, getRoleFromToken, getToken, getUserIdFromToken, inferRole, setStoredUser, setToken } from "./auth";
+import { clearAuth, getCurrentUserId, getRoleFromToken, getToken, getUserIdFromToken, inferRole, isAuthenticatedStudent, setStoredUser, setToken } from "./auth";
 import type {
   ActivityLog,
   AuthUser,
@@ -180,6 +180,15 @@ function normalizeCourse(course: any): Course {
     ratingCount: course.ratingCount ?? course.RatingCount ?? 0,
     recommendationScore: course.recommendationScore ?? course.RecommendationScore
   };
+}
+
+function normalizeCourseList(data: any): Course[] {
+  const courses = Array.isArray(data) ? data : unwrapData(data);
+  if (!Array.isArray(courses)) return [];
+
+  return courses
+    .filter((course) => course && typeof course === "object")
+    .map(normalizeCourse);
 }
 
 function normalizeRecommendedCourses(data: any): Course[] {
@@ -826,8 +835,8 @@ export const authService = {
 
 export const courseService = {
   async getAll() {
-    const response = await api.get("/Course/GetAll");
-    return (response.data as any[]).map(normalizeCourse);
+    const response = await api.get("/Course/GetAll", { timeout: 0 });
+    return normalizeCourseList(response.data);
   },
 
   async getOwnedByCurrentUser() {
@@ -873,7 +882,7 @@ export const courseService = {
 
   async search(query: string) {
     const response = await api.get(`/Course/search/${encodeURIComponent(query)}`);
-    return (response.data as any[]).map(normalizeCourse);
+    return normalizeCourseList(response.data);
   },
 
   async create(formData: FormData): Promise<ServiceResult> {
@@ -1331,16 +1340,19 @@ export const adminService = {
 
 export const recommendationService = {
   async getPersonalizedRecommendations() {
+    if (!isAuthenticatedStudent()) throw new Error("Recommendations are available to students only.");
     const response = await api.get("/Recommendation/ForMe");
     return normalizeRecommendedCourses(response.data);
   },
 
   async getSimilarCourses(courseId: string) {
+    if (!isAuthenticatedStudent()) throw new Error("Recommendations are available to students only.");
     const response = await api.get(`/Recommendation/Similar/${courseId}`);
     return normalizeRecommendedCourses(response.data);
   },
 
   async getTrendingCourses() {
+    if (!isAuthenticatedStudent()) throw new Error("Recommendations are available to students only.");
     const response = await api.get("/Recommendation/Trending");
     return normalizeRecommendedCourses(response.data);
   }
