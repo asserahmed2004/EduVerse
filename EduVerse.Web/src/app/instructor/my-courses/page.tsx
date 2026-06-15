@@ -6,27 +6,17 @@ import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
 import { EmptyState, LoadingState, PageHeader, StatCard } from "@/components/ui";
-import { courseService } from "@/lib/api";
-import type { Course } from "@/lib/types";
-
-type InstructorCourseCard = Course & { assignmentsCount: number };
+import { instructorService } from "@/lib/api";
+import type { InstructorCourse } from "@/lib/types";
 
 export default function InstructorMyCoursesPage() {
-  const [courses, setCourses] = useState<InstructorCourseCard[]>([]);
+  const [courses, setCourses] = useState<InstructorCourse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    courseService.getAll()
-      .then(async (coursesData) => {
-        const enriched = await Promise.all(
-          coursesData.map(async (course) => ({
-            ...course,
-            assignmentsCount: await courseService.getAssignmentsCount(course.id).catch(() => 0)
-          }))
-        );
-        setCourses(enriched);
-      })
+    instructorService.getMyCourses()
+      .then(setCourses)
       .catch(() => setError("Could not load your assigned courses from the API."))
       .finally(() => setLoading(false));
   }, []);
@@ -52,8 +42,8 @@ export default function InstructorMyCoursesPage() {
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {courses.map((course) => (
                 <Link
-                  key={course.id}
-                  href={`/instructor/my-courses/${course.id}`}
+                  key={course.courseId}
+                  href={`/instructor/my-courses/${course.courseId}`}
                   className="group rounded-xl2 bg-white p-5 shadow-soft ring-1 ring-slate-100 transition hover:-translate-y-0.5 hover:shadow-lg"
                 >
                   <h2 className="text-lg font-bold text-ink group-hover:text-teal-600">{course.title || course.name}</h2>

@@ -13,6 +13,13 @@ namespace API.Controllers
     [Authorize(Roles = AppRoles.InstructorAccess)]
     public class InstructorController(IInstructorService instructorService) : ControllerBase
     {
+        [HttpGet("MyCourses")]
+        public async Task<IActionResult> MyCourses()
+        {
+            var result = await instructorService.GetMyCoursesAsync(CurrentUserId());
+            return result.success ? Ok(result) : BadRequest(result);
+        }
+
         [HttpGet("Overview")]
         public async Task<IActionResult> Overview()
         {

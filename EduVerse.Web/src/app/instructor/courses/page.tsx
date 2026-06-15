@@ -7,7 +7,7 @@ import { AuthGuard } from "@/components/auth-guard";
 import { useToast } from "@/components/toast-provider";
 import { Badge, Button, EmptyState, LoadingState, PageHeader, StatCard } from "@/components/ui";
 import { courseService, organizationService } from "@/lib/api";
-import { getCurrentUserId, getStoredUser } from "@/lib/auth";
+import { getStoredUser } from "@/lib/auth";
 import type { Course, CourseSession, OrganizationDetails } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils";
 
@@ -124,21 +124,20 @@ export default function InstructorCoursesPage() {
 
   async function addSession(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const currentUserId = getCurrentUserId();
-    if (currentUserId) {
-      form.set("TrainerId", currentUserId);
-    }
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
 
     try {
       await courseService.addSession(form);
-      showToast({ title: "Session added", message: "The session was sent to the backend successfully.", tone: "success" });
-      event.currentTarget.reset();
-      if (String(form.get("Course")) === assignmentCourseId) {
-        courseService.getSessions(assignmentCourseId).then(setSessions).catch(() => undefined);
-      }
-    } catch {
-      showToast({ title: "Session failed", message: "Check course id, trainer id, file, and ownership permissions.", tone: "error" });
+    } catch (error) {
+      showToast({ title: "Session failed", message: error instanceof Error ? error.message : "Check the course, file, and access permissions.", tone: "error" });
+      return;
+    }
+
+    showToast({ title: "Session added", message: "The session was sent to the backend successfully.", tone: "success" });
+    formElement?.reset();
+    if (String(form.get("CourseId")) === assignmentCourseId) {
+      courseService.getSessions(assignmentCourseId).then(setSessions).catch(() => undefined);
     }
   }
 
@@ -210,7 +209,7 @@ export default function InstructorCoursesPage() {
               <h2 className="text-lg font-bold text-ink">Add session</h2>
               <p className="mt-1 text-sm text-muted">Uses `POST /Course/AddSession`</p>
               <div className="mt-5 space-y-4">
-                <SelectField name="Course" label="Course" required disabled={courses.length === 0} defaultValue="">
+                <SelectField name="CourseId" label="Course" required disabled={courses.length === 0} defaultValue="">
                   <option value="" disabled>Select course</option>
                   {courses.map((course) => <option key={course.id} value={course.id}>{course.name}</option>)}
                 </SelectField>

@@ -94,6 +94,18 @@ namespace Application.DTOs.Learning
         public IEnumerable<InstructorSubmissionDto> RecentSubmissions { get; set; } = [];
     }
 
+    public class InstructorCourseDto
+    {
+        public Guid CourseId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public Guid OrganizationId { get; set; }
+        public string OrganizationName { get; set; } = string.Empty;
+        public int StudentsCount { get; set; }
+        public int SessionsCount { get; set; }
+        public int AssignmentsCount { get; set; }
+    }
+
     public class InstructorSessionDto
     {
         public Guid SessionId { get; set; }

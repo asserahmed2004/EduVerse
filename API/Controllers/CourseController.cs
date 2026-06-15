@@ -270,25 +270,20 @@ namespace API.Controllers
             return Ok(result);
         }
         [HttpPost("AddSession")]
-        [Authorize(Roles = AppRoles.All)]
+        [Authorize(Roles = AppRoles.AdminOrganizationAdminOrInstructor)]
         public async Task<IActionResult> AddSession([FromForm]CreateSessionRequest session)
         {
+            var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrWhiteSpace(userId))
+                return Unauthorized(new { success = false, message = "User id claim is missing" });
+
             var sessionEntity = mapper.Map<CreateSession>(session);
-            sessionEntity.CourseId = Guid.Parse(session.Course);
-            if(String.Equals(User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Role)?.Value, AppRoles.Instructor))
-            {
-                var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
-                sessionEntity.TrainerId = userId;
-                if (string.IsNullOrEmpty(userId))
-                    return Unauthorized(new { success = false, message = "User id claim is missing" });
-                //if (!await courseService.CanManageAssignedCourse(sessionEntity.CourseId, userId))
-                //    return Forbid();
-            }
-
-            if (!await CanManageCourseLearningContent(sessionEntity.CourseId))
-                return Forbid();
-
-            var result = await courseService.AddSession(sessionEntity);
+            var result = await courseService.AddSession(
+                sessionEntity,
+                userId,
+                User.HasRole(AppRoles.Admin),
+                User.HasRole(AppRoles.OrganizationAdmin),
+                User.HasRole(AppRoles.Instructor));
             
             if (!result.success)
                 return BadRequest(result);

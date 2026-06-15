@@ -406,7 +406,14 @@ namespace InfraStructure.Data.Seed
                 if (course == null)
                 {
                     var organization = organizations[_faker.Random.Int(0, organizations.Count - 1)];
-                    var instructor = instructors[_faker.Random.Int(0, instructors.Count - 1)];
+                    var organizationInstructors = instructors
+                        .Where(item => item.OrganizationId == organization.Id)
+                        .ToList();
+                    if (organizationInstructors.Count == 0)
+                    {
+                        throw new InvalidOperationException($"No seeded instructor belongs to organization '{organization.Name}'.");
+                    }
+                    var instructor = organizationInstructors[_faker.Random.Int(0, organizationInstructors.Count - 1)];
 
                     course = new Course
                     {

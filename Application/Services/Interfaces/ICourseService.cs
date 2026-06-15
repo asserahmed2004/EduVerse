@@ -34,7 +34,7 @@ namespace Application.Services.Interfaces
         Task<AdminCourseDetailsDto?> GetAdminCourseDetails(Guid id, string? currentUserId, bool isAdmin, bool isOrganizationAdmin, bool isInstructor);
 
         Task<ServiceResponse> AddRating(CreateRating rating, string userid);
-        Task<ServiceResponse> AddSession(CreateSession session);
+        Task<ServiceResponse> AddSession(CreateSession session, string currentUserId, bool isAdmin, bool isOrganizationAdmin, bool isInstructor);
         Task<ServiceResponse> UpdateSession(UpdateSession session);
         Task<ServiceResponse> DeleteSession(Guid id);
         Task<List<GetSession>> GetCourseAllSessions(Guid courdeid);

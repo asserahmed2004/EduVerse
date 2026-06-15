@@ -13,8 +13,56 @@ namespace Application.Services.Implementitions
         IGeneric<AssignmentSubmission> submissions,
         IGeneric<Enrollment> enrollments,
         IGeneric<AttendanceRecord> attendanceRecords,
+        IGeneric<Organization> organizations,
         IUserManagment userManagement) : IInstructorService
     {
+        public async Task<ServiceResponse> GetMyCoursesAsync(string instructorId)
+        {
+            var assignedCourses = await GetAssignedCourses(instructorId);
+            if (assignedCourses.Count == 0)
+                return new ServiceResponse(true, "Instructor courses retrieved successfully", new List<InstructorCourseDto>());
+
+            var courseIds = assignedCourses.Select(c => c.Id).ToHashSet();
+            var sessionRows = (await sessions.GetAllAsync())
+                .Where(s => courseIds.Contains(s.CourseId))
+                .ToList();
+            var sessionIds = sessionRows.Select(s => s.Id).ToHashSet();
+            var assignmentRows = (await assignments.GetAllAsync())
+                .Where(a => sessionIds.Contains(a.SessionId))
+                .ToList();
+            var enrollmentRows = (await enrollments.GetAllAsync())
+                .Where(e => courseIds.Contains(e.CourseId))
+                .ToList();
+            var organizationIds = assignedCourses
+                .Where(c => c.OrganizationId.HasValue)
+                .Select(c => c.OrganizationId!.Value)
+                .ToHashSet();
+            var organizationRows = (await organizations.GetAllAsync())
+                .Where(o => organizationIds.Contains(o.Id))
+                .ToDictionary(o => o.Id);
+
+            var rows = assignedCourses.Select(course =>
+            {
+                var courseSessions = sessionRows.Where(s => s.CourseId == course.Id).ToList();
+                var courseSessionIds = courseSessions.Select(s => s.Id).ToHashSet();
+                return new InstructorCourseDto
+                {
+                    CourseId = course.Id,
+                    Name = course.Name,
+                    Title = course.Title,
+                    OrganizationId = course.OrganizationId!.Value,
+                    OrganizationName = organizationRows.TryGetValue(course.OrganizationId.Value, out var organization)
+                        ? organization.Name
+                        : "EduVerseOrganization",
+                    StudentsCount = enrollmentRows.Where(e => e.CourseId == course.Id).Select(e => e.StudentId).Distinct().Count(),
+                    SessionsCount = courseSessions.Count,
+                    AssignmentsCount = assignmentRows.Count(a => courseSessionIds.Contains(a.SessionId))
+                };
+            }).ToList();
+
+            return new ServiceResponse(true, "Instructor courses retrieved successfully", rows);
+        }
+
         public async Task<ServiceResponse> GetOverviewAsync(string instructorId)
         {
             var assignedCourses = await GetAssignedCourses(instructorId);
@@ -211,18 +259,25 @@ namespace Application.Services.Implementitions
         }
         private async Task<List<Course>> GetAssignedCourses(string instructorId)
         {
+            var instructor = await userManagement.GetUserById(instructorId);
+            if (instructor?.OrganizationId.HasValue != true)
+                return [];
+
             var activeCourses = (await courses.GetAllAsync()).Where(c => !c.IsDeleted).ToList();
             var fallbackCourseIds = (await sessions.GetAllAsync()).Where(s => s.TrainerId == instructorId).Select(s => s.CourseId).ToHashSet();
-            return activeCourses.Where(c => c.InstructorId == instructorId || fallbackCourseIds.Contains(c.Id)).ToList();
+            return activeCourses
+                .Where(c => c.OrganizationId == instructor.OrganizationId &&
+                    (c.InstructorId == instructorId || fallbackCourseIds.Contains(c.Id)))
+                .ToList();
         }
 
         private async Task<List<Session>> GetManagedSessions(string instructorId)
         {
-            var activeCourses = (await courses.GetAllAsync()).Where(c => !c.IsDeleted).ToList();
-            var ownedCourseIds = activeCourses.Where(c => c.InstructorId == instructorId).Select(c => c.Id).ToHashSet();
-            var activeCourseIds = activeCourses.Select(c => c.Id).ToHashSet();
+            var assignedCourses = await GetAssignedCourses(instructorId);
+            var ownedCourseIds = assignedCourses.Where(c => c.InstructorId == instructorId).Select(c => c.Id).ToHashSet();
+            var assignedCourseIds = assignedCourses.Select(c => c.Id).ToHashSet();
             return (await sessions.GetAllAsync())
-                .Where(s => activeCourseIds.Contains(s.CourseId) && (ownedCourseIds.Contains(s.CourseId) || s.TrainerId == instructorId))
+                .Where(s => assignedCourseIds.Contains(s.CourseId) && (ownedCourseIds.Contains(s.CourseId) || s.TrainerId == instructorId))
                 .ToList();
         }
 

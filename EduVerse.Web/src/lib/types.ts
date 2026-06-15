@@ -444,7 +444,7 @@ export type StudentAssignment = {
   sessionTitle: string;
   sessionNumber: number;
   dueDate?: string;
-  submissionStatus: "Not Submitted" | "Submitted" | "Late" | "Missing" | "Graded";
+  submissionStatus: "Not Submitted" | "Submitted" | "Pending" | "Late" | "Missing" | "Graded";
   submittedAt?: string;
   grade?: number;
   feedback?: string;
@@ -504,6 +504,17 @@ export type InstructorOverview = {
   totalAssignments: number;
   upcomingSessions: InstructorSession[];
   recentSubmissions: InstructorSubmission[];
+};
+
+export type InstructorCourse = {
+  courseId: string;
+  name: string;
+  title: string;
+  organizationId: string;
+  organizationName: string;
+  studentsCount: number;
+  sessionsCount: number;
+  assignmentsCount: number;
 };
 
 export type InstructorSession = {

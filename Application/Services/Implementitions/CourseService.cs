@@ -178,12 +178,19 @@ namespace Application.Services.Implementitions
             if (instructor == null)
                 return new ServiceResponse(false, "Instructor not found");
 
+            if (!course.OrganizationId.HasValue ||
+                !instructor.OrganizationId.HasValue ||
+                course.OrganizationId.Value != instructor.OrganizationId.Value)
+            {
+                return new ServiceResponse(false, "Instructor must belong to the same organization as the course");
+            }
+
             if (!isAdmin)
             {
                 var currentUser = await UserManagment.GetUserById(currentUserId);
                 if (currentUser?.OrganizationId.HasValue != true ||
                     course.OrganizationId != currentUser.OrganizationId ||
-                    instructor.OrganizationId != currentUser.OrganizationId)
+                    course.OrganizationId != currentUser.OrganizationId)
                 {
                     return new ServiceResponse(false, "You can assign only instructors from your organization to your courses");
                 }
@@ -320,12 +327,19 @@ namespace Application.Services.Implementitions
                 if (string.IsNullOrWhiteSpace(userId))
                     return [];
 
+                var instructor = await UserManagment.GetUserById(userId);
+                if (instructor?.OrganizationId.HasValue != true)
+                    return [];
+
                 var assignedCourseIds = (await SessionManagment.GetAllAsync())
                     .Where(s => s.TrainerId == userId)
                     .Select(s => s.CourseId)
                     .ToHashSet();
 
-                return courses.Where(c => c.InstructorId == userId || assignedCourseIds.Contains(c.Id)).ToList();
+                return courses
+                    .Where(c => c.OrganizationId == instructor.OrganizationId &&
+                        (c.InstructorId == userId || assignedCourseIds.Contains(c.Id)))
+                    .ToList();
             }
 
             return courses;
@@ -808,16 +822,59 @@ namespace Application.Services.Implementitions
             return user?.FullName ?? user?.UserName ?? user?.Email ?? "Unknown user";
         }
 
-        public async Task<ServiceResponse> AddSession(CreateSession session)
+        public async Task<ServiceResponse> AddSession(
+            CreateSession session,
+            string currentUserId,
+            bool isAdmin,
+            bool isOrganizationAdmin,
+            bool isInstructor)
         {
             if (session == null)
                 return new ServiceResponse { success = false, message = "Invalid session data" };
+            if (session.CourseId == Guid.Empty)
+                return new ServiceResponse { success = false, message = "CourseId is required" };
+            if (string.IsNullOrWhiteSpace(currentUserId))
+                return new ServiceResponse { success = false, message = "Authenticated user is required" };
+
             var course = await CoursesManagment.GetByIdAsync(session.CourseId);
             if (course == null || course.IsDeleted)
                 return new ServiceResponse { success = false, message = "Course not found" };
+
+            var currentUser = await UserManagment.GetUserById(currentUserId);
+            if (currentUser == null)
+                return new ServiceResponse { success = false, message = "Authenticated user was not found" };
+
+            if (isInstructor)
+            {
+                if (!currentUser.OrganizationId.HasValue ||
+                    !course.OrganizationId.HasValue ||
+                    currentUser.OrganizationId.Value != course.OrganizationId.Value)
+                {
+                    return new ServiceResponse { success = false, message = "You can add sessions only to courses inside your organization" };
+                }
+
+                if (!string.Equals(course.InstructorId, currentUserId, StringComparison.Ordinal))
+                    return new ServiceResponse { success = false, message = "You can add sessions only to courses assigned to you" };
+            }
+            else if (isOrganizationAdmin)
+            {
+                if (!currentUser.OrganizationId.HasValue ||
+                    !course.OrganizationId.HasValue ||
+                    currentUser.OrganizationId.Value != course.OrganizationId.Value)
+                {
+                    return new ServiceResponse { success = false, message = "You can add sessions only to courses inside your organization" };
+                }
+            }
+            else if (!isAdmin)
+            {
+                return new ServiceResponse { success = false, message = "You are not allowed to add sessions" };
+            }
+
+            if (string.IsNullOrWhiteSpace(course.InstructorId))
+                return new ServiceResponse { success = false, message = "Assign an instructor to the course before adding sessions" };
+
             var mappedSession = mapper.Map<Session>(session);
-            if (string.IsNullOrWhiteSpace(mappedSession.TrainerId) && !string.IsNullOrWhiteSpace(course.InstructorId))
-                mappedSession.TrainerId = course.InstructorId;
+            mappedSession.TrainerId = course.InstructorId;
             mappedSession.Date= DateTime .Today;
             var duration = GetVideoDuration(session.File);
             mappedSession.Duration = duration.TotalMinutes;
@@ -835,24 +892,24 @@ namespace Application.Services.Implementitions
             {
                 mappedSession.FileUrl = string.Empty;
             }
-            List<AttendanceRecord> attendances=new List<AttendanceRecord>();
-            var enrolled = await EnrollmentManagment.GetAllAsync();
-            enrolled = enrolled.Where(c=>c.CourseId== mappedSession.CourseId);
-            var added = new AttendanceRecord
-            {
-                SessionId = mappedSession.Id,
-
-                Attended = false
-            };
-            foreach (var attendance in enrolled)
-            {
-                added.StudentId = attendance.StudentId;
-                attendances.Add(added);
-            }
-            var addattendance = attendencemanagment.MassAdd(attendances);
             var result = await SessionManagment.AddAsync(mappedSession);
             if (result == null)
                 return new ServiceResponse { success = false, message = "Failed to add session" };
+
+            var enrolled = (await EnrollmentManagment.GetAllAsync())
+                .Where(enrollment => enrollment.CourseId == mappedSession.CourseId);
+            var attendances = enrolled
+                .Select(enrollment => new AttendanceRecord
+                {
+                    SessionId = mappedSession.Id,
+                    StudentId = enrollment.StudentId,
+                    Attended = false
+                })
+                .ToList();
+
+            if (attendances.Count > 0)
+                await attendencemanagment.MassAdd(attendances);
+
             return new ServiceResponse { success = true, message = "Session added successfully" };
 
         }

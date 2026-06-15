@@ -30,16 +30,17 @@ export default function InstructorSessionsPage() {
 
   async function addSession(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     try {
       await courseService.addSession(form);
-      showToast({ title: "Session added", message: "The session was added to your assigned course.", tone: "success" });
-      event.currentTarget.reset();
     } catch (error) {
       showToast({ title: "Session failed", message: error instanceof Error ? error.message : "Could not add session to this course.", tone: "error" });
       return;
     }
 
+    showToast({ title: "Session added", message: "The session was added to your assigned course.", tone: "success" });
+    formElement?.reset();
     instructorService.getSessions().then(setSessions).catch(() => undefined);
   }
 
@@ -74,7 +75,7 @@ export default function InstructorSessionsPage() {
           <div className="mt-5 grid gap-4 lg:grid-cols-2">
             <label className="block">
               <span className="text-sm font-semibold text-ink">Course</span>
-              <select name="Course" className="mt-2 h-12 w-full rounded-xl bg-slate-50 px-4 text-sm outline-none ring-1 ring-slate-200 focus:ring-teal-500" required disabled={courses.length === 0}>
+              <select name="CourseId" className="mt-2 h-12 w-full rounded-xl bg-slate-50 px-4 text-sm outline-none ring-1 ring-slate-200 focus:ring-teal-500" required disabled={courses.length === 0}>
                 <option value="">Select course</option>
                 {courses.map((course) => <option key={course.id} value={course.id}>{course.name}</option>)}
               </select>

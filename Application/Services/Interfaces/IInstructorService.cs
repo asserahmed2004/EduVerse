@@ -6,6 +6,7 @@ namespace Application.Services.Interfaces
 {
     public interface IInstructorService
     {
+        Task<ServiceResponse> GetMyCoursesAsync(string instructorId);
         Task<ServiceResponse> GetOverviewAsync(string instructorId);
         Task<ServiceResponse> GetSessionsAsync(string instructorId);
         Task<ServiceResponse> GetStudentsAsync(string instructorId);

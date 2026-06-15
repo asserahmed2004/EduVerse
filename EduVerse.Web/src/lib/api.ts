@@ -14,6 +14,7 @@ import type {
   CourseSession,
   DashboardStats,
   GlobalSearchResult,
+  InstructorCourse,
   InstructorOverview,
   InstructorSession,
   InstructorStudent,
@@ -631,6 +632,19 @@ function normalizeInstructorSession(item: any): InstructorSession {
   };
 }
 
+function normalizeInstructorCourse(item: any): InstructorCourse {
+  return {
+    courseId: item.courseId ?? item.CourseId ?? "",
+    name: item.name ?? item.Name ?? "",
+    title: item.title ?? item.Title ?? item.name ?? item.Name ?? "",
+    organizationId: item.organizationId ?? item.OrganizationId ?? "",
+    organizationName: item.organizationName ?? item.OrganizationName ?? "EduVerseOrganization",
+    studentsCount: item.studentsCount ?? item.StudentsCount ?? 0,
+    sessionsCount: item.sessionsCount ?? item.SessionsCount ?? 0,
+    assignmentsCount: item.assignmentsCount ?? item.AssignmentsCount ?? 0
+  };
+}
+
 function normalizeInstructorSubmission(item: any): InstructorSubmission {
   return {
     submissionId: item.submissionId ?? item.SubmissionId,
@@ -1029,6 +1043,11 @@ export const studentService = {
 };
 
 export const instructorService = {
+  async getMyCourses(): Promise<InstructorCourse[]> {
+    const response = await api.get("/Instructor/MyCourses");
+    return (unwrapData(response.data) ?? []).map(normalizeInstructorCourse);
+  },
+
   async getOverview(): Promise<InstructorOverview> {
     const response = await api.get("/Instructor/Overview");
     return normalizeInstructorOverview(response.data);

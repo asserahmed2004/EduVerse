@@ -1,7 +1,7 @@
 "use client";
 
-import { FileText, Upload } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
+import { BookOpen, FileText, Upload } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
 import { useToast } from "@/components/toast-provider";
@@ -10,13 +10,46 @@ import { studentService } from "@/lib/api";
 import type { StudentAssignment } from "@/lib/types";
 import { cn, formatDate, gradeTextColor } from "@/lib/utils";
 
+function AssignmentCard({ assignment, onSubmit }: { assignment: StudentAssignment; onSubmit: (assignment: StudentAssignment) => void }) {
+  const hasSubmission = Boolean(assignment.submittedAt) || ["Submitted", "Pending", "Late", "Graded"].includes(assignment.submissionStatus);
+
+  return (
+    <article className="rounded-xl2 bg-white p-5 shadow-soft ring-1 ring-slate-100 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg">
+      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+        <div>
+          <Badge tone={assignment.submissionStatus === "Graded" ? "teal" : assignment.submissionStatus === "Missing" || assignment.submissionStatus === "Late" ? "coral" : "amber"}>{assignment.submissionStatus}</Badge>
+          <h3 className="mt-3 text-lg font-bold text-ink">{assignment.title}</h3>
+          <p className="mt-1 text-sm text-muted">{assignment.sessionTitle} - Session {assignment.sessionNumber}</p>
+          <p className="mt-2 text-sm text-muted">{assignment.description}</p>
+          <p className="mt-2 text-xs font-semibold text-muted">Due: {assignment.dueDate ? formatDate(assignment.dueDate) : "Not set"}</p>
+          {assignment.submissionStatus === "Graded" && (
+            <div className="mt-3 rounded-xl bg-teal-50 p-3 ring-1 ring-teal-100">
+              <p className={cn("text-sm font-bold", gradeTextColor(assignment.grade))}>Grade: {assignment.grade ?? "Not available"} / 100</p>
+              <p className="mt-1 whitespace-pre-wrap text-sm text-muted">Feedback: {assignment.feedback?.trim() || "No feedback provided."}</p>
+            </div>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {hasSubmission && <LinkButton href={`/assignments/${assignment.assignmentId}`} variant="ghost">View details</LinkButton>}
+          <Button onClick={() => onSubmit(assignment)} variant="ghost">{hasSubmission ? "Resubmit" : "Submit"}</Button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
 export default function StudentAssignmentsPage() {
   const { showToast } = useToast();
   const [assignments, setAssignments] = useState<StudentAssignment[]>([]);
   const [selected, setSelected] = useState<StudentAssignment | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const pending = assignments.filter((item) => item.submissionStatus === "Not Submitted" || item.submissionStatus === "Missing").length;
+  const pending = assignments.filter((item) => item.submissionStatus === "Not Submitted" || item.submissionStatus === "Missing" || item.submissionStatus === "Pending").length;
+  const groupedAssignments = useMemo(() => assignments.reduce<Record<string, StudentAssignment[]>>((groups, assignment) => {
+    const courseKey = assignment.courseId || assignment.courseName;
+    (groups[courseKey] ??= []).push(assignment);
+    return groups;
+  }, {}), [assignments]);
 
   async function load(notifyOnError = true) {
     setLoading(true);
@@ -69,35 +102,34 @@ export default function StudentAssignmentsPage() {
           <StatCard label="Graded" value={`${assignments.filter((item) => item.submissionStatus === "Graded").length}`} icon={FileText} accent="coral" />
         </div>
 
-        <section className="mt-8 space-y-4">
+        <section className="mt-8">
           {loading ? <LoadingState label="Loading assignments" /> : assignments.length === 0 ? (
             <EmptyState title="No assignments yet" description="Assignments will appear after you enroll in courses with sessions." />
-          ) : assignments.map((assignment) => (
-            <article key={assignment.assignmentId} className="rounded-xl2 bg-white p-5 shadow-soft ring-1 ring-slate-100">
-              <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-                <div>
-                  <div className="flex flex-wrap gap-2">
-                    <Badge tone={assignment.submissionStatus === "Graded" ? "teal" : assignment.submissionStatus === "Missing" || assignment.submissionStatus === "Late" ? "coral" : "amber"}>{assignment.submissionStatus}</Badge>
-                    <Badge tone="slate">{assignment.courseName}</Badge>
-                  </div>
-                  <h2 className="mt-3 text-lg font-bold text-ink">{assignment.title}</h2>
-                  <p className="mt-1 text-sm text-muted">{assignment.sessionTitle} - Session {assignment.sessionNumber}</p>
-                  <p className="mt-2 text-sm text-muted">{assignment.description}</p>
-                  <p className="mt-2 text-xs font-semibold text-muted">Due: {assignment.dueDate ? formatDate(assignment.dueDate) : "Not set"}</p>
-                  {assignment.submissionStatus === "Graded" && (
-                    <div className="mt-3 rounded-xl bg-teal-50 p-3 ring-1 ring-teal-100">
-                      <p className={cn("text-sm font-bold", gradeTextColor(assignment.grade))}>Grade: {assignment.grade ?? "Not available"} / 100</p>
-                      <p className="mt-1 whitespace-pre-wrap text-sm text-muted">Feedback: {assignment.feedback?.trim() || "No feedback provided."}</p>
+          ) : (
+            <div className="space-y-10">
+              {Object.entries(groupedAssignments).map(([courseKey, courseAssignments]) => (
+                <section key={courseKey} className="border-b border-slate-200 pb-10 last:border-0 last:pb-0">
+                  <header className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                    <div className="flex items-center gap-3">
+                      <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-teal-50 text-teal-600 shadow-sm">
+                        <BookOpen size={20} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold uppercase text-teal-600">Course assignments</p>
+                        <h2 className="mt-1 text-xl font-black text-ink">{courseAssignments[0].courseName} Assignments</h2>
+                      </div>
                     </div>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {assignment.submittedAt && <LinkButton href={`/assignments/${assignment.assignmentId}`} variant="ghost">View details</LinkButton>}
-                  <Button onClick={() => setSelected(assignment)} variant="ghost">{assignment.submittedAt ? "Resubmit" : "Submit"}</Button>
-                </div>
-              </div>
-            </article>
-          ))}
+                    <Badge tone="slate">{courseAssignments.length} {courseAssignments.length === 1 ? "assignment" : "assignments"}</Badge>
+                  </header>
+                  <div className="grid gap-4">
+                    {courseAssignments.map((assignment) => (
+                      <AssignmentCard key={assignment.assignmentId} assignment={assignment} onSubmit={setSelected} />
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+          )}
         </section>
 
         {selected && (
