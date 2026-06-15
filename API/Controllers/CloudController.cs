@@ -35,6 +35,7 @@ namespace API.Controllers
                 Folder = Folder
             };
             var result = await cloudService.GetFileAsync(details);
+            Response.Headers.Add("Accept-Ranges", "bytes");
             if (result != null)
                 return File(result.FileStream , "application/octet-stream", result.Details.FileName);
             return NotFound();
