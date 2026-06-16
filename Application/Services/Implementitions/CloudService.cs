@@ -38,6 +38,12 @@ namespace Application.Services.Implementitions
             return new ServiceResponse { success = true, message = "File not found" };
         }
 
+        public async Task<string> GetCloudUrl(FileDetails details)
+        {
+            var sasurl =  container.GetBlobClient($"{details.Folder}/{details.FileName}").GenerateSasUri(Azure.Storage.Sas.BlobSasPermissions.Read, DateTimeOffset.UtcNow.AddHours(2));
+            return sasurl.ToString();
+        }
+
         public async Task<GetCloudFile> GetFileAsync(FileDetails details)
         {
             var blobClient = container.GetBlobClient($"{details.Folder}/{details.FileName}");

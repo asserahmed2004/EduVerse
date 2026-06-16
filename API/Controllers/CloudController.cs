@@ -40,6 +40,20 @@ namespace API.Controllers
                 return File(result.FileStream , "application/octet-stream", result.Details.FileName);
             return NotFound();
         }
+        [HttpGet("GetSas/{Folder}/{FileName}")]
+        public async Task<IActionResult> GEtSas(string FileName, string Folder)
+        {
+            var details = new Application.DTOs.Cloud.FileDetails
+            {
+                FileName = FileName,
+                Folder = Folder
+            };
+            var result = await cloudService.GetCloudUrl(details);
+            Response.Headers.Add("Accept-Ranges", "bytes");
+            if (result != null)
+                return Ok(result);
+            return NotFound();
+        }
         [HttpDelete("Delete/{Folder}/{FileName}")]
         [Authorize(Roles = AppRoles.AdminOrOrganizationAdmin)]
         public async Task<IActionResult> DeletePhoto(string FileName, string Folder)

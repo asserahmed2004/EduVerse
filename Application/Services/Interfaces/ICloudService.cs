@@ -13,5 +13,6 @@ namespace Application.Services.Interfaces
         public Task<ServiceResponse> UploadFileAsync(AddCloudFile cloudFile);
         public Task<GetCloudFile> GetFileAsync(FileDetails details);
         public Task<ServiceResponse> DeleteFileAsync(FileDetails details);
+        public Task<string> GetCloudUrl(FileDetails details);
     }
 }
