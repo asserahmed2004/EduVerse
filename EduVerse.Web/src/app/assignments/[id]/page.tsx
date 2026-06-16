@@ -1,10 +1,11 @@
 "use client";
 
-import { ArrowLeft, CheckCircle2, FileText } from "lucide-react";
+import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
+import { FileActionButtons } from "@/components/file-actions";
 import { Badge, EmptyState, LinkButton, LoadingState, PageHeader } from "@/components/ui";
 import { studentService } from "@/lib/api";
 import type { StudentAssignment, StudentSubmission } from "@/lib/types";
@@ -72,10 +73,10 @@ export default function StudentSubmissionDetailsPage() {
                 <p className="whitespace-pre-wrap text-sm leading-6 text-ink">{submission.textAnswer?.trim() || "No text answer was submitted."}</p>
               </div>
               {submission.fileUrl ? (
-                <a href={submission.fileUrl} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-teal-600">
-                  <FileText size={17} />
-                  Open submitted file
-                </a>
+                <div className="mt-4">
+                  <p className="text-sm font-semibold text-ink">Submitted file</p>
+                  <FileActionButtons url={submission.fileUrl} className="mt-3" previewLabel="Open file" downloadLabel="Download file" />
+                </div>
               ) : (
                 <p className="mt-4 text-sm text-muted">No file was submitted.</p>
               )}

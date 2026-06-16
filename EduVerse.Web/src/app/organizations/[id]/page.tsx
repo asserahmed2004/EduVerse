@@ -105,7 +105,7 @@ export default function OrganizationDetailsPage() {
 
               <Panel title="Recent payments" icon={CreditCard}>
                 {details.recentPayments?.length ? details.recentPayments.map((item) => (
-                  <Row key={`${item.courseId}-${item.studentId}-${item.submittingDate}`} title={item.courseName ?? item.courseId} meta={`${item.studentEmail ?? item.studentId} - ${item.paymentStatus}`} value={formatCurrency(item.totalPrice)} />
+                  <Row key={`${item.courseId}-${item.studentId}-${item.submittingDate}`} title={item.courseName ?? "Unknown course"} meta={`${item.studentEmail ?? item.studentId} - ${item.paymentStatus}`} value={formatCurrency(item.totalPrice)} />
                 )) : <Muted>No recent payments yet</Muted>}
               </Panel>
             </section>

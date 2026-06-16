@@ -1,21 +1,30 @@
+"use client";
+
 import { ArrowRight, BookOpen, CheckCircle2, GraduationCap, ShieldCheck, Sparkles } from "lucide-react";
+import { useEffect, useState } from "react";
+import { BrandLogo } from "@/components/brand-logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { TrendingCoursesSection } from "@/components/trending-courses-section";
 import { LinkButton, StatCard } from "@/components/ui";
+import { getDashboardPath, getStoredUser, getToken } from "@/lib/auth";
+import type { AuthUser } from "@/lib/types";
 
 export default function LandingPage() {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const dashboardHref = getDashboardPath(user?.role);
+
+  useEffect(() => {
+    const token = getToken();
+    const storedUser = getStoredUser();
+    setUser(token && storedUser ? storedUser : null);
+    setAuthChecked(true);
+  }, []);
+
   return (
     <main>
       <header className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 lg:px-8">
-        <div className="flex items-center gap-3">
-          <div className="grid size-11 place-items-center rounded-xl bg-ink text-white">
-            <GraduationCap size={22} />
-          </div>
-          <div>
-            <p className="text-lg font-bold text-ink">EduVerse</p>
-            <p className="text-xs text-muted">Modern LMS</p>
-          </div>
-        </div>
+        <BrandLogo imageClassName="h-14 max-w-44" />
         <nav className="hidden items-center gap-7 text-sm font-semibold text-muted md:flex">
           <a href="#courses" className="hover:text-ink">Courses</a>
           <a href="#platform" className="hover:text-ink">Platform</a>
@@ -23,8 +32,17 @@ export default function LandingPage() {
         </nav>
         <div className="flex items-center gap-3">
           <ThemeToggle />
-          <LinkButton href="/login" variant="ghost">Login</LinkButton>
-          <LinkButton href="/register" className="hidden sm:inline-flex">Join now</LinkButton>
+          {!authChecked ? null : user ? (
+            <>
+              <LinkButton href={dashboardHref} variant="ghost">Dashboard</LinkButton>
+              <LinkButton href="/profile" className="hidden sm:inline-flex">Profile</LinkButton>
+            </>
+          ) : (
+            <>
+              <LinkButton href="/login" variant="ghost">Login</LinkButton>
+              <LinkButton href="/register" className="hidden sm:inline-flex">Join now</LinkButton>
+            </>
+          )}
         </div>
       </header>
 
@@ -34,9 +52,8 @@ export default function LandingPage() {
             <Sparkles size={16} />
             Learn, track, pay, and certify in one place
           </div>
-          <h1 className="mt-6 max-w-3xl text-5xl font-bold leading-tight tracking-normal text-ink lg:text-6xl">
-            EduVerse
-          </h1>
+          <h1 className="sr-only">EduVerse</h1>
+          <BrandLogo className="mt-6" imageClassName="h-24 max-w-full sm:h-28 lg:h-32" />
           <p className="mt-5 max-w-2xl text-lg leading-8 text-muted">
             A responsive LMS experience for students, instructors, and admins with courses, enrollments, certificates, payments, and dashboards built around your backend API.
           </p>
@@ -44,7 +61,7 @@ export default function LandingPage() {
             <LinkButton href="/courses">
               Explore courses <ArrowRight size={18} />
             </LinkButton>
-            <LinkButton href="/dashboard/student" variant="ghost">Open dashboard</LinkButton>
+            {authChecked && <LinkButton href={user ? dashboardHref : "/login"} variant="ghost">Open dashboard</LinkButton>}
           </div>
           <div className="mt-9 grid gap-4 sm:grid-cols-3">
             <StatCard label="Courses" value="120+" icon={BookOpen} />

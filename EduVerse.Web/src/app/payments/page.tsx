@@ -82,7 +82,7 @@ export default function PaymentsPage() {
     const headers = ["student", "course", "amount", "status", "method", "provider", "date", "reference"];
     const rows = payments.map((payment) => [
       payment.studentEmail ?? payment.studentName ?? payment.studentId,
-      payment.courseName ?? payment.courseId,
+      payment.courseName ?? "Unknown course",
       payment.totalPrice,
       payment.paymentStatus,
       payment.paymentMethod,
@@ -166,7 +166,7 @@ export default function PaymentsPage() {
                   <tbody>
                     {payments.map((payment) => (
                       <tr key={`${payment.courseId}-${payment.studentId}-${payment.merchantOrderId}-${payment.submittingDate}`} className="border-b border-slate-100 last:border-0">
-                        <td className="px-5 py-4 text-sm font-semibold text-ink">{payment.courseName ?? payment.courseId}</td>
+                        <td className="px-5 py-4 text-sm font-semibold text-ink">{payment.courseName ?? "Unknown course"}</td>
                         <td className="px-5 py-4 text-sm text-muted">{payment.studentEmail ?? payment.studentName ?? payment.studentId}</td>
                         <td className="px-5 py-4 text-sm text-ink">{formatCurrency(payment.totalPrice)}</td>
                         <td className="px-5 py-4 text-sm capitalize text-muted">{payment.paymentMethod}</td>

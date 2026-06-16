@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { getStoredUser, getToken } from "@/lib/auth";
+import { getDashboardPath, getStoredUser, getToken } from "@/lib/auth";
 import type { UserRole } from "@/lib/types";
 import { LoadingState } from "./ui";
 
@@ -20,7 +20,7 @@ export function AuthGuard({ children, roles }: { children: React.ReactNode; role
     }
 
     if (roles?.length && user && !roles.includes(user.role)) {
-      router.replace(user.role === "Admin" ? "/admin" : user.role === "OrganizationAdmin" ? "/dashboard/organization" : user.role === "Instructor" ? "/dashboard/instructor" : "/dashboard/student");
+      router.replace(getDashboardPath(user.role));
       return;
     }
 

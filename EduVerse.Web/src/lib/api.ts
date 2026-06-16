@@ -13,6 +13,7 @@ import type {
   CourseProgress,
   CourseSession,
   DashboardStats,
+  Enrollment,
   GlobalSearchResult,
   InstructorCourse,
   InstructorOverview,
@@ -45,6 +46,37 @@ import type {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5153";
 
+function isCloudGetUrl(value: string) {
+  try {
+    const url = new URL(value, API_BASE_URL);
+    return /\/Cloud\/Get\//i.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function withDownloadPreference(value: string, download: boolean) {
+  try {
+    const url = new URL(value, API_BASE_URL);
+    if (isCloudGetUrl(url.toString())) {
+      url.searchParams.set("download", String(download));
+    }
+    return url.toString();
+  } catch {
+    return value;
+  }
+}
+
+function inferFileName(value: string) {
+  try {
+    const url = new URL(value, API_BASE_URL);
+    const segments = url.pathname.split("/").filter(Boolean);
+    return decodeURIComponent(segments[segments.length - 1] ?? "download");
+  } catch {
+    return "download";
+  }
+}
+
 function readSuccessFlag(data: any): boolean | undefined {
   if (!data || typeof data !== "object" || Array.isArray(data)) return undefined;
 
@@ -76,6 +108,36 @@ function readResponseMessage(data: any): string | undefined {
 export function getApiErrorMessage(error: unknown, fallbackMessage = "Request failed."): string {
   const responseData = (error as { response?: { data?: any } })?.response?.data;
   return readResponseMessage(responseData) ?? (error instanceof Error ? error.message : fallbackMessage);
+}
+
+export function getPreviewFileUrl(value?: string) {
+  if (!value) return undefined;
+  return withDownloadPreference(value, false);
+}
+
+export function getDownloadFileUrl(value?: string) {
+  if (!value) return undefined;
+  return withDownloadPreference(value, true);
+}
+
+export function openFile(value?: string) {
+  const url = getPreviewFileUrl(value);
+  if (!url || typeof window === "undefined") return;
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+export function downloadFile(value?: string, fileName?: string) {
+  const url = getDownloadFileUrl(value);
+  if (!url || typeof document === "undefined") return;
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.download = fileName ?? inferFileName(url);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 }
 
 export const api = axios.create({
@@ -582,6 +644,23 @@ function normalizeStudentSubmission(item: any): StudentSubmission {
   };
 }
 
+function normalizeEnrollment(item: any): Enrollment {
+  const value = unwrapData(item) ?? {};
+
+  return {
+    courseId: value.courseId ?? value.CourseId ?? value.id ?? value.Id ?? "",
+    courseName: value.courseName ?? value.CourseName ?? value.name ?? value.Name ?? "Course",
+    enrollmentDate: value.enrollmentDate ?? value.EnrollmentDate ?? new Date().toISOString(),
+    progression: value.progression ?? value.Progression ?? value.progressPercentage ?? value.ProgressPercentage ?? 0,
+    progressPercentage: value.progressPercentage ?? value.ProgressPercentage ?? value.progression ?? value.Progression ?? 0,
+    isCompleted: value.isCompleted ?? value.IsCompleted ?? Boolean(value.graduationDate ?? value.GraduationDate),
+    completedAt: value.completedAt ?? value.CompletedAt,
+    graduationDate: value.graduationDate ?? value.GraduationDate,
+    fileUrl: value.fileUrl ?? value.FileUrl,
+    certificateCode: value.certificateCode ?? value.CertificateCode
+  };
+}
+
 function normalizeCourseProgress(data: any): CourseProgress {
   const value = unwrapData(data);
   return {
@@ -941,18 +1020,12 @@ export const courseService = {
 export const studentService = {
   async getEnrollments() {
     const response = await api.get("/User/my-enrolled-courses");
-    return (response.data as any[]).map((item) => ({
-      courseId: item.courseId ?? item.CourseId ?? item.id ?? item.Id,
-      courseName: item.courseName ?? item.CourseName ?? item.name ?? item.Name,
-      enrollmentDate: item.enrollmentDate ?? item.EnrollmentDate ?? new Date().toISOString(),
-      progression: item.progression ?? item.Progression ?? 0,
-      progressPercentage: item.progressPercentage ?? item.ProgressPercentage ?? item.progression ?? item.Progression ?? 0,
-      isCompleted: item.isCompleted ?? item.IsCompleted ?? Boolean(item.graduationDate ?? item.GraduationDate),
-      completedAt: item.completedAt ?? item.CompletedAt,
-      graduationDate: item.graduationDate ?? item.GraduationDate,
-      fileUrl: item.fileUrl ?? item.FileUrl,
-      certificateCode: item.certificateCode ?? item.CertificateCode
-    }));
+    return (response.data as any[]).map(normalizeEnrollment);
+  },
+
+  async getEnrollment(courseId: string): Promise<Enrollment> {
+    const response = await api.get(`/User/my-enrollment/${courseId}`);
+    return normalizeEnrollment(response.data);
   },
 
   async getCertificates() {

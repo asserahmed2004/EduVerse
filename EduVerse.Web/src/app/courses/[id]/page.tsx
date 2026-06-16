@@ -1,15 +1,16 @@
 "use client";
 
-import { Award, BookOpen, CheckCircle2, Clock, CreditCard, ExternalLink, Link as LinkIcon, Star, Users } from "lucide-react";
+import { Award, BookOpen, CheckCircle2, Clock, CreditCard, ExternalLink, FileText, Link as LinkIcon, Star, Users } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
+import { FileActionButtons } from "@/components/file-actions";
 import { useToast } from "@/components/toast-provider";
 import { RecommendationSection } from "@/components/recommendation-section";
 import { Badge, Button, EmptyState, LoadingState, PageHeader, ProgressBar } from "@/components/ui";
 import { courseService, studentService } from "@/lib/api";
 import { getStoredUser } from "@/lib/auth";
-import type { Course, CourseAdminDetails, CourseProgress } from "@/lib/types";
+import type { Course, CourseAdminDetails, CourseProgress, Enrollment } from "@/lib/types";
 import { cn, formatCurrency, formatDate, gradeTextColor } from "@/lib/utils";
 
 export default function CourseDetailsPage() {
@@ -27,8 +28,14 @@ export default function CourseDetailsPage() {
   const [certificateLoading, setCertificateLoading] = useState(false);
   const [progress, setProgress] = useState<CourseProgress | null>(null);
   const [progressError, setProgressError] = useState("");
+  const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
+  const [enrollmentLoading, setEnrollmentLoading] = useState(false);
+  const [enrollmentError, setEnrollmentError] = useState("");
   const user = getStoredUser();
   const canViewAdminDetails = user?.role === "Admin" || user?.role === "OrganizationAdmin" || user?.role === "Instructor";
+  const isStudent = user?.role === "Student";
+  const isEnrolled = Boolean(enrollment) || Boolean(progress);
+  const studentEnrollmentCheckLoading = Boolean(isStudent && (enrollmentLoading || progressLoading));
 
   useEffect(() => {
     let cancelled = false;
@@ -118,25 +125,62 @@ export default function CourseDetailsPage() {
   }, [courseId, canViewAdminDetails]);
 
   useEffect(() => {
-    if (user?.role !== "Student") return;
+    if (!isStudent) return;
 
+    let cancelled = false;
+
+    setEnrollmentLoading(true);
+    setEnrollment(null);
+    setEnrollmentError("");
     setProgressLoading(true);
+    setProgress(null);
     setProgressError("");
+
+    studentService.getEnrollment(courseId)
+      .then((data) => {
+        if (!cancelled) setEnrollment(data);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        const status = (error as { response?: { status?: number } })?.response?.status;
+        setEnrollment(null);
+        if (status !== 404) {
+          setEnrollmentError("We could not verify your enrollment status. Please refresh before purchasing.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setEnrollmentLoading(false);
+      });
+
     studentService.getCourseProgress(courseId)
-      .then(setProgress)
+      .then((data) => {
+        if (!cancelled) setProgress(data);
+      })
       .catch(() => {
+        if (cancelled) return;
         setProgress(null);
         setProgressError("Progress is unavailable. Enroll in this course or try again later.");
       })
-      .finally(() => setProgressLoading(false));
-  }, [courseId, user?.role]);
+      .finally(() => {
+        if (!cancelled) setProgressLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [courseId, isStudent]);
 
   async function enrollFree() {
+    if (isEnrolled) {
+      showToast({ title: "Already enrolled", message: "You are already enrolled in this course.", tone: "success" });
+      return;
+    }
+
     setEnrollLoading(true);
     try {
       const result = await studentService.enrollFree(courseId);
       showToast({ title: "Enrollment complete", message: result.message ?? "You are enrolled in this free course.", tone: "success" });
+      const refreshedEnrollment = await studentService.getEnrollment(courseId).catch(() => null);
       const refreshed = await studentService.getCourseProgress(courseId).catch(() => null);
+      if (refreshedEnrollment) setEnrollment(refreshedEnrollment);
       if (refreshed) setProgress(refreshed);
     } catch (error) {
       showToast({ title: "Enrollment failed", message: error instanceof Error ? error.message : "Could not enroll in this course.", tone: "error" });
@@ -169,6 +213,11 @@ export default function CourseDetailsPage() {
   }
 
   async function pay(method: "card" | "wallet") {
+    if (isEnrolled) {
+      showToast({ title: "Already enrolled", message: "You already own this course. Continue learning from the course content section.", tone: "success" });
+      return;
+    }
+
     setPaymentLoading(true);
     try {
       const redirectUrl = await studentService.createPayment(courseId, method);
@@ -180,6 +229,10 @@ export default function CourseDetailsPage() {
     } finally {
       setPaymentLoading(false);
     }
+  }
+
+  function scrollToProgress() {
+    document.getElementById("course-progress")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   if (loading) {
@@ -224,18 +277,46 @@ export default function CourseDetailsPage() {
           <p className="text-sm font-semibold text-muted">Course price</p>
           <p className="mt-2 text-4xl font-bold text-ink">{course.price <= 0 ? "Free" : formatCurrency(course.price)}</p>
           <div className="mt-5 space-y-3 text-sm text-muted">
-            <p><span className="font-bold text-ink">Course Id:</span> {course.id}</p>
             <p><span className="font-bold text-ink">Organization:</span> {course.organizationName ?? course.organizationOwnerName ?? "EduVerseOrganization"}</p>
             <p><span className="font-bold text-ink">Instructor:</span> {course.instructorName ?? "Unassigned"}</p>
             {course.isDeleted && <p><span className="font-bold text-ink">Deleted:</span> {course.deletedAt ? formatDate(course.deletedAt) : "Not recorded"} by {course.deletedByName ?? "Unknown"}</p>}
             {adminDetails?.restoredAt && <p><span className="font-bold text-ink">Restored:</span> {formatDate(adminDetails.restoredAt)} by {adminDetails.restoredByName ?? "Unknown"}</p>}
           </div>
-          {user?.role === "Student" && !course.isDeleted && (
+          {isStudent && !course.isDeleted && (
             <div className="mt-6 grid gap-3">
-              {course.price <= 0 ? (
+              {studentEnrollmentCheckLoading ? (
+                <Button disabled>
+                  <CheckCircle2 size={18} />
+                  Checking enrollment...
+                </Button>
+              ) : isEnrolled ? (
+                <div className="rounded-xl bg-teal-50 p-4 ring-1 ring-teal-100">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle2 size={20} className="mt-0.5 shrink-0 text-teal-600" />
+                    <div>
+                      <p className="font-bold text-ink">You are already enrolled in this course</p>
+                      <p className="mt-1 text-sm text-muted">Continue learning, view sessions, and track your course progress below.</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-2">
+                    <Button onClick={scrollToProgress}>
+                      <BookOpen size={18} />
+                      Continue Learning
+                    </Button>
+                    <Button variant="ghost" onClick={scrollToProgress}>
+                      <CheckCircle2 size={18} />
+                      View Progress
+                    </Button>
+                  </div>
+                </div>
+              ) : enrollmentError ? (
+                <div className="rounded-xl bg-amber-50 p-4 text-sm font-semibold text-amber-700 ring-1 ring-amber-100">
+                  {enrollmentError}
+                </div>
+              ) : course.price <= 0 ? (
                 <Button onClick={enrollFree} disabled={enrollLoading || Boolean(progress)}>
                   <CheckCircle2 size={18} />
-                  {progress ? "Already enrolled" : enrollLoading ? "Enrolling..." : "Enroll for free"}
+                  {enrollLoading ? "Enrolling..." : "Enroll for free"}
                 </Button>
               ) : (
                 <>
@@ -251,11 +332,28 @@ export default function CourseDetailsPage() {
               )}
             </div>
           )}
+          {!user && !course.isDeleted && (
+            <div className="mt-6 grid gap-3">
+              <Button onClick={() => router.push("/login")}>
+                <CreditCard size={18} />
+                Login to enroll
+              </Button>
+              <Button variant="ghost" onClick={() => router.push("/register")}>
+                <Award size={18} />
+                Create account
+              </Button>
+            </div>
+          )}
+          {user && !isStudent && !course.isDeleted && (
+            <div className="mt-6 rounded-xl bg-slate-50 p-4 text-sm font-semibold text-muted ring-1 ring-slate-100">
+              Student purchase actions are hidden for your role.
+            </div>
+          )}
         </aside>
       </div>
 
-      {user?.role === "Student" && (
-        <section className="mt-8 rounded-xl2 bg-white p-6 shadow-soft ring-1 ring-slate-100">
+      {isStudent && (
+        <section id="course-progress" className="mt-8 scroll-mt-24 rounded-xl2 bg-white p-6 shadow-soft ring-1 ring-slate-100">
           <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
             <div>
               <h2 className="text-xl font-bold text-ink">Learning progress</h2>
@@ -308,10 +406,17 @@ export default function CourseDetailsPage() {
                     </div>
 
                     <div className="mt-4 grid gap-3 md:grid-cols-2">
-                      {(session.materials ?? []).map((material) => <MaterialLink key={material.id} title={material.title} href={material.url ?? material.fileUrl ?? material.filePath ?? material.materialUrl ?? material.link} />)}
+                      {(session.materials ?? []).map((material) => (
+                        <MaterialLink
+                          key={material.id}
+                          title={material.title}
+                          fileHref={material.fileUrl ?? material.filePath}
+                          href={material.url ?? material.materialUrl ?? material.link}
+                        />
+                      ))}
                       {session.videoUrl && <LearningLink href={session.videoUrl} label="Video material" />}
                       {session.externalLink && <LearningLink href={session.externalLink} label="External link" />}
-                      {session.fileUrl ? <LearningLink href={session.fileUrl} label="Session file" /> : (session.materials ?? []).length === 0 && <NoMaterial />}
+                      {session.fileUrl ? <FileResourceCard href={session.fileUrl} title="Session file" /> : (session.materials ?? []).length === 0 && <NoMaterial />}
                     </div>
 
                     {(session.assignments ?? []).length > 0 && (
@@ -427,7 +532,20 @@ function LearningLink({ href, label }: { href: string; label: string }) {
   );
 }
 
-function MaterialLink({ href, title }: { href?: string; title: string }) {
+function FileResourceCard({ href, title }: { href: string; title: string }) {
+  return (
+    <div className="rounded-xl bg-white p-3 ring-1 ring-slate-100">
+      <span className="inline-flex items-center gap-2 text-sm font-semibold text-ink">
+        <FileText size={16} className="text-teal-600" />
+        {title}
+      </span>
+      <FileActionButtons url={href} className="mt-3" fullWidth previewLabel="Open" downloadLabel="Download" />
+    </div>
+  );
+}
+
+function MaterialLink({ href, fileHref, title }: { href?: string; fileHref?: string; title: string }) {
+  if (fileHref) return <FileResourceCard href={fileHref} title={title} />;
   if (!href) return <NoMaterial />;
 
   return (

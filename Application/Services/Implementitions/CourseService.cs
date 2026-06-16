@@ -881,7 +881,7 @@ namespace Application.Services.Implementitions
             await UpdateDuration(mappedSession.CourseId, duration.TotalMinutes);
             if (session.File != null && session.File.Length > 0)
             {
-                var fileDetails = new FileDetails { FileName = $"{mappedSession.Id}-SessionMaterial", Folder = "sessions" };
+                var fileDetails = new FileDetails { FileName = $"{mappedSession.Id}-SessionMaterial{Path.GetExtension(session.File.FileName)}", Folder = "sessions" };
                 var addCloudFile = new AddCloudFile { Details = fileDetails, File = session.File };
                 var uploadResult = await cloud.UploadFileAsync(addCloudFile);
                 if (!uploadResult.success)
@@ -932,7 +932,7 @@ namespace Application.Services.Implementitions
                 var cloudDeleteResult = await cloud.DeleteFileAsync(fileDetails);
                 if (!cloudDeleteResult.success)
                     return new ServiceResponse { success = false, message = "Failed to delete old session material from cloud" };
-                var newFileDetails = new FileDetails { FileName = $"{existingSession.Id}-SessionMaterial", Folder = "sessions" };
+                var newFileDetails = new FileDetails { FileName = $"{existingSession.Id}-SessionMaterial{Path.GetExtension(session.File.FileName)}", Folder = "sessions" };
                 var addCloudFile = new AddCloudFile { Details = newFileDetails, File = session.File };
                 var cloudUploadResult = await cloud.UploadFileAsync(addCloudFile);
                 if (!cloudUploadResult.success)
@@ -941,7 +941,6 @@ namespace Application.Services.Implementitions
             }
             existingSession.Title = session.Title;
             existingSession.TrainerId = session.TrainerId;
-            existingSession.FileUrl = $"{existingSession.Id}-SessionMaterial";
             existingSession.SessionNumber = session.SessionNumber;
 
             var updateResult = await SessionManagment.UpdateAsync(existingSession);

@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, Award, BookOpen, Building2, CalendarClock, CreditCard, FileText, GraduationCap, Home, LayoutDashboard, LogOut, Menu, Search, Settings, ShieldCheck, User, Users } from "lucide-react";
+import { Activity, Award, BookOpen, Building2, CalendarClock, CreditCard, FileText, GraduationCap, LayoutDashboard, LogOut, Menu, Search, Settings, ShieldCheck, User, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -8,6 +8,7 @@ import { clearAuth, getStoredUser } from "@/lib/auth";
 import { adminService } from "@/lib/api";
 import type { AuthUser, GlobalSearchResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { BrandLogo } from "./brand-logo";
 import { ThemeToggle } from "./theme-toggle";
 
 const navItems = [
@@ -74,14 +75,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           open ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        <Link href="/" className="flex items-center gap-3">
-          <div className="grid size-12 place-items-center rounded-2xl bg-gradient-to-br from-teal-500 to-indigo-500 text-white shadow-button">
-            <Home size={20} />
-          </div>
-          <div>
-            <p className="text-lg font-bold text-ink">EduVerse</p>
-            <p className="text-xs text-muted">Learning OS</p>
-          </div>
+        <Link href="/" className="inline-flex items-center">
+          <BrandLogo imageClassName="h-16 max-w-48" />
         </Link>
 
         <nav className="mt-10 space-y-2">

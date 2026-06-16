@@ -143,7 +143,7 @@ export default function AdminPage() {
               </Panel>
               <Panel title="Recent payments">
                 {recentPayments.length === 0 ? <Muted>No data yet</Muted> : recentPayments.map((item) => (
-                  <Row key={`${item.courseId}-${item.studentId}-${item.submittingDate}`} title={item.courseName ?? item.courseId} meta={`${item.studentEmail ?? item.studentId} - ${item.paymentStatus}`} value={formatCurrency(item.totalPrice)} />
+                  <Row key={`${item.courseId}-${item.studentId}-${item.submittingDate}`} title={item.courseName ?? "Unknown course"} meta={`${item.studentEmail ?? item.studentId} - ${item.paymentStatus}`} value={formatCurrency(item.totalPrice)} />
                 ))}
               </Panel>
               <Panel title="Recent created courses">

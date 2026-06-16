@@ -43,6 +43,13 @@ export function setStoredUser(user: AuthUser) {
   localStorage.setItem(USER_KEY, JSON.stringify(user));
 }
 
+export function getDashboardPath(role?: UserRole) {
+  if (role === "Admin") return "/admin";
+  if (role === "OrganizationAdmin") return "/dashboard/organization";
+  if (role === "Instructor") return "/dashboard/instructor";
+  return "/dashboard/student";
+}
+
 export function inferRole(value?: string): UserRole {
   const normalized = value?.toLowerCase();
   if (normalized === "admin") return "Admin";

@@ -4,6 +4,7 @@ import { CheckCircle2, FileText, Plus } from "lucide-react";
 import { FormEvent, type InputHTMLAttributes, useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
+import { FileActionButtons } from "@/components/file-actions";
 import { useToast } from "@/components/toast-provider";
 import { Badge, Button, EmptyState, LoadingState, PageHeader, StatCard } from "@/components/ui";
 import { courseService, instructorService } from "@/lib/api";
@@ -150,7 +151,15 @@ export default function InstructorAssignmentsPage() {
                         <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-ink">{submission.textAnswer || "No text answer submitted."}</p>
                       </div>
                       {(submission.fileUrl || submission.filePath) ? (
-                        <a href={submission.fileUrl ?? submission.filePath} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-sm font-bold text-teal-600">Open submission file</a>
+                        <div className="mt-4">
+                          <p className="text-sm font-semibold text-ink">Submission file</p>
+                          <FileActionButtons
+                            url={submission.fileUrl ?? submission.filePath}
+                            className="mt-3"
+                            previewLabel="Open file"
+                            downloadLabel="Download file"
+                          />
+                        </div>
                       ) : (
                         <p className="mt-3 text-sm font-semibold text-muted">No file uploaded.</p>
                       )}

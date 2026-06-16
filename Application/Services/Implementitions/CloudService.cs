@@ -51,7 +51,6 @@ namespace Application.Services.Implementitions
             {
                 var data = await blobClient.OpenReadAsync();
                 Stream stream = data;
-                var content=await blobClient.DownloadContentAsync();
                 var fileDetails = new FileDetails { FileName = details.FileName, Folder = details.Folder };
                 return new GetCloudFile { FileStream = stream, Details = fileDetails };
             }

@@ -4,6 +4,7 @@ import { Award, Download, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
+import { FileActionButtons } from "@/components/file-actions";
 import { useToast } from "@/components/toast-provider";
 import { Button, EmptyState, LinkButton, LoadingState, PageHeader, StatCard } from "@/components/ui";
 import { studentService } from "@/lib/api";
@@ -57,10 +58,13 @@ export default function CertificatesPage() {
                 <p className="mt-2 text-xs font-semibold text-muted">Code: {certificate.certificateCode ?? certificate.id}</p>
                 <p className="mt-1 text-xs font-semibold text-muted">Status: {certificate.status ?? "Valid"}</p>
                 {certificate.fileUrl ? (
-                  <LinkButton href={certificate.fileUrl} variant="ghost" className="mt-6 w-full">
-                    <Download size={18} />
-                    Download
-                  </LinkButton>
+                  <FileActionButtons
+                    url={certificate.fileUrl}
+                    className="mt-6"
+                    fullWidth
+                    previewLabel="Open certificate"
+                    downloadLabel="Download"
+                  />
                 ) : (
                   <Button variant="ghost" className="mt-6 w-full cursor-not-allowed opacity-60" disabled>
                     <Download size={18} />

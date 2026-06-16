@@ -3,17 +3,28 @@
 import { Eye, EyeOff, Lock, Mail } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
+import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui";
 import { authService } from "@/lib/api";
+import { getDashboardPath, getStoredUser, getToken } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("mohamed@test.com");
-  const [password, setPassword] = useState("Admin123!");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const token = getToken();
+    const user = getStoredUser();
+
+    if (token && user) {
+      router.replace(getDashboardPath(user.role));
+    }
+  }, [router]);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -22,7 +33,7 @@ export default function LoginPage() {
 
     try {
       const user = await authService.login({ email, password });
-      router.push(user.role === "Admin" ? "/admin" : user.role === "Instructor" ? "/dashboard/instructor" : "/dashboard/student");
+      router.push(getDashboardPath(user.role));
     } catch (error) {
       setError(error instanceof Error ? error.message : "Login failed. Check backend API, email, and password.");
     } finally {
@@ -40,7 +51,8 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={onSubmit} className="p-6 sm:p-10">
-          <p className="text-sm font-semibold text-teal-600">Login</p>
+          <BrandLogo imageClassName="h-20 max-w-56" />
+          <p className="mt-6 text-sm font-semibold text-teal-600">Login</p>
           <h2 className="mt-2 text-3xl font-bold text-ink">Access your workspace</h2>
           <p className="mt-3 text-sm text-muted">Use your EduVerse account to continue.</p>
 
