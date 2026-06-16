@@ -37,6 +37,8 @@ namespace Application.DTOs.Learning
         public string? Description { get; set; }
         public string? VideoUrl { get; set; }
         public string? ExternalLink { get; set; }
+        public bool IsDone { get; set; }
+        public DateTime? DoneAt { get; set; }
         public bool IsCompleted { get; set; }
         public DateTime? CompletedAt { get; set; }
         public IEnumerable<SessionMaterialDto> Materials { get; set; } = [];
@@ -47,10 +49,44 @@ namespace Application.DTOs.Learning
     {
         public Guid CourseId { get; set; }
         public string CourseName { get; set; } = string.Empty;
+        public int TotalSessions { get; set; }
+        public int DoneSessions { get; set; }
         public double ProgressPercentage { get; set; }
         public bool IsCompleted { get; set; }
         public DateTime? CompletedAt { get; set; }
         public IEnumerable<SessionProgressDto> Sessions { get; set; } = [];
+    }
+
+    public class ToggleSessionDoneResultDto
+    {
+        public Guid SessionId { get; set; }
+        public Guid CourseId { get; set; }
+        public bool IsDone { get; set; }
+        public DateTime? DoneAt { get; set; }
+        public int DoneSessions { get; set; }
+        public int TotalSessions { get; set; }
+        public double ProgressPercentage { get; set; }
+    }
+
+    public class AssignmentProgressDto
+    {
+        public Guid CourseId { get; set; }
+        public int TotalAssignments { get; set; }
+        public int SubmittedAssignments { get; set; }
+        public double AssignmentProgressPercentage { get; set; }
+        public int RequiredPercentage { get; set; } = 80;
+        public bool HasRequiredAssignmentProgress { get; set; }
+    }
+
+    public class CertificateEligibilityDto
+    {
+        public Guid CourseId { get; set; }
+        public double AssignmentProgressPercentage { get; set; }
+        public int RequiredPercentage { get; set; } = 80;
+        public bool HasRequiredAssignmentProgress { get; set; }
+        public bool IsCourseDurationFinished { get; set; }
+        public bool CanReceiveCertificate { get; set; }
+        public string Message { get; set; } = string.Empty;
     }
 
     public class CertificateDto

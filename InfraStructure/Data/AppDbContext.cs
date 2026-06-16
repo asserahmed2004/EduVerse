@@ -89,6 +89,24 @@ namespace InfraStructure.Data
                 .HasIndex(p => new { p.StudentId, p.SessionId })
                 .IsUnique();
 
+            modelBuilder.Entity<StudentSessionProgress>()
+                .HasOne<AppUser>()
+                .WithMany()
+                .HasForeignKey(p => p.StudentId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            modelBuilder.Entity<StudentSessionProgress>()
+                .HasOne<Course>()
+                .WithMany()
+                .HasForeignKey(p => p.CourseId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            modelBuilder.Entity<StudentSessionProgress>()
+                .HasOne<Session>()
+                .WithMany()
+                .HasForeignKey(p => p.SessionId)
+                .OnDelete(DeleteBehavior.NoAction);
+
             modelBuilder.Entity<CertificateRecord>()
                 .HasIndex(c => c.CertificateCode)
                 .IsUnique();

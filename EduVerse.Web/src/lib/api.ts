@@ -2,11 +2,13 @@ import axios from "axios";
 import { clearAuth, getCurrentUserId, getRoleFromToken, getToken, getUserIdFromToken, inferRole, isAuthenticatedStudent, setStoredUser, setToken } from "./auth";
 import type {
   ActivityLog,
+  AssignmentProgress,
   AuthUser,
   AdminAssignment,
   AdminSession,
   AdminUserDetails,
   Certificate,
+  CertificateEligibility,
   ChangePasswordPayload,
   Course,
   CourseAdminDetails,
@@ -38,6 +40,7 @@ import type {
   StudentSubmission,
   TopCourse,
   TopCourseChart,
+  ToggleSessionDoneResult,
   TopInstructor,
   TopOrganization,
   TrendPoint,
@@ -210,38 +213,39 @@ function normalizeProfilePictureUrl(value?: string) {
 }
 
 function normalizeCourse(course: any): Course {
+  const value = unwrapData(course) ?? course ?? {};
   return {
-    id: course.id ?? course.Id,
-    name: course.name ?? course.Name,
-    title: course.title ?? course.Title ?? course.name ?? course.Name,
-    description: course.description ?? course.Description ?? "",
-    price: course.price ?? course.Price ?? 0,
-    duration: course.duration ?? course.Duration ?? 0,
-    rating: course.rating ?? course.Rating ?? 0,
-    userRating: course.userRating ?? course.UserRating ?? 0,
-    orgId: course.orgId ?? course.OrgId,
-    organizationId: course.organizationId ?? course.OrganizationId,
-    organizationName: course.organizationName ?? course.OrganizationName ?? "EduVerseOrganization",
-    instructorId: course.instructorId ?? course.InstructorId,
-    imageUrl: normalizeImageUrl(course.imageUrl ?? course.ImageUrl),
-    categories: course.categories ?? course.Categories ?? [],
-    category: course.category ?? course.Category ?? course.categories?.[0]?.name ?? course.Categories?.[0]?.Name,
-    instructorName: course.instructorName ?? course.InstructorName,
-    organizationOwnerName: course.organizationOwnerName ?? course.OrganizationOwnerName ?? course.organizationName ?? course.OrganizationName ?? "EduVerseOrganization",
-    organizationOwnerEmail: course.organizationOwnerEmail ?? course.OrganizationOwnerEmail,
-    studentsCount: course.studentsCount ?? course.StudentsCount ?? 0,
-    sessionsCount: course.sessionsCount ?? course.SessionsCount ?? 0,
-    isDeleted: course.isDeleted ?? course.IsDeleted ?? false,
-    deletedAt: course.deletedAt ?? course.DeletedAt,
-    deletedById: course.deletedById ?? course.DeletedById,
-    deletedByName: course.deletedByName ?? course.DeletedByName,
-    restoredAt: course.restoredAt ?? course.RestoredAt,
-    restoredById: course.restoredById ?? course.RestoredById,
-    restoredByName: course.restoredByName ?? course.RestoredByName,
-    level: course.level ?? course.Level,
-    tags: course.tags ?? course.Tags,
-    ratingCount: course.ratingCount ?? course.RatingCount ?? 0,
-    recommendationScore: course.recommendationScore ?? course.RecommendationScore
+    id: value.id ?? value.Id ?? value.courseId ?? value.CourseId ?? "",
+    name: value.name ?? value.Name ?? value.courseName ?? value.CourseName ?? "Course",
+    title: value.title ?? value.Title ?? value.name ?? value.Name ?? value.courseName ?? value.CourseName ?? "Course",
+    description: value.description ?? value.Description ?? "",
+    price: value.price ?? value.Price ?? 0,
+    duration: value.duration ?? value.Duration ?? 0,
+    rating: value.rating ?? value.Rating ?? 0,
+    userRating: value.userRating ?? value.UserRating ?? 0,
+    orgId: value.orgId ?? value.OrgId,
+    organizationId: value.organizationId ?? value.OrganizationId,
+    organizationName: value.organizationName ?? value.OrganizationName ?? "EduVerseOrganization",
+    instructorId: value.instructorId ?? value.InstructorId,
+    imageUrl: normalizeImageUrl(value.imageUrl ?? value.ImageUrl),
+    categories: value.categories ?? value.Categories ?? [],
+    category: value.category ?? value.Category ?? value.categories?.[0]?.name ?? value.Categories?.[0]?.Name,
+    instructorName: value.instructorName ?? value.InstructorName,
+    organizationOwnerName: value.organizationOwnerName ?? value.OrganizationOwnerName ?? value.organizationName ?? value.OrganizationName ?? "EduVerseOrganization",
+    organizationOwnerEmail: value.organizationOwnerEmail ?? value.OrganizationOwnerEmail,
+    studentsCount: value.studentsCount ?? value.StudentsCount ?? 0,
+    sessionsCount: value.sessionsCount ?? value.SessionsCount ?? 0,
+    isDeleted: value.isDeleted ?? value.IsDeleted ?? false,
+    deletedAt: value.deletedAt ?? value.DeletedAt,
+    deletedById: value.deletedById ?? value.DeletedById,
+    deletedByName: value.deletedByName ?? value.DeletedByName,
+    restoredAt: value.restoredAt ?? value.RestoredAt,
+    restoredById: value.restoredById ?? value.RestoredById,
+    restoredByName: value.restoredByName ?? value.RestoredByName,
+    level: value.level ?? value.Level,
+    tags: value.tags ?? value.Tags,
+    ratingCount: value.ratingCount ?? value.RatingCount ?? 0,
+    recommendationScore: value.recommendationScore ?? value.RecommendationScore
   };
 }
 
@@ -666,27 +670,73 @@ function normalizeCourseProgress(data: any): CourseProgress {
   return {
     courseId: value.courseId ?? value.CourseId ?? "",
     courseName: value.courseName ?? value.CourseName ?? "Course",
+    totalSessions: value.totalSessions ?? value.TotalSessions ?? (value.sessions ?? value.Sessions ?? []).length ?? 0,
+    doneSessions: value.doneSessions ?? value.DoneSessions ?? 0,
     progressPercentage: value.progressPercentage ?? value.ProgressPercentage ?? 0,
     isCompleted: value.isCompleted ?? value.IsCompleted ?? false,
     completedAt: value.completedAt ?? value.CompletedAt,
-    sessions: (value.sessions ?? value.Sessions ?? []).map((session: any) => ({
-      ...normalizeSession(session),
-      isCompleted: session.isCompleted ?? session.IsCompleted ?? false,
-      completedAt: session.completedAt ?? session.CompletedAt,
-      materials: (session.materials ?? session.Materials ?? []).map((material: any) => ({
-        id: material.id ?? material.Id ?? "",
-        sessionId: material.sessionId ?? material.SessionId ?? "",
-        title: material.title ?? material.Title ?? "Material",
-        type: material.type ?? material.Type ?? "Link",
-        url: normalizeExternalUrl(material.url ?? material.Url ?? material.materialUrl ?? material.MaterialUrl ?? material.link ?? material.Link),
-        filePath: normalizeCloudFileUrl("sessions", material.filePath ?? material.FilePath),
-        fileUrl: normalizeCloudFileUrl("sessions", material.fileUrl ?? material.FileUrl),
-        materialUrl: normalizeExternalUrl(material.materialUrl ?? material.MaterialUrl),
-        link: normalizeExternalUrl(material.link ?? material.Link),
-        createdAt: material.createdAt ?? material.CreatedAt ?? new Date().toISOString()
-      })),
-      assignments: (session.assignments ?? session.Assignments ?? []).map(normalizeStudentAssignment)
-    }))
+    sessions: (value.sessions ?? value.Sessions ?? []).map((session: any) => {
+      const isDone = session.isDone ?? session.IsDone ?? session.isCompleted ?? session.IsCompleted ?? false;
+      const doneAt = session.doneAt ?? session.DoneAt ?? session.completedAt ?? session.CompletedAt;
+      return {
+        ...normalizeSession(session),
+        isDone,
+        doneAt,
+        isCompleted: isDone,
+        completedAt: doneAt,
+        materials: (session.materials ?? session.Materials ?? []).map((material: any) => ({
+          id: material.id ?? material.Id ?? "",
+          sessionId: material.sessionId ?? material.SessionId ?? "",
+          title: material.title ?? material.Title ?? "Material",
+          type: material.type ?? material.Type ?? "Link",
+          url: normalizeExternalUrl(material.url ?? material.Url ?? material.materialUrl ?? material.MaterialUrl ?? material.link ?? material.Link),
+          filePath: normalizeCloudFileUrl("sessions", material.filePath ?? material.FilePath),
+          fileUrl: normalizeCloudFileUrl("sessions", material.fileUrl ?? material.FileUrl),
+          materialUrl: normalizeExternalUrl(material.materialUrl ?? material.MaterialUrl),
+          link: normalizeExternalUrl(material.link ?? material.Link),
+          createdAt: material.createdAt ?? material.CreatedAt ?? new Date().toISOString()
+        })),
+        assignments: (session.assignments ?? session.Assignments ?? []).map(normalizeStudentAssignment)
+      };
+    })
+  };
+}
+
+function normalizeToggleSessionDone(data: any): ToggleSessionDoneResult {
+  const value = unwrapData(data);
+  return {
+    sessionId: value.sessionId ?? value.SessionId ?? "",
+    courseId: value.courseId ?? value.CourseId ?? "",
+    isDone: value.isDone ?? value.IsDone ?? false,
+    doneAt: value.doneAt ?? value.DoneAt,
+    doneSessions: value.doneSessions ?? value.DoneSessions ?? 0,
+    totalSessions: value.totalSessions ?? value.TotalSessions ?? 0,
+    progressPercentage: value.progressPercentage ?? value.ProgressPercentage ?? 0
+  };
+}
+
+function normalizeAssignmentProgress(data: any): AssignmentProgress {
+  const value = unwrapData(data);
+  return {
+    courseId: value.courseId ?? value.CourseId ?? "",
+    totalAssignments: value.totalAssignments ?? value.TotalAssignments ?? 0,
+    submittedAssignments: value.submittedAssignments ?? value.SubmittedAssignments ?? 0,
+    assignmentProgressPercentage: value.assignmentProgressPercentage ?? value.AssignmentProgressPercentage ?? 0,
+    requiredPercentage: value.requiredPercentage ?? value.RequiredPercentage ?? 80,
+    hasRequiredAssignmentProgress: value.hasRequiredAssignmentProgress ?? value.HasRequiredAssignmentProgress ?? false
+  };
+}
+
+function normalizeCertificateEligibility(data: any): CertificateEligibility {
+  const value = unwrapData(data);
+  return {
+    courseId: value.courseId ?? value.CourseId ?? "",
+    assignmentProgressPercentage: value.assignmentProgressPercentage ?? value.AssignmentProgressPercentage ?? 0,
+    requiredPercentage: value.requiredPercentage ?? value.RequiredPercentage ?? 80,
+    hasRequiredAssignmentProgress: value.hasRequiredAssignmentProgress ?? value.HasRequiredAssignmentProgress ?? false,
+    isCourseDurationFinished: value.isCourseDurationFinished ?? value.IsCourseDurationFinished ?? false,
+    canReceiveCertificate: value.canReceiveCertificate ?? value.CanReceiveCertificate ?? false,
+    message: value.message ?? value.Message ?? ""
   };
 }
 
@@ -959,8 +1009,26 @@ export const courseService = {
   },
 
   async getById(id: string) {
-    const response = await api.get(`/Course/GetById/${id}`);
-    return normalizeCourse(response.data);
+    const courseId = id?.trim();
+    if (!courseId) {
+      throw new Error("Course id is missing.");
+    }
+
+    if (process.env.NODE_ENV === "development") {
+      console.log("[EduVerse] course details route id", courseId);
+    }
+
+    const response = await api.get(`/Course/GetById/${encodeURIComponent(courseId)}`);
+    if (process.env.NODE_ENV === "development") {
+      console.log("[EduVerse] course details response", response.data);
+    }
+
+    const course = normalizeCourse(response.data);
+    if (!course.id) {
+      throw new Error("Course details response did not include a course id.");
+    }
+
+    return course;
   },
 
   async getAdminDetails(id: string) {
@@ -1063,14 +1131,29 @@ export const studentService = {
   },
 
   async getCourseProgress(courseId: string): Promise<CourseProgress> {
-    const response = await api.get(`/User/my-course-progress/${courseId}`);
+    const response = await api.get(`/Progress/Course/${courseId}`);
     return normalizeCourseProgress(response.data);
   },
 
+  async toggleSessionDone(sessionId: string): Promise<ToggleSessionDoneResult> {
+    const response = await api.post(`/Progress/ToggleSessionDone/${sessionId}`);
+    ensureSuccessfulResult(response.data, "Session progress update failed.");
+    return normalizeToggleSessionDone(response.data);
+  },
+
   async markSessionCompleted(sessionId: string): Promise<CourseProgress> {
-    const response = await api.post(`/User/mark-session-completed/${sessionId}`);
-    ensureSuccessfulResult(response.data, "Session completion failed.");
-    return normalizeCourseProgress(response.data);
+    const toggleResult = await this.toggleSessionDone(sessionId);
+    return this.getCourseProgress(toggleResult.courseId);
+  },
+
+  async getAssignmentProgress(courseId: string): Promise<AssignmentProgress> {
+    const response = await api.get(`/AssignmentProgress/Course/${courseId}`);
+    return normalizeAssignmentProgress(response.data);
+  },
+
+  async getCertificateEligibility(courseId: string): Promise<CertificateEligibility> {
+    const response = await api.get(`/Certificate/Eligibility/${courseId}`);
+    return normalizeCertificateEligibility(response.data);
   },
 
   async enrollFree(courseId: string): Promise<ServiceResult> {

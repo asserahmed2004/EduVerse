@@ -6,7 +6,8 @@ namespace Domain.Entities
         public string StudentId { get; set; } = string.Empty;
         public Guid CourseId { get; set; }
         public Guid SessionId { get; set; }
-        public bool IsCompleted { get; set; }
-        public DateTime? CompletedAt { get; set; }
+        public bool IsDone { get; set; }
+        public DateTime? DoneAt { get; set; }
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }
 }

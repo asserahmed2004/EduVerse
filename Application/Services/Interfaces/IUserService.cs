@@ -35,6 +35,9 @@ namespace Application.Services.Interfaces
         Task<IEnumerable<Enrollment>> EnrollmentData();
         Task<ServiceResponse> UpdateProgress(Guid courseId, string userId, double progression);
         Task<CourseProgressDto?> GetCourseProgress(Guid courseId, string userId);
+        Task<ServiceResponse> ToggleSessionDone(Guid sessionId, string userId);
+        Task<AssignmentProgressDto?> GetAssignmentProgress(Guid courseId, string userId);
+        Task<CertificateEligibilityDto?> GetCertificateEligibility(Guid courseId, string userId);
         Task<ServiceResponse> MarkSessionCompleted(Guid sessionId, string userId);
         Task<IEnumerable<StudentAssignmentDto>> GetMyAssignments(string userId);
         Task<ServiceResponse> SubmitAssignment(SubmitAssignmentRequest submission, string userId);

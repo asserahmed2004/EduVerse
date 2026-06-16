@@ -22,6 +22,21 @@ namespace API.Controllers
             return result.success ? Ok(result) : BadRequest(result);
         }
 
+        [HttpGet("Eligibility/{courseId}")]
+        [Authorize(Roles = AppRoles.StudentAccess)]
+        public async Task<IActionResult> Eligibility(Guid courseId)
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrWhiteSpace(userId))
+                return Unauthorized(new { success = false, message = "User id was not found in token." });
+
+            var eligibility = await userService.GetCertificateEligibility(courseId, userId);
+            if (eligibility == null)
+                return NotFound(new { success = false, message = "Certificate eligibility not found or student is not enrolled." });
+
+            return Ok(new { success = true, message = "Certificate eligibility retrieved successfully", data = eligibility });
+        }
+
         [HttpGet("Verify/{code}")]
         [AllowAnonymous]
         public async Task<IActionResult> Verify(string code)

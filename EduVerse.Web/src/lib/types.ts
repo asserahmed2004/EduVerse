@@ -465,15 +465,48 @@ export type StudentSubmission = {
 export type CourseProgress = {
   courseId: string;
   courseName: string;
+  totalSessions: number;
+  doneSessions: number;
   progressPercentage: number;
   isCompleted: boolean;
   completedAt?: string;
   sessions: (CourseSession & {
+    isDone: boolean;
+    doneAt?: string;
     isCompleted: boolean;
     completedAt?: string;
     materials?: SessionMaterial[];
     assignments?: StudentAssignment[];
   })[];
+};
+
+export type ToggleSessionDoneResult = {
+  sessionId: string;
+  courseId: string;
+  isDone: boolean;
+  doneAt?: string;
+  doneSessions: number;
+  totalSessions: number;
+  progressPercentage: number;
+};
+
+export type AssignmentProgress = {
+  courseId: string;
+  totalAssignments: number;
+  submittedAssignments: number;
+  assignmentProgressPercentage: number;
+  requiredPercentage: number;
+  hasRequiredAssignmentProgress: boolean;
+};
+
+export type CertificateEligibility = {
+  courseId: string;
+  assignmentProgressPercentage: number;
+  requiredPercentage: number;
+  hasRequiredAssignmentProgress: boolean;
+  isCourseDurationFinished: boolean;
+  canReceiveCertificate: boolean;
+  message: string;
 };
 
 export type SessionMaterial = {
