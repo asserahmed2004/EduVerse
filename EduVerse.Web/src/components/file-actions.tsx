@@ -11,6 +11,7 @@ type FileActionButtonsProps = {
   downloadLabel?: string;
   className?: string;
   fullWidth?: boolean;
+  showPreview?: boolean;
 };
 
 export function FileActionButtons({
@@ -18,7 +19,8 @@ export function FileActionButtons({
   previewLabel = "Open",
   downloadLabel = "Download",
   className,
-  fullWidth = false
+  fullWidth = false,
+  showPreview = true
 }: FileActionButtonsProps) {
   if (!url) return null;
 
@@ -26,10 +28,12 @@ export function FileActionButtons({
 
   return (
     <div className={cn("flex flex-wrap gap-2", fullWidth && "w-full", className)}>
-      <Button type="button" className={stretchClassName} onClick={() => openFile(url)}>
-        <ExternalLink size={16} />
-        {previewLabel}
-      </Button>
+      {showPreview && (
+        <Button type="button" className={stretchClassName} onClick={() => openFile(url)}>
+          <ExternalLink size={16} />
+          {previewLabel}
+        </Button>
+      )}
       <Button type="button" variant="ghost" className={stretchClassName} onClick={() => downloadFile(url)}>
         <Download size={16} />
         {downloadLabel}

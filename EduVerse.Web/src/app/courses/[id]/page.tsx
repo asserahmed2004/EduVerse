@@ -1,6 +1,6 @@
 "use client";
 
-import { Award, BookOpen, CheckCircle2, Clock, CreditCard, ExternalLink, FileText, Link as LinkIcon, Star, Users } from "lucide-react";
+import { Award, BookOpen, CheckCircle2, Clock, CreditCard, ExternalLink, FileText, Link as LinkIcon, PlayCircle, Star, Users } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
@@ -8,7 +8,7 @@ import { FileActionButtons } from "@/components/file-actions";
 import { useToast } from "@/components/toast-provider";
 import { RecommendationSection } from "@/components/recommendation-section";
 import { Badge, Button, EmptyState, LoadingState, PageHeader, ProgressBar } from "@/components/ui";
-import { courseService, getApiErrorMessage, studentService } from "@/lib/api";
+import { courseService, getApiErrorMessage, getFileResourceType, getPreviewFileUrl, isEmbeddableVideoFileUrl, isKnownExternalVideoUrl, openFile, studentService } from "@/lib/api";
 import { getStoredUser } from "@/lib/auth";
 import type { AssignmentProgress, CertificateEligibility, Course, CourseAdminDetails, CourseProgress, Enrollment } from "@/lib/types";
 import { cn, formatCurrency, formatDate, gradeTextColor } from "@/lib/utils";
@@ -39,11 +39,19 @@ export default function CourseDetailsPage() {
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
   const [enrollmentLoading, setEnrollmentLoading] = useState(false);
   const [enrollmentError, setEnrollmentError] = useState("");
+  const [ratingSaving, setRatingSaving] = useState(false);
   const user = getStoredUser();
   const canViewAdminDetails = user?.role === "Admin" || user?.role === "OrganizationAdmin" || user?.role === "Instructor";
   const isStudent = user?.role === "Student";
   const isEnrolled = Boolean(enrollment) || Boolean(progress);
   const studentEnrollmentCheckLoading = Boolean(isStudent && (enrollmentLoading || progressLoading));
+  const enrollmentProgressValue = Math.max(enrollment?.progression ?? 0, enrollment?.progressPercentage ?? 0);
+  const hasCompletedCourseForRating = Boolean(enrollment && (
+    enrollment.isCompleted ||
+    enrollment.completedAt ||
+    enrollment.graduationDate ||
+    enrollmentProgressValue >= 100
+  ));
 
   useEffect(() => {
     let cancelled = false;
@@ -321,6 +329,34 @@ export default function CourseDetailsPage() {
     document.getElementById("course-progress")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  async function rateCourse(ratingValue: number) {
+    if (!course) return;
+    if (!isEnrolled) {
+      showToast({ title: "Enrollment required", message: "Enroll in this course before rating it.", tone: "info" });
+      return;
+    }
+    if (!hasCompletedCourseForRating) {
+      showToast({ title: "Course not completed", message: "You can rate this course after completing it.", tone: "info" });
+      return;
+    }
+
+    setRatingSaving(true);
+    try {
+      const result = await courseService.addRating(course.id, ratingValue);
+      setCourse((current) => current ? {
+        ...current,
+        rating: result.averageRating,
+        ratingCount: result.ratingCount,
+        userRating: result.userRating
+      } : current);
+      showToast({ title: "Rating saved", message: result.message ?? "Thanks for rating this course.", tone: "success" });
+    } catch (error) {
+      showToast({ title: "Rating failed", message: error instanceof Error ? error.message : "Could not save your rating.", tone: "error" });
+    } finally {
+      setRatingSaving(false);
+    }
+  }
+
   if (loading) {
     return (
       <AppShell>
@@ -353,7 +389,7 @@ export default function CourseDetailsPage() {
             <p className="mt-3 leading-7 text-muted">{course.description}</p>
             <div className="mt-6 grid gap-4 sm:grid-cols-3">
               <Metric icon={Clock} label="Sessions" value={`${course.sessionsCount ?? 0}`} />
-              <Metric icon={Star} label="Average rating" value={(course.rating ?? 0).toFixed(1)} />
+              <Metric icon={Star} label="Average rating" value={`${(course.rating ?? 0).toFixed(1)} (${course.ratingCount ?? 0})`} />
               <Metric icon={Users} label="Students" value={`${course.studentsCount ?? course.students ?? 0}`} />
             </div>
           </div>
@@ -439,6 +475,23 @@ export default function CourseDetailsPage() {
       </div>
 
       {isStudent && (
+        <CourseRatingPanel
+          currentRating={course.userRating ?? 0}
+          averageRating={course.rating ?? 0}
+          ratingCount={course.ratingCount ?? 0}
+          disabled={studentEnrollmentCheckLoading || !isEnrolled || !hasCompletedCourseForRating || ratingSaving}
+          loading={studentEnrollmentCheckLoading}
+          saving={ratingSaving}
+          message={!isEnrolled
+            ? "Enroll in this course before rating it."
+            : hasCompletedCourseForRating
+              ? "Your rating helps other learners choose confidently."
+              : "You can rate this course after completing it."}
+          onRate={rateCourse}
+        />
+      )}
+
+      {isStudent && (
         <section id="course-progress" className="mt-8 scroll-mt-24 rounded-xl2 bg-white p-6 shadow-soft ring-1 ring-slate-100">
           <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
             <div>
@@ -491,17 +544,7 @@ export default function CourseDetailsPage() {
                     </div>
 
                     <div className="mt-4 grid gap-3 md:grid-cols-2">
-                      {(session.materials ?? []).map((material) => (
-                        <MaterialLink
-                          key={material.id}
-                          title={material.title}
-                          fileHref={material.fileUrl ?? material.filePath}
-                          href={material.url ?? material.materialUrl ?? material.link}
-                        />
-                      ))}
-                      {session.videoUrl && <LearningLink href={session.videoUrl} label="Video material" />}
-                      {session.externalLink && <LearningLink href={session.externalLink} label="External link" />}
-                      {session.fileUrl ? <FileResourceCard href={session.fileUrl} title="Session file" /> : (session.materials ?? []).length === 0 && <NoMaterial />}
+                      <SessionResourceGrid session={session} />
                     </div>
 
                     {(session.assignments ?? []).length > 0 && (
@@ -512,6 +555,12 @@ export default function CourseDetailsPage() {
                               <div>
                                 <p className="font-bold text-ink">{assignment.title}</p>
                                 <p className="mt-1 text-xs font-semibold text-muted">Due: {assignment.dueDate ? formatDate(assignment.dueDate) : "Not set"}</p>
+                                {assignment.assignmentFileUrl && (
+                                  <div className="mt-2 rounded-lg bg-slate-50 p-2 ring-1 ring-slate-100">
+                                    <p className="text-xs font-bold uppercase tracking-wide text-muted">Instructor attachment</p>
+                                    <FileActionButtons url={assignment.assignmentFileUrl} className="mt-2" previewLabel="Open" downloadLabel="Download" />
+                                  </div>
+                                )}
                                 {assignment.submissionStatus === "Graded" && (
                                   <div className="mt-2 rounded-lg bg-teal-50 p-2 ring-1 ring-teal-100">
                                     <p className={cn("text-sm font-bold", gradeTextColor(assignment.grade))}>Grade: {assignment.grade ?? "Not available"} / 100</p>
@@ -664,6 +713,66 @@ function Metric({ icon: Icon, label, value }: { icon: any; label: string; value:
   );
 }
 
+function CourseRatingPanel({
+  currentRating,
+  averageRating,
+  ratingCount,
+  disabled,
+  loading,
+  saving,
+  message,
+  onRate
+}: {
+  currentRating: number;
+  averageRating: number;
+  ratingCount: number;
+  disabled: boolean;
+  loading: boolean;
+  saving: boolean;
+  message: string;
+  onRate: (rating: number) => void;
+}) {
+  const roundedCurrentRating = Math.round(currentRating);
+
+  return (
+    <section className="mt-8 rounded-xl2 bg-white p-6 shadow-soft ring-1 ring-slate-100">
+      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+        <div>
+          <h2 className="text-xl font-bold text-ink">Rate this course</h2>
+          <p className="mt-1 text-sm text-muted">{message}</p>
+          <p className="mt-2 text-xs font-semibold text-muted">
+            Average: {averageRating.toFixed(1)} from {ratingCount} {ratingCount === 1 ? "rating" : "ratings"}
+          </p>
+        </div>
+        {currentRating > 0 && <Badge tone="teal">Your rating: {currentRating} / 5</Badge>}
+      </div>
+      <div className="mt-5 flex flex-wrap gap-2">
+        {[1, 2, 3, 4, 5].map((rating) => (
+          <button
+            key={rating}
+            type="button"
+            onClick={() => onRate(rating)}
+            disabled={disabled}
+            aria-label={`Rate ${rating} out of 5`}
+            className={cn(
+              "inline-flex h-11 w-11 items-center justify-center rounded-xl ring-1 ring-slate-200 transition",
+              roundedCurrentRating >= rating ? "bg-amber-100 text-amber-500" : "bg-white text-slate-400",
+              disabled ? "cursor-not-allowed opacity-60" : "hover:-translate-y-0.5 hover:bg-amber-50 hover:text-amber-500 hover:shadow-soft"
+            )}
+          >
+            <Star size={19} fill={roundedCurrentRating >= rating ? "currentColor" : "none"} />
+          </button>
+        ))}
+      </div>
+      {(loading || saving) && (
+        <p className="mt-3 text-sm font-semibold text-muted">
+          {saving ? "Saving rating..." : "Checking rating eligibility..."}
+        </p>
+      )}
+    </section>
+  );
+}
+
 function DetailsPanel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="rounded-xl2 bg-white p-6 shadow-soft ring-1 ring-slate-100">
@@ -684,6 +793,172 @@ function Row({ title, meta }: { title: string; meta: string }) {
 
 function Muted({ children }: { children: React.ReactNode }) {
   return <p className="rounded-xl bg-slate-50 p-4 text-sm font-semibold text-muted">{children}</p>;
+}
+
+function SessionResourceGrid({ session }: { session: CourseProgress["sessions"][number] }) {
+  const usedResourceUrls = new Set<string>();
+  const resources: React.ReactNode[] = [];
+
+  (session.materials ?? []).forEach((material) => {
+    const fileHref = material.fileUrl ?? material.filePath;
+    const href = material.url ?? material.materialUrl ?? material.link;
+    const resourceKey = fileHref ? normalizeResourceKey(fileHref) : undefined;
+    if (resourceKey) usedResourceUrls.add(resourceKey);
+
+    resources.push(<MaterialLink key={material.id} title={material.title} fileHref={fileHref} href={href} />);
+  });
+
+  const addFileResource = (href: string | undefined, title: string, key: string) => {
+    if (!href) return;
+    const resourceKey = normalizeResourceKey(href);
+    if (usedResourceUrls.has(resourceKey)) return;
+    usedResourceUrls.add(resourceKey);
+    resources.push(<SessionFileResourceCard key={key} href={href} title={title} />);
+  };
+
+  if (session.videoUrl) {
+    if (getFileResourceType(session.videoUrl) !== "unknown") {
+      addFileResource(session.videoUrl, "Session video", "session-video");
+    } else {
+      resources.push(<ExternalVideoCard key="session-video-link" href={session.videoUrl} title="Session video" />);
+    }
+  }
+
+  if (session.externalLink) {
+    if (getFileResourceType(session.externalLink) !== "unknown") {
+      addFileResource(session.externalLink, "External resource", "external-resource");
+    } else if (isKnownExternalVideoUrl(session.externalLink)) {
+      resources.push(<ExternalVideoCard key="external-video-link" href={session.externalLink} title="External video" />);
+    } else {
+      resources.push(<LearningLink key="external-link" href={session.externalLink} label="External link" />);
+    }
+  }
+
+  if (session.fileUrl) {
+    addFileResource(session.fileUrl, "Session file", "session-file");
+  }
+
+  return resources.length > 0 ? <>{resources}</> : <NoMaterial />;
+}
+
+function normalizeResourceKey(value: string) {
+  const previewUrl = getPreviewFileUrl(value) ?? value;
+  try {
+    const url = new URL(previewUrl);
+    url.searchParams.delete("download");
+    return url.toString();
+  } catch {
+    return previewUrl.trim();
+  }
+}
+
+function SessionFileResourceCard({ href, title }: { href: string; title: string }) {
+  const resourceType = getFileResourceType(href);
+
+  if (resourceType === "video") return <VideoResourceCard href={href} title={title} />;
+  if (resourceType === "archive") return <ArchiveResourceCard href={href} title={title} />;
+  if (resourceType === "office") return <OfficeResourceCard href={href} title={title} />;
+  if (resourceType === "pdf" || resourceType === "image") return <FileResourceCard href={href} title={title} />;
+
+  return <UnknownFileResourceCard href={href} title={title} />;
+}
+
+function VideoResourceCard({ href, title }: { href: string; title: string }) {
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const previewUrl = getPreviewFileUrl(href) ?? href;
+  const canAttemptPreview = isEmbeddableVideoFileUrl(href);
+
+  return (
+    <div className="rounded-xl bg-white p-3 ring-1 ring-slate-100 md:col-span-2">
+      <span className="inline-flex items-center gap-2 text-sm font-semibold text-ink">
+        <PlayCircle size={16} className="text-teal-600" />
+        {title}
+      </span>
+      {canAttemptPreview ? (
+        <>
+          <p className="mt-3 text-xs font-bold uppercase tracking-wide text-muted">Play video</p>
+          <div className="mt-2 overflow-hidden rounded-xl bg-ink">
+            <video
+              controls
+              preload="metadata"
+              src={previewUrl}
+              className="aspect-video w-full bg-ink"
+              onError={() => setPreviewFailed(true)}
+            />
+          </div>
+        </>
+      ) : (
+        <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-700 ring-1 ring-amber-100">
+          Preview is not supported for this video format. You can open or download it.
+        </p>
+      )}
+      {previewFailed && (
+        <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-700 ring-1 ring-amber-100">
+          Preview is not supported for this video format. You can open or download it.
+        </p>
+      )}
+      <FileActionButtons url={href} className="mt-3" fullWidth previewLabel="Open video" downloadLabel="Download" />
+    </div>
+  );
+}
+
+function OfficeResourceCard({ href, title }: { href: string; title: string }) {
+  return (
+    <div className="rounded-xl bg-white p-3 ring-1 ring-slate-100">
+      <span className="inline-flex items-center gap-2 text-sm font-semibold text-ink">
+        <FileText size={16} className="text-teal-600" />
+        {title}
+      </span>
+      <p className="mt-2 rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-700 ring-1 ring-amber-100">
+        Office files may open in a new tab if your browser supports preview. Download is always available.
+      </p>
+      <FileActionButtons url={href} className="mt-3" fullWidth previewLabel="Open" downloadLabel="Download" />
+    </div>
+  );
+}
+
+function ArchiveResourceCard({ href, title }: { href: string; title: string }) {
+  return (
+    <div className="rounded-xl bg-white p-3 ring-1 ring-slate-100">
+      <span className="inline-flex items-center gap-2 text-sm font-semibold text-ink">
+        <FileText size={16} className="text-teal-600" />
+        {title}
+      </span>
+      <p className="mt-2 rounded-xl bg-slate-50 p-3 text-xs font-semibold text-muted ring-1 ring-slate-100">
+        Archive files cannot be previewed.
+      </p>
+      <FileActionButtons url={href} className="mt-3" fullWidth showPreview={false} downloadLabel="Download" />
+    </div>
+  );
+}
+
+function UnknownFileResourceCard({ href, title }: { href: string; title: string }) {
+  return (
+    <div className="rounded-xl bg-white p-3 ring-1 ring-slate-100">
+      <span className="inline-flex items-center gap-2 text-sm font-semibold text-ink">
+        <FileText size={16} className="text-teal-600" />
+        {title}
+      </span>
+      <p className="mt-2 text-xs font-semibold text-muted">Your browser may preview this file. Download is always available.</p>
+      <FileActionButtons url={href} className="mt-3" fullWidth previewLabel="Open" downloadLabel="Download" />
+    </div>
+  );
+}
+
+function ExternalVideoCard({ href, title }: { href: string; title: string }) {
+  return (
+    <div className="rounded-xl bg-white p-3 ring-1 ring-slate-100">
+      <span className="inline-flex items-center gap-2 text-sm font-semibold text-ink">
+        <ExternalLink size={16} className="text-teal-600" />
+        {title}
+      </span>
+      <p className="mt-2 text-xs font-semibold text-muted">Open this video in a new tab.</p>
+      <Button type="button" className="mt-3 w-full" onClick={() => openFile(href)}>
+        <ExternalLink size={16} />
+        Open video
+      </Button>
+    </div>
+  );
 }
 
 function LearningLink({ href, label }: { href: string; label: string }) {
@@ -710,7 +985,9 @@ function FileResourceCard({ href, title }: { href: string; title: string }) {
 }
 
 function MaterialLink({ href, fileHref, title }: { href?: string; fileHref?: string; title: string }) {
-  if (fileHref) return <FileResourceCard href={fileHref} title={title} />;
+  if (fileHref) {
+    return <SessionFileResourceCard href={fileHref} title={title} />;
+  }
   if (!href) return <NoMaterial />;
 
   return (

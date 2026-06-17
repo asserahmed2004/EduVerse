@@ -34,6 +34,7 @@ import type {
   RecentActivity,
   RecentEnrollment,
   RegisterPayload,
+  RatingResult,
   RoleCount,
   ServiceResult,
   StudentAssignment,
@@ -77,6 +78,66 @@ function inferFileName(value: string) {
     return decodeURIComponent(segments[segments.length - 1] ?? "download");
   } catch {
     return "download";
+  }
+}
+
+const VIDEO_FILE_EXTENSIONS = new Set(["mp4", "webm", "ogg", "ogv", "mov", "mkv"]);
+const EMBEDDABLE_VIDEO_EXTENSIONS = new Set(["mp4", "webm", "ogg", "ogv", "mov"]);
+const PDF_FILE_EXTENSIONS = new Set(["pdf"]);
+const IMAGE_FILE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "bmp", "webp", "svg"]);
+const OFFICE_FILE_EXTENSIONS = new Set(["doc", "docx", "ppt", "pptx", "xls", "xlsx"]);
+const ARCHIVE_FILE_EXTENSIONS = new Set(["zip", "rar", "7z"]);
+
+export type FileResourceType = "video" | "pdf" | "image" | "office" | "archive" | "unknown";
+
+function getUrlPathname(value?: string) {
+  if (!value) return "";
+  try {
+    return decodeURIComponent(new URL(value, API_BASE_URL).pathname);
+  } catch {
+    return decodeURIComponent(value.split(/[?#]/)[0] ?? value);
+  }
+}
+
+function getFileExtension(value?: string) {
+  const pathname = getUrlPathname(value);
+  const match = pathname.match(/\.([a-z0-9]+)$/i);
+  return match?.[1]?.toLowerCase();
+}
+
+function hasDomainWithoutScheme(value: string) {
+  return /^(www\.)?[\w-]+(\.[\w-]+)+(\/|$|\?)/i.test(value);
+}
+
+export function isVideoFileUrl(value?: string) {
+  const extension = getFileExtension(value);
+  return extension ? VIDEO_FILE_EXTENSIONS.has(extension) : false;
+}
+
+export function getFileResourceType(value?: string): FileResourceType {
+  const extension = getFileExtension(value);
+  if (!extension) return "unknown";
+  if (VIDEO_FILE_EXTENSIONS.has(extension)) return "video";
+  if (PDF_FILE_EXTENSIONS.has(extension)) return "pdf";
+  if (IMAGE_FILE_EXTENSIONS.has(extension)) return "image";
+  if (OFFICE_FILE_EXTENSIONS.has(extension)) return "office";
+  if (ARCHIVE_FILE_EXTENSIONS.has(extension)) return "archive";
+  return "unknown";
+}
+
+export function isEmbeddableVideoFileUrl(value?: string) {
+  const extension = getFileExtension(value);
+  return extension ? EMBEDDABLE_VIDEO_EXTENSIONS.has(extension) : false;
+}
+
+export function isKnownExternalVideoUrl(value?: string) {
+  if (!value) return false;
+  try {
+    const url = new URL(normalizeExternalUrl(value) ?? value, API_BASE_URL);
+    const host = url.hostname.replace(/^www\./i, "").toLowerCase();
+    return host === "youtu.be" || host.endsWith("youtube.com") || host.endsWith("vimeo.com");
+  } catch {
+    return false;
   }
 }
 
@@ -196,6 +257,20 @@ function normalizeCloudFileUrl(folder: string, value?: string) {
   return `${API_BASE_URL}/Cloud/Get/${folder}/${encodeURIComponent(trimmed)}`;
 }
 
+function normalizeSessionVideoUrl(value?: string) {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.startsWith("http")) return trimmed;
+  if (trimmed.startsWith("/")) return `${API_BASE_URL}${trimmed}`;
+  if (isVideoFileUrl(trimmed) && !trimmed.includes("/") && !trimmed.includes("\\")) {
+    return `${API_BASE_URL}/Cloud/Get/sessions/${encodeURIComponent(trimmed)}`;
+  }
+  if (hasDomainWithoutScheme(trimmed)) return normalizeExternalUrl(trimmed);
+  if (trimmed.includes("/")) return `${API_BASE_URL}/${trimmed.replace(/^\/+/, "")}`;
+  return normalizeExternalUrl(trimmed);
+}
+
 function normalizeExternalUrl(value?: string) {
   if (!value) return undefined;
   const trimmed = value.trim();
@@ -245,7 +320,8 @@ function normalizeCourse(course: any): Course {
     level: value.level ?? value.Level,
     tags: value.tags ?? value.Tags,
     ratingCount: value.ratingCount ?? value.RatingCount ?? 0,
-    recommendationScore: value.recommendationScore ?? value.RecommendationScore
+    recommendationScore: value.recommendationScore ?? value.RecommendationScore,
+    progressPercent: value.progressPercent ?? value.ProgressPercent
   };
 }
 
@@ -282,8 +358,9 @@ function normalizeSession(session: any): CourseSession {
     duration: session.duration ?? session.Duration,
     sessionNumber: session.sessionNumber ?? session.SessionNumber ?? 0,
     description: session.description ?? session.Description,
-    videoUrl: normalizeExternalUrl(session.videoUrl ?? session.VideoUrl),
+    videoUrl: normalizeSessionVideoUrl(session.videoUrl ?? session.VideoUrl),
     externalLink: normalizeExternalUrl(session.externalLink ?? session.ExternalLink),
+    isCompleted: session.isCompleted ?? session.IsCompleted ?? false,
     attendanceCode: session.attendanceCode ?? session.AttendanceCode,
     attendanceCodeCreatedAt: session.attendanceCodeCreatedAt ?? session.AttendanceCodeCreatedAt
   };
@@ -631,6 +708,10 @@ function normalizeStudentAssignment(item: any): StudentAssignment {
     submittedAt: item.submittedAt ?? item.SubmittedAt,
     grade: item.grade ?? item.Grade,
     feedback: item.feedback ?? item.Feedback,
+    assignmentFileUrl: normalizeCloudFileUrl(
+      "assignments",
+      item.assignmentFileUrl ?? item.AssignmentFileUrl ?? item.attachmentUrl ?? item.AttachmentUrl ?? item.content ?? item.Content
+    ),
     fileUrl: normalizeCloudFileUrl("submissions", item.fileUrl ?? item.FileUrl)
   };
 }
@@ -654,9 +735,11 @@ function normalizeEnrollment(item: any): Enrollment {
   return {
     courseId: value.courseId ?? value.CourseId ?? value.id ?? value.Id ?? "",
     courseName: value.courseName ?? value.CourseName ?? value.name ?? value.Name ?? "Course",
+    instructorName: value.instructorName ?? value.InstructorName,
     enrollmentDate: value.enrollmentDate ?? value.EnrollmentDate ?? new Date().toISOString(),
-    progression: value.progression ?? value.Progression ?? value.progressPercentage ?? value.ProgressPercentage ?? 0,
-    progressPercentage: value.progressPercentage ?? value.ProgressPercentage ?? value.progression ?? value.Progression ?? 0,
+    progression: value.progression ?? value.Progression ?? value.progressPercent ?? value.ProgressPercent ?? value.progressPercentage ?? value.ProgressPercentage ?? 0,
+    progressPercent: value.progressPercent ?? value.ProgressPercent ?? value.progressPercentage ?? value.ProgressPercentage ?? value.progression ?? value.Progression ?? 0,
+    progressPercentage: value.progressPercentage ?? value.ProgressPercentage ?? value.progressPercent ?? value.ProgressPercent ?? value.progression ?? value.Progression ?? 0,
     isCompleted: value.isCompleted ?? value.IsCompleted ?? Boolean(value.graduationDate ?? value.GraduationDate),
     completedAt: value.completedAt ?? value.CompletedAt,
     graduationDate: value.graduationDate ?? value.GraduationDate,
@@ -841,6 +924,17 @@ function ensureSuccessfulResult(data: any, fallbackMessage: string): ServiceResu
   }
 
   return result;
+}
+
+function normalizeRatingResult(data: any): RatingResult {
+  const value = unwrapData(data) ?? {};
+  return {
+    courseId: value.courseId ?? value.CourseId ?? "",
+    averageRating: value.averageRating ?? value.AverageRating ?? value.rating ?? value.Rating ?? 0,
+    ratingCount: value.ratingCount ?? value.RatingCount ?? 0,
+    userRating: value.userRating ?? value.UserRating ?? value.ratingValue ?? value.RatingValue ?? 0,
+    message: readResponseMessage(data)
+  };
 }
 
 function normalizeAuthProfile(data: any, fallbackRole?: AuthUser["role"]): AuthUser {
@@ -1079,6 +1173,16 @@ export const courseService = {
     return ensureSuccessfulResult(response.data, "Assignment creation failed.");
   },
 
+  async addRating(courseId: string, ratingValue: number): Promise<RatingResult> {
+    if (!Number.isFinite(ratingValue) || ratingValue < 1 || ratingValue > 5) {
+      throw new Error("Rating must be between 1 and 5.");
+    }
+
+    const response = await api.post("/Course/AddRating", { courseId, ratingValue });
+    ensureSuccessfulResult(response.data, "Rating failed.");
+    return normalizeRatingResult(response.data);
+  },
+
   async assignInstructor(courseId: string, instructorId: string): Promise<ServiceResult> {
     const response = await api.post("/Course/AssignInstructor", { courseId, instructorId });
     return ensureSuccessfulResult(response.data, "Instructor assignment failed.");
@@ -1142,8 +1246,9 @@ export const studentService = {
   },
 
   async markSessionCompleted(sessionId: string): Promise<CourseProgress> {
-    const toggleResult = await this.toggleSessionDone(sessionId);
-    return this.getCourseProgress(toggleResult.courseId);
+    const response = await api.post(`/User/mark-session-completed/${sessionId}`);
+    ensureSuccessfulResult(response.data, "Session completion failed.");
+    return normalizeCourseProgress(response.data);
   },
 
   async getAssignmentProgress(courseId: string): Promise<AssignmentProgress> {

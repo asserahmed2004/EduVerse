@@ -37,7 +37,7 @@ namespace Application.Services.Interfaces
         Task<ServiceResponse> AddSession(CreateSession session, string currentUserId, bool isAdmin, bool isOrganizationAdmin, bool isInstructor);
         Task<ServiceResponse> UpdateSession(UpdateSession session);
         Task<ServiceResponse> DeleteSession(Guid id);
-        Task<List<GetSession>> GetCourseAllSessions(Guid courdeid);
+        Task<List<GetSession>> GetCourseAllSessions(Guid courdeid, string? studentId = null);
         Task<GetSession> GetSessionById(Guid id);   
         Task<GetSession> GetSessionByNumber(Guid courseid, int sessionnumber);
         Task<ServiceResponse> AddAssignment(CreateAssignment assignment);

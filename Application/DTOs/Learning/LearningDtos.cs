@@ -17,6 +17,7 @@ namespace Application.DTOs.Learning
         public DateTime? SubmittedAt { get; set; }
         public double? Grade { get; set; }
         public string? Feedback { get; set; }
+        public string? AssignmentFileUrl { get; set; }
         public string? FileUrl { get; set; }
     }
 

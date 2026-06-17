@@ -17,6 +17,7 @@ namespace Application.DTOs.Course
         public double Duration { get; set; }
         public float Rating { get; set; }
         public float UserRating { get; set; }
+        public int RatingCount { get; set; }
         public string OrgId { get; set; }
         public Guid? OrganizationId { get; set; }
         public string? OrganizationName { get; set; }
@@ -29,6 +30,7 @@ namespace Application.DTOs.Course
         public string? OrganizationOwnerEmail { get; set; }
         public int StudentsCount { get; set; }
         public int SessionsCount { get; set; }
+        public double ProgressPercent { get; set; }
         public bool IsDeleted { get; set; }
         public DateTime? DeletedAt { get; set; }
         public string? DeletedById { get; set; }

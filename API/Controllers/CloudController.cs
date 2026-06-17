@@ -13,6 +13,33 @@ namespace API.Controllers
     public class CloudController(ICloudService cloudService) : ControllerBase
     {
         private static readonly FileExtensionContentTypeProvider ContentTypeProvider = new();
+        private static readonly IReadOnlyDictionary<string, string> KnownContentTypes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [".mp4"] = "video/mp4",
+            [".webm"] = "video/webm",
+            [".mov"] = "video/quicktime",
+            [".m4v"] = "video/x-m4v",
+            [".ogg"] = "video/ogg",
+            [".ogv"] = "video/ogg",
+            [".mkv"] = "video/x-matroska",
+            [".pdf"] = "application/pdf",
+            [".png"] = "image/png",
+            [".jpg"] = "image/jpeg",
+            [".jpeg"] = "image/jpeg",
+            [".gif"] = "image/gif",
+            [".bmp"] = "image/bmp",
+            [".webp"] = "image/webp",
+            [".svg"] = "image/svg+xml",
+            [".doc"] = "application/msword",
+            [".docx"] = "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            [".ppt"] = "application/vnd.ms-powerpoint",
+            [".pptx"] = "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            [".xls"] = "application/vnd.ms-excel",
+            [".xlsx"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            [".zip"] = "application/zip",
+            [".rar"] = "application/vnd.rar",
+            [".7z"] = "application/x-7z-compressed"
+        };
 
         [HttpPost("Add/{Folder}")]
         [Authorize(Roles = AppRoles.AdminOrOrganizationAdmin)]
@@ -42,9 +69,7 @@ namespace API.Controllers
             if (result != null)
             {
                 var contentType = ResolveContentType(result.FileStream, result.Details.FileName);
-                if (download)
-                    return File(result.FileStream, contentType, result.Details.FileName, enableRangeProcessing: true);
-
+                Response.Headers.ContentDisposition = BuildContentDisposition(download ? "attachment" : "inline", result.Details.FileName);
                 return File(result.FileStream, contentType, enableRangeProcessing: true);
             }
             return NotFound();
@@ -80,6 +105,10 @@ namespace API.Controllers
 
         private static string ResolveContentType(Stream fileStream, string fileName)
         {
+            var extension = Path.GetExtension(fileName);
+            if (!string.IsNullOrWhiteSpace(extension) && KnownContentTypes.TryGetValue(extension, out var knownContentType))
+                return knownContentType;
+
             if (ContentTypeProvider.TryGetContentType(fileName, out var contentType))
                 return contentType;
 
@@ -139,6 +168,13 @@ namespace API.Controllers
             }
 
             return "application/octet-stream";
+        }
+
+        private static string BuildContentDisposition(string dispositionType, string fileName)
+        {
+            var safeFileName = Path.GetFileName(fileName).Replace("\"", "\\\"");
+            var encodedFileName = Uri.EscapeDataString(safeFileName);
+            return $"{dispositionType}; filename=\"{safeFileName}\"; filename*=UTF-8''{encodedFileName}";
         }
     }
 }

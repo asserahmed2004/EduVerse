@@ -146,9 +146,41 @@ namespace Application.Services.Implementitions
         public async Task<IEnumerable<GetCourse>> GetEnrolledCourses(string userId)
         {
             var enrollments = (await Enrollment.GetAllAsync()).Where(e => e.StudentId == userId).ToList();
-            var courseIds = enrollments.Select(e => e.CourseId).ToList();
+            var enrollmentByCourseId = enrollments.GroupBy(e => e.CourseId).ToDictionary(group => group.Key, group => group.First());
+            var courseIds = enrollments.Select(e => e.CourseId).ToHashSet();
             var courses = (await Courses.GetAllAsync()).Where(c => !c.IsDeleted && courseIds.Contains(c.Id)).ToList();
-            var enrolledCourses = mapper.Map<IEnumerable<GetCourse>>(courses);
+            var sessions = (await Sessions.GetAllAsync()).Where(s => courseIds.Contains(s.CourseId)).ToList();
+            var progressRows = (await Progresses.GetAllAsync()).Where(p => p.StudentId == userId && courseIds.Contains(p.CourseId)).ToList();
+            var enrolledCourses = mapper.Map<List<GetCourse>>(courses);
+
+            foreach (var course in enrolledCourses)
+            {
+                var courseSessions = sessions.Where(s => s.CourseId == course.Id).ToList();
+                var sessionIds = courseSessions.Select(s => s.Id).ToHashSet();
+                var doneSessions = progressRows.Count(p => p.IsDone && p.CourseId == course.Id && sessionIds.Contains(p.SessionId));
+                var progressPercent = CalculatePercentage(doneSessions, courseSessions.Count);
+                course.ProgressPercent = progressPercent;
+
+                if (enrollmentByCourseId.TryGetValue(course.Id, out var enrollment))
+                {
+                    enrollment.Progression = progressPercent;
+                    enrollment.ProgressPercentage = progressPercent;
+                    if (courseSessions.Count > 0 && doneSessions == courseSessions.Count)
+                    {
+                        MarkEnrollmentCompleted(enrollment);
+                    }
+                    await Enrollment.UpdateAsync(enrollment);
+                }
+
+                var trainerId = courses.FirstOrDefault(c => c.Id == course.Id)?.InstructorId
+                    ?? courseSessions.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.TrainerId))?.TrainerId;
+                course.InstructorId = trainerId;
+                if (!string.IsNullOrWhiteSpace(trainerId))
+                {
+                    var trainer = await userManagment.GetUserById(trainerId);
+                    course.InstructorName = trainer?.FullName ?? trainer?.UserName ?? trainer?.Email;
+                }
+            }
             return enrolledCourses;
         }
 
@@ -311,6 +343,14 @@ namespace Application.Services.Implementitions
             var totalSessions = sessions.Count;
             var doneSessions = progressRows.Count(p => p.IsDone && sessionIds.Contains(p.SessionId));
             var progressPercentage = CalculatePercentage(doneSessions, totalSessions);
+            var completedAt = totalSessions > 0 && doneSessions == totalSessions
+                ? progressRows
+                    .Where(p => p.IsDone && sessionIds.Contains(p.SessionId))
+                    .Select(p => p.DoneAt)
+                    .Where(doneAt => doneAt.HasValue)
+                    .DefaultIfEmpty(DateTime.UtcNow)
+                    .Max()
+                : null;
 
             return new CourseProgressDto
             {
@@ -320,9 +360,7 @@ namespace Application.Services.Implementitions
                 DoneSessions = doneSessions,
                 ProgressPercentage = progressPercentage,
                 IsCompleted = totalSessions > 0 && doneSessions == totalSessions,
-                CompletedAt = totalSessions > 0 && doneSessions == totalSessions
-                    ? progressRows.Where(p => p.IsDone).Max(p => p.DoneAt)
-                    : null,
+                CompletedAt = completedAt,
                 Sessions = sessions.Select(session =>
                 {
                     var progress = progressRows.FirstOrDefault(p => p.SessionId == session.Id);
@@ -387,10 +425,9 @@ namespace Application.Services.Implementitions
             }
 
             var allCourseSessions = (await Sessions.GetAllAsync()).Where(s => s.CourseId == session.CourseId).Select(s => s.Id).ToHashSet();
-            var totalSessions = allCourseSessions.Count;
             var progressRows = (await Progresses.GetAllAsync()).Where(p => p.CourseId == session.CourseId && p.StudentId == userId).ToList();
-            var doneSessions = progressRows.Count(p => p.IsDone && allCourseSessions.Contains(p.SessionId));
             var updatedProgress = progressRows.FirstOrDefault(p => p.SessionId == sessionId);
+            var summary = await SyncEnrollmentProgress(session.CourseId, userId, enrollment, allCourseSessions);
 
             var data = new ToggleSessionDoneResultDto
             {
@@ -398,9 +435,9 @@ namespace Application.Services.Implementitions
                 CourseId = session.CourseId,
                 IsDone = updatedProgress?.IsDone ?? true,
                 DoneAt = updatedProgress?.DoneAt,
-                DoneSessions = doneSessions,
-                TotalSessions = totalSessions,
-                ProgressPercentage = CalculatePercentage(doneSessions, totalSessions)
+                DoneSessions = summary.DoneSessions,
+                TotalSessions = summary.TotalSessions,
+                ProgressPercentage = summary.ProgressPercentage
             };
 
             return new ServiceResponse(true, data.IsDone ? "Session marked as done." : "Session marked as not done.", data);
@@ -474,13 +511,55 @@ namespace Application.Services.Implementitions
 
         public async Task<ServiceResponse> MarkSessionCompleted(Guid sessionId, string userId)
         {
-            var result = await ToggleSessionDone(sessionId, userId);
-            if (!result.success)
-                return result;
+            if (sessionId == Guid.Empty)
+                return new ServiceResponse(false, "Invalid session id.");
+            if (string.IsNullOrWhiteSpace(userId))
+                return new ServiceResponse(false, "Student id is required.");
 
-            var toggleResult = result.data as ToggleSessionDoneResultDto;
-            var courseProgress = toggleResult == null ? null : await GetCourseProgress(toggleResult.CourseId, userId);
-            return new ServiceResponse(true, result.message, courseProgress);
+            var session = await Sessions.GetByIdAsync(sessionId);
+            if (session == null)
+                return new ServiceResponse(false, "Session not found.");
+
+            var course = await Courses.GetByIdAsync(session.CourseId);
+            if (course == null || course.IsDeleted)
+                return new ServiceResponse(false, "Course not found or unavailable.");
+
+            var enrollment = (await Enrollment.GetAllAsync()).FirstOrDefault(e => e.CourseId == session.CourseId && e.StudentId == userId);
+            if (enrollment == null)
+                return new ServiceResponse(false, "You must enroll in this course before completing sessions.");
+
+            var now = DateTime.UtcNow;
+            var existing = (await Progresses.GetAllAsync()).FirstOrDefault(p => p.StudentId == userId && p.SessionId == sessionId);
+            var wasAlreadyCompleted = existing?.IsDone == true;
+
+            if (existing == null)
+            {
+                await Progresses.AddAsync(new StudentSessionProgress
+                {
+                    StudentId = userId,
+                    CourseId = session.CourseId,
+                    SessionId = sessionId,
+                    IsDone = true,
+                    DoneAt = now,
+                    UpdatedAt = now
+                });
+            }
+            else if (!existing.IsDone || existing.CourseId != session.CourseId)
+            {
+                existing.IsDone = true;
+                existing.DoneAt ??= now;
+                existing.CourseId = session.CourseId;
+                existing.UpdatedAt = now;
+                await Progresses.UpdateAsync(existing);
+            }
+
+            await SyncEnrollmentProgress(session.CourseId, userId, enrollment);
+            var courseProgress = await GetCourseProgress(session.CourseId, userId);
+
+            return new ServiceResponse(
+                true,
+                wasAlreadyCompleted ? "Session was already completed." : "Session marked as completed.",
+                courseProgress);
         }
 
         public async Task<IEnumerable<StudentAssignmentDto>> GetMyAssignments(string userId)
@@ -995,6 +1074,39 @@ namespace Application.Services.Implementitions
             });
         }
 
+        private async Task<(int DoneSessions, int TotalSessions, double ProgressPercentage)> SyncEnrollmentProgress(
+            Guid courseId,
+            string userId,
+            Enrollment enrollment,
+            HashSet<Guid>? courseSessionIds = null)
+        {
+            var sessionIds = courseSessionIds ?? (await Sessions.GetAllAsync())
+                .Where(s => s.CourseId == courseId)
+                .Select(s => s.Id)
+                .ToHashSet();
+
+            var totalSessions = sessionIds.Count;
+            var progressRows = (await Progresses.GetAllAsync())
+                .Where(p => p.CourseId == courseId && p.StudentId == userId)
+                .ToList();
+            var doneSessions = progressRows.Count(p => p.IsDone && sessionIds.Contains(p.SessionId));
+            var percentage = CalculatePercentage(doneSessions, totalSessions);
+
+            enrollment.Progression = percentage;
+            enrollment.ProgressPercentage = percentage;
+            if (totalSessions > 0 && doneSessions == totalSessions)
+            {
+                MarkEnrollmentCompleted(enrollment);
+            }
+            else if (!enrollment.CompletedAt.HasValue && !enrollment.GraduationDate.HasValue)
+            {
+                enrollment.IsCompleted = false;
+            }
+
+            await Enrollment.UpdateAsync(enrollment);
+            return (doneSessions, totalSessions, percentage);
+        }
+
         private static bool IsEnrollmentCompleted(Enrollment enrollment)
         {
             return enrollment.IsCompleted || enrollment.CompletedAt.HasValue || enrollment.GraduationDate.HasValue || enrollment.Progression >= 100 || enrollment.ProgressPercentage >= 100;
@@ -1070,6 +1182,7 @@ namespace Application.Services.Implementitions
                 SubmittedAt = submission?.SubmittedAt,
                 Grade = submission?.Grade,
                 Feedback = submission?.Feedback,
+                AssignmentFileUrl = string.IsNullOrWhiteSpace(assignment.Content) ? null : assignment.Content,
                 FileUrl = submission?.FileUrl
             };
         }

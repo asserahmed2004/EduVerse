@@ -19,6 +19,7 @@ namespace Application.DTOs.Sessions
         public string? Description { get; set; }
         public string? VideoUrl { get; set; }
         public string? ExternalLink { get; set; }
+        public bool IsCompleted { get; set; }
         public string? AttendanceCode { get; set; }
         public DateTime? AttendanceCodeCreatedAt { get; set; }
     }

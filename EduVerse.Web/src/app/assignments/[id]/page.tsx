@@ -68,6 +68,18 @@ export default function StudentSubmissionDetailsPage() {
                 <Badge tone={isGraded ? "teal" : submission.isLate ? "coral" : "amber"}>{isGraded ? "Graded" : submission.isLate ? "Late" : "Submitted"}</Badge>
                 <Badge tone="slate">{assignment.courseName}</Badge>
               </div>
+              <h2 className="mt-5 text-lg font-bold text-ink">Assignment instructions</h2>
+              <div className="mt-3 rounded-xl bg-slate-50 p-4 ring-1 ring-slate-100">
+                <p className="whitespace-pre-wrap text-sm leading-6 text-ink">{assignment.description?.trim() || "No instructions provided."}</p>
+              </div>
+              <div className="mt-4 rounded-xl bg-slate-50 p-4 ring-1 ring-slate-100">
+                <p className="text-sm font-semibold text-ink">Instructor attachment</p>
+                {assignment.assignmentFileUrl ? (
+                  <FileActionButtons url={assignment.assignmentFileUrl} className="mt-3" previewLabel="Open" downloadLabel="Download" />
+                ) : (
+                  <p className="mt-2 text-sm text-muted">No attachment provided.</p>
+                )}
+              </div>
               <h2 className="mt-5 text-lg font-bold text-ink">Submitted answer</h2>
               <div className="mt-3 rounded-xl bg-slate-50 p-4 ring-1 ring-slate-100">
                 <p className="whitespace-pre-wrap text-sm leading-6 text-ink">{submission.textAnswer?.trim() || "No text answer was submitted."}</p>

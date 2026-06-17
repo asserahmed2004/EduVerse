@@ -255,8 +255,8 @@ namespace API.Controllers
         [Authorize(Roles = AppRoles.StudentAccess)]
         public async Task<IActionResult> AddRating( CreateRating rating)
         {
-            string userId;
-            if (User.Identity.IsAuthenticated)
+            string? userId;
+            if (User.Identity?.IsAuthenticated == true)
             {
                 userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
             }
@@ -264,6 +264,9 @@ namespace API.Controllers
             {
                 return Unauthorized(new { success = false, message = "You must be logged in to add a rating" });
             }
+            if (string.IsNullOrWhiteSpace(userId))
+                return Unauthorized(new { success = false, message = "User id claim is missing" });
+
             var result = await courseService.AddRating(rating, userId);
             if (!result.success)
                 return BadRequest(result);
@@ -292,7 +295,8 @@ namespace API.Controllers
         [HttpGet("GetAllSessions/{courseId}")]
         public async Task<IActionResult> GetCourseAllSessions(Guid courseId)
         {
-            var result = await courseService.GetCourseAllSessions(courseId);
+            var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            var result = await courseService.GetCourseAllSessions(courseId, userId);
             
             return Ok(result);
         }

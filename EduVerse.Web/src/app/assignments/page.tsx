@@ -4,6 +4,7 @@ import { BookOpen, FileText, Upload } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
+import { FileActionButtons } from "@/components/file-actions";
 import { useToast } from "@/components/toast-provider";
 import { Badge, Button, EmptyState, LinkButton, LoadingState, PageHeader, StatCard } from "@/components/ui";
 import { studentService } from "@/lib/api";
@@ -22,6 +23,12 @@ function AssignmentCard({ assignment, onSubmit }: { assignment: StudentAssignmen
           <p className="mt-1 text-sm text-muted">{assignment.sessionTitle} - Session {assignment.sessionNumber}</p>
           <p className="mt-2 text-sm text-muted">{assignment.description}</p>
           <p className="mt-2 text-xs font-semibold text-muted">Due: {assignment.dueDate ? formatDate(assignment.dueDate) : "Not set"}</p>
+          {assignment.assignmentFileUrl && (
+            <div className="mt-3 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-100">
+              <p className="text-xs font-bold uppercase tracking-wide text-muted">Instructor attachment</p>
+              <FileActionButtons url={assignment.assignmentFileUrl} className="mt-3" previewLabel="Open" downloadLabel="Download" />
+            </div>
+          )}
           {assignment.submissionStatus === "Graded" && (
             <div className="mt-3 rounded-xl bg-teal-50 p-3 ring-1 ring-teal-100">
               <p className={cn("text-sm font-bold", gradeTextColor(assignment.grade))}>Grade: {assignment.grade ?? "Not available"} / 100</p>
@@ -137,6 +144,19 @@ export default function StudentAssignmentsPage() {
             <form onSubmit={submit} className="w-full max-w-xl rounded-xl2 bg-white p-6 shadow-xl ring-1 ring-slate-100" onClick={(event) => event.stopPropagation()}>
               <h2 className="text-2xl font-black text-ink">{selected.title}</h2>
               <p className="mt-2 text-sm text-muted">{selected.courseName}</p>
+              <div className="mt-4 rounded-xl bg-slate-50 p-4 ring-1 ring-slate-100">
+                <p className="text-xs font-bold uppercase tracking-wide text-muted">Instructions</p>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-ink">{selected.description?.trim() || "No instructions provided."}</p>
+                <p className="mt-3 text-xs font-semibold text-muted">Due: {selected.dueDate ? formatDate(selected.dueDate) : "Not set"}</p>
+              </div>
+              <div className="mt-4 rounded-xl bg-slate-50 p-4 ring-1 ring-slate-100">
+                <p className="text-xs font-bold uppercase tracking-wide text-muted">Instructor attachment</p>
+                {selected.assignmentFileUrl ? (
+                  <FileActionButtons url={selected.assignmentFileUrl} className="mt-3" previewLabel="Open" downloadLabel="Download" />
+                ) : (
+                  <p className="mt-2 text-sm text-muted">No attachment provided.</p>
+                )}
+              </div>
               {selected.submissionStatus === "Graded" && (
                 <div className="mt-5 rounded-xl bg-teal-50 p-4 ring-1 ring-teal-100">
                   <p className={cn("font-bold", gradeTextColor(selected.grade))}>Grade: {selected.grade ?? "Not available"} / 100</p>

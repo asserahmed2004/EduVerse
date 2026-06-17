@@ -39,6 +39,15 @@ export type Course = {
   students?: number;
   ratingCount?: number;
   recommendationScore?: number;
+  progressPercent?: number;
+};
+
+export type RatingResult = {
+  courseId: string;
+  averageRating: number;
+  ratingCount: number;
+  userRating: number;
+  message?: string;
 };
 
 export type CourseSession = {
@@ -53,6 +62,7 @@ export type CourseSession = {
   description?: string;
   videoUrl?: string;
   externalLink?: string;
+  isCompleted?: boolean;
   attendanceCode?: string;
   attendanceCodeCreatedAt?: string;
 };
@@ -404,8 +414,10 @@ export type PaymentFilters = {
 export type Enrollment = {
   courseId: string;
   courseName: string;
+  instructorName?: string;
   enrollmentDate: string;
   progression: number;
+  progressPercent?: number;
   progressPercentage?: number;
   isCompleted?: boolean;
   completedAt?: string;
@@ -448,6 +460,7 @@ export type StudentAssignment = {
   submittedAt?: string;
   grade?: number;
   feedback?: string;
+  assignmentFileUrl?: string;
   fileUrl?: string;
 };
 

@@ -26,29 +26,57 @@ namespace Application.Services.Implementitions
         IMapper mapper ,ICloudService cloud,IGeneric<Rating> RatingManagment ,IGeneric<Session> SessionManagment,IGeneric<Assignment> AssignmentManagment,
         IGeneric<Enrollment> EnrollmentManagment, IGeneric<Payment> PaymentManagment, IUserManagment UserManagment,
         IActivityLogService activityLogService,IGeneric<AttendanceRecord> attendencemanagment,
-        IGeneric<Organization> OrganizationManagment) : ICourseService
+        IGeneric<Organization> OrganizationManagment, IGeneric<StudentSessionProgress> ProgressManagment) : ICourseService
     {
         public async Task<ServiceResponse> AddRating(CreateRating rating, string userid)
         {
-            if(rating == null || rating.CourseId == Guid.Empty || string.IsNullOrEmpty(userid) || rating.RatingValue < 0 || rating.RatingValue > 5)
+            if(rating == null || rating.CourseId == Guid.Empty || string.IsNullOrEmpty(userid))
                 return new ServiceResponse { success = false, message = "Invalid rating data" };
+            if (rating.RatingValue < 1 || rating.RatingValue > 5)
+                return new ServiceResponse { success = false, message = "Rating must be between 1 and 5." };
             var course = await CoursesManagment.GetByIdAsync(rating.CourseId);
             if (course == null || course.IsDeleted)
                 return new ServiceResponse { success = false, message = "Course not found" };
-            var enrolled = (await EnrollmentManagment.GetAllAsync())
-                .Any(e => e.CourseId == rating.CourseId && e.StudentId == userid);
-            if (!enrolled)
+            var enrollment = (await EnrollmentManagment.GetAllAsync())
+                .FirstOrDefault(e => e.CourseId == rating.CourseId && e.StudentId == userid);
+            if (enrollment == null)
                 return new ServiceResponse { success = false, message = "You must enroll in this course before rating it." };
-            var mappedRating = mapper.Map<Rating>(rating);
-            mappedRating.StudentId = userid;
-            var existingRating = await RatingManagment.GetAllAsync();
-            var userCourseRating = existingRating.FirstOrDefault(r => r.CourseId == rating.CourseId && r.StudentId == userid);
+            if (!IsEnrollmentCompleted(enrollment))
+                return new ServiceResponse { success = false, message = "You can rate this course after completing it." };
+
+            var existingRatings = (await RatingManagment.GetAllAsync()).ToList();
+            var userCourseRating = existingRatings.FirstOrDefault(r => r.CourseId == rating.CourseId && r.StudentId == userid);
             if (userCourseRating != null)
-                await RatingManagment.DeleteAsync(userCourseRating);
-            var result = await RatingManagment.AddAsync(mappedRating);
+            {
+                userCourseRating.RatingValue = rating.RatingValue;
+                await RatingManagment.UpdateAsync(userCourseRating);
+            }
+            else
+            {
+                var mappedRating = mapper.Map<Rating>(rating);
+                mappedRating.StudentId = userid;
+                await RatingManagment.AddAsync(mappedRating);
+            }
+
+            var updatedRatings = (await RatingManagment.GetAllAsync())
+                .Where(r => r.CourseId == rating.CourseId)
+                .ToList();
+            var result = updatedRatings.FirstOrDefault(r => r.StudentId == userid);
             if (result == null)
-                return new ServiceResponse { success = false, message = "Failed to add rating" };
-            return new ServiceResponse { success = true, message = "Rating added successfully" };
+                return new ServiceResponse { success = false, message = "Failed to save rating" };
+
+            return new ServiceResponse
+            {
+                success = true,
+                message = userCourseRating != null ? "Rating updated successfully" : "Rating added successfully",
+                data = new
+                {
+                    courseId = rating.CourseId,
+                    averageRating = updatedRatings.Any() ? Math.Round(updatedRatings.Average(r => r.RatingValue), 2) : 0,
+                    ratingCount = updatedRatings.Count,
+                    userRating = result.RatingValue
+                }
+            };
         }
 
         
@@ -374,6 +402,7 @@ namespace Application.Services.Implementitions
                 foreach (var course in mappedCourses)
                 {
                     var courseRatings = ratings.Where(r => r.CourseId == course.Id).ToList();
+                course.RatingCount = courseRatings.Count;
                 if (courseRatings.Any())
                     course.Rating = (float)courseRatings.Average(r => r.RatingValue);
                 else
@@ -414,6 +443,7 @@ namespace Application.Services.Implementitions
             foreach (var course in mappedCourses)
             {
                 var courseRatings = ratings.Where(r => r.CourseId == course.Id).ToList();
+                course.RatingCount = courseRatings.Count;
                 if (courseRatings.Any())
                     course.Rating = (float)courseRatings.Average(r => r.RatingValue);
                 else
@@ -456,6 +486,7 @@ namespace Application.Services.Implementitions
             foreach (var course in mappedCourses)
             {
                 var courseRatings = ratings.Where(r => r.CourseId == course.Id).ToList();
+                course.RatingCount = courseRatings.Count;
                 if (courseRatings.Any())
                     course.Rating = (float)courseRatings.Average(r => r.RatingValue);
                 else
@@ -487,12 +518,21 @@ namespace Application.Services.Implementitions
             var enrollments = (await EnrollmentManagment.GetAllAsync())
                 .Where(e => courseIds.Contains(e.CourseId))
                 .ToList();
+            var ratings = (await RatingManagment.GetAllAsync())
+                .Where(r => courseIds.Contains(r.CourseId))
+                .ToList();
 
             foreach (var course in mappedCourses)
             {
                 var courseSessions = sessions.Where(s => s.CourseId == course.Id).ToList();
+                var courseRatings = ratings.Where(r => r.CourseId == course.Id).ToList();
                 course.SessionsCount = courseSessions.Count;
                 course.StudentsCount = enrollments.Where(e => e.CourseId == course.Id).Select(e => e.StudentId).Distinct().Count();
+                course.Rating = courseRatings.Any() ? (float)courseRatings.Average(r => r.RatingValue) : 0;
+                course.RatingCount = courseRatings.Count;
+                course.UserRating = !string.IsNullOrEmpty(userid)
+                    ? courseRatings.FirstOrDefault(r => r.StudentId == userid)?.RatingValue ?? 0
+                    : 0;
                 course.Category = course.Categories?.FirstOrDefault()?.Name;
                 course.IsDeleted = course.IsDeleted;
 
@@ -549,6 +589,7 @@ namespace Application.Services.Implementitions
             mappedCourse.Categories = categories;
 
             var courseRatings = ratings.Where(r => r.CourseId == course.Id).ToList();
+            mappedCourse.RatingCount = courseRatings.Count;
             if (courseRatings.Any())
             {
                 mappedCourse.Rating = (float)courseRatings.Average(r => r.RatingValue);
@@ -587,6 +628,7 @@ namespace Application.Services.Implementitions
             mappedCourse.Categories = categories;
             var ratings = await RatingManagment.GetAllAsync();
             var courseRatings = ratings.Where(r => r.CourseId == course.Id).ToList();
+            mappedCourse.RatingCount = courseRatings.Count;
             if (courseRatings.Any())
             {
                 mappedCourse.Rating = (float)courseRatings.Average(r => r.RatingValue);
@@ -1009,7 +1051,7 @@ namespace Application.Services.Implementitions
 
         }
 
-        public async Task<List<GetSession>> GetCourseAllSessions(Guid courdeid)
+        public async Task<List<GetSession>> GetCourseAllSessions(Guid courdeid, string? studentId = null)
         {
             if (courdeid == Guid.Empty)
                 return new List<GetSession>();
@@ -1022,6 +1064,25 @@ namespace Application.Services.Implementitions
 
             var courseSessions = sessions.Where(s => s.CourseId == courdeid).OrderBy(n=>n.SessionNumber).ToList();
             var mappedSessions = mapper.Map<List<GetSession>>(courseSessions);
+
+            if (!string.IsNullOrWhiteSpace(studentId))
+            {
+                var isEnrolled = (await EnrollmentManagment.GetAllAsync())
+                    .Any(e => e.CourseId == courdeid && e.StudentId == studentId);
+                if (isEnrolled)
+                {
+                    var completedSessionIds = (await ProgressManagment.GetAllAsync())
+                        .Where(p => p.CourseId == courdeid && p.StudentId == studentId && p.IsDone)
+                        .Select(p => p.SessionId)
+                        .ToHashSet();
+
+                    foreach (var session in mappedSessions)
+                    {
+                        session.IsCompleted = completedSessionIds.Contains(session.Id);
+                    }
+                }
+            }
+
             return mappedSessions;
         }
 
@@ -1171,8 +1232,8 @@ namespace Application.Services.Implementitions
             var assignments = await AssignmentManagment.GetAllAsync();
             if (assignments == null || !assignments.Any())
                 return new List<GetAssignment>();
-            var sessions = GetCourseAllSessions(courdeid);
-            var courseAssignments = assignments.Where(a => sessions.Result.Any(s => s.Id == a.SessionId)).ToList();
+            var sessions = await GetCourseAllSessions(courdeid);
+            var courseAssignments = assignments.Where(a => sessions.Any(s => s.Id == a.SessionId)).ToList();
             var mappedAssignments = mapper.Map<List<GetAssignment>>(courseAssignments);
             return mappedAssignments;
 
@@ -1202,6 +1263,15 @@ namespace Application.Services.Implementitions
                 return null;
             var mappedAssignment = mapper.Map<GetAssignment>(targetAssignment);
             return mappedAssignment;
+        }
+
+        private static bool IsEnrollmentCompleted(Enrollment enrollment)
+        {
+            return enrollment.IsCompleted
+                || enrollment.CompletedAt.HasValue
+                || enrollment.GraduationDate.HasValue
+                || enrollment.Progression >= 100
+                || enrollment.ProgressPercentage >= 100;
         }
     }
 }
