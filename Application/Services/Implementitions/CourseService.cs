@@ -13,6 +13,9 @@ using Domain.Interfaces;
 using MediaToolkit;
 using MediaToolkit.Model;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -26,7 +29,8 @@ namespace Application.Services.Implementitions
         IMapper mapper ,ICloudService cloud,IGeneric<Rating> RatingManagment ,IGeneric<Session> SessionManagment,IGeneric<Assignment> AssignmentManagment,
         IGeneric<Enrollment> EnrollmentManagment, IGeneric<Payment> PaymentManagment, IUserManagment UserManagment,
         IActivityLogService activityLogService,IGeneric<AttendanceRecord> attendencemanagment,
-        IGeneric<Organization> OrganizationManagment, IGeneric<StudentSessionProgress> ProgressManagment) : ICourseService
+        IGeneric<Organization> OrganizationManagment, IGeneric<StudentSessionProgress> ProgressManagment,
+        ILogger<CourseService> logger) : ICourseService
     {
         public async Task<ServiceResponse> AddRating(CreateRating rating, string userid)
         {
@@ -324,328 +328,217 @@ namespace Application.Services.Implementitions
                 (session.TrainerId == userId || course?.InstructorId == userId || await CanManageCourse(session.CourseId, userId));
         }
 
-        private async Task<List<Course>> ScopeActiveCoursesAsync(
-            IEnumerable<Course> sourceCourses,
+        private async Task<IQueryable<Course>> ScopeCoursesAsync(
+            IQueryable<Course> sourceCourses,
             string? userId,
             bool isAdmin,
             bool isOrganizationAdmin,
             bool isInstructor)
         {
-            var courses = sourceCourses.ToList();
-
             if (isAdmin)
             {
-                return courses;
+                return sourceCourses;
             }
 
             if (isOrganizationAdmin)
             {
                 if (string.IsNullOrWhiteSpace(userId))
-                    return [];
+                    return sourceCourses.Where(_ => false);
 
                 var user = await UserManagment.GetUserById(userId);
                 if (user?.OrganizationId.HasValue != true)
-                    return [];
+                    return sourceCourses.Where(_ => false);
 
-                return courses.Where(c => c.OrganizationId == user.OrganizationId.Value).ToList();
+                return sourceCourses.Where(c => c.OrganizationId == user.OrganizationId.Value);
             }
 
             if (isInstructor)
             {
                 if (string.IsNullOrWhiteSpace(userId))
-                    return [];
+                    return sourceCourses.Where(_ => false);
 
                 var instructor = await UserManagment.GetUserById(userId);
                 if (instructor?.OrganizationId.HasValue != true)
-                    return [];
+                    return sourceCourses.Where(_ => false);
 
-                var assignedCourseIds = (await SessionManagment.GetAllAsync())
+                var assignedCourseIds = SessionManagment.Query()
                     .Where(s => s.TrainerId == userId)
-                    .Select(s => s.CourseId)
-                    .ToHashSet();
+                    .Select(s => s.CourseId);
 
-                return courses
+                return sourceCourses
                     .Where(c => c.OrganizationId == instructor.OrganizationId &&
-                        (c.InstructorId == userId || assignedCourseIds.Contains(c.Id)))
-                    .ToList();
+                        (c.InstructorId == userId || assignedCourseIds.Contains(c.Id)));
             }
 
-            return courses;
+            return sourceCourses;
         }
 
-        public async Task<List<GetCourse>> GetAllCourses(string? userid, bool isAdmin = false, bool isOrganizationAdmin = false, bool isInstructor = false)
+        public async Task<List<GetCourse>> GetAllCourses(string? userid, bool isAdmin = false, bool isOrganizationAdmin = false, bool isInstructor = false, int page = 1, int pageSize = 50)
         {
-            var courses = await ScopeActiveCoursesAsync((await CoursesManagment.GetAllAsync()).Where(c => !c.IsDeleted), userid, isAdmin, isOrganizationAdmin, isInstructor);
-            if (courses == null || !courses.Any())
-                return new List<GetCourse>();
-            var mappedCourses = mapper.Map<List<GetCourse>>(courses);
-
-            var categoryLinks = await CoursesCatManagment.GetAllAsync();
-            var ratings = await RatingManagment.GetAllAsync();
-            
-            foreach (var course in mappedCourses)
-            {
-                
-                var courseCategories = categoryLinks.Where(cc => cc.CourseId == course.Id).ToList();
-                var categories = new List<GetCategory>();
-                foreach (var courseCategory in courseCategories)
-                {
-                    var category = await CategoryManagment.GetByIdAsync(courseCategory.CategoryId);
-                    if (category != null)
-                    {
-                        categories.Add(mapper.Map<GetCategory>(category));
-                    }
-                }
-                course.Categories = categories;
-            }
-          
-                foreach (var course in mappedCourses)
-                {
-                    var courseRatings = ratings.Where(r => r.CourseId == course.Id).ToList();
-                course.RatingCount = courseRatings.Count;
-                if (courseRatings.Any())
-                    course.Rating = (float)courseRatings.Average(r => r.RatingValue);
-                else
-                    course.Rating = 0;
-
-                if (!string.IsNullOrEmpty(userid))
-                {
-                    course.UserRating = courseRatings.FirstOrDefault(r => r.StudentId == userid)?.RatingValue ?? 0;
-                }
-                    
-                    
-                }
-            
-            await EnrichCourses(mappedCourses, userid);
-            return mappedCourses;
+            page = Math.Max(1, page);
+            pageSize = Math.Clamp(pageSize, 1, 100);
+            var query = await ScopeCoursesAsync(
+                CoursesManagment.Query().Where(c => !c.IsDeleted),
+                userid,
+                isAdmin,
+                isOrganizationAdmin,
+                isInstructor);
+            return await LoadCourseDtosAsync(query, userid, page, pageSize);
         }
 
         public async Task<List<GetCourse>> GetDeletedCourses(string? userid)
         {
-            var courses = (await CoursesManagment.GetAllAsync()).Where(c => c.IsDeleted).ToList();
-            if (courses == null || !courses.Any())
-                return new List<GetCourse>();
-
-            var mappedCourses = mapper.Map<List<GetCourse>>(courses);
-            await EnrichCourses(mappedCourses, userid);
-            return mappedCourses;
+            return await LoadCourseDtosAsync(
+                CoursesManagment.Query().Where(c => c.IsDeleted),
+                userid);
         }
         public async Task<List<GetCourse>> GetCourseByCategory(Guid categoryId, string? userid, bool isAdmin = false, bool isOrganizationAdmin = false, bool isInstructor = false)
         {
-            var categoryLinks = await CoursesCatManagment.GetAllAsync();
-            var courseIds = categoryLinks.Where(cl => cl.CategoryId == categoryId).Select(cl => cl.CourseId).ToList();
-            var courses = await CoursesManagment.GetAllAsync();
-            var filteredCourses = await ScopeActiveCoursesAsync(courses.Where(c => !c.IsDeleted && courseIds.Contains(c.Id)), userid, isAdmin, isOrganizationAdmin, isInstructor);
-            if (filteredCourses == null || !filteredCourses.Any())
-                return new List<GetCourse>();
-            var mappedCourses = mapper.Map<List<GetCourse>>(filteredCourses);
-            var ratings = await RatingManagment.GetAllAsync();
-            foreach (var course in mappedCourses)
-            {
-                var courseRatings = ratings.Where(r => r.CourseId == course.Id).ToList();
-                course.RatingCount = courseRatings.Count;
-                if (courseRatings.Any())
-                    course.Rating = (float)courseRatings.Average(r => r.RatingValue);
-                else
-                    course.Rating = 0;
-                if (!string.IsNullOrEmpty(userid))
-                {
-                    course.UserRating = courseRatings.FirstOrDefault(r => r.StudentId == userid)?.RatingValue ?? 0;
-                }
-            }
-            await EnrichCourses(mappedCourses, userid);
-            return mappedCourses;
+            var courseIds = CoursesCatManagment.Query()
+                .Where(link => link.CategoryId == categoryId)
+                .Select(link => link.CourseId);
+            var query = await ScopeCoursesAsync(
+                CoursesManagment.Query().Where(c => !c.IsDeleted && courseIds.Contains(c.Id)),
+                userid,
+                isAdmin,
+                isOrganizationAdmin,
+                isInstructor);
+            return await LoadCourseDtosAsync(query, userid);
         }
         public async Task<List<GetCourse>> Search(string name,string? userid, bool isAdmin = false, bool isOrganizationAdmin = false, bool isInstructor = false)
         {
-            var courses = await CoursesManagment.GetAllAsync();
-            var filteredCourses = await ScopeActiveCoursesAsync(courses.Where(c => !c.IsDeleted && c.Name.Contains(name, StringComparison.OrdinalIgnoreCase)), userid, isAdmin, isOrganizationAdmin, isInstructor);
-            if (courses == null || !courses.Any())
-                return new List<GetCourse>();
-            var mappedCourses = mapper.Map<List<GetCourse>>(filteredCourses);
-
-            var categoryLinks = await CoursesCatManagment.GetAllAsync();
-            var ratings = await RatingManagment.GetAllAsync();
-
-            foreach (var course in mappedCourses)
-            {
-
-                var courseCategories = categoryLinks.Where(cc => cc.CourseId == course.Id).ToList();
-                var categories = new List<GetCategory>();
-                foreach (var courseCategory in courseCategories)
-                {
-                    var category = await CategoryManagment.GetByIdAsync(courseCategory.CategoryId);
-                    if (category != null)
-                    {
-                        categories.Add(mapper.Map<GetCategory>(category));
-                    }
-                }
-                course.Categories = categories;
-            }
-
-            foreach (var course in mappedCourses)
-            {
-                var courseRatings = ratings.Where(r => r.CourseId == course.Id).ToList();
-                course.RatingCount = courseRatings.Count;
-                if (courseRatings.Any())
-                    course.Rating = (float)courseRatings.Average(r => r.RatingValue);
-                else
-                    course.Rating = 0;
-
-                if (!string.IsNullOrEmpty(userid))
-                {
-                    course.UserRating = courseRatings.FirstOrDefault(r => r.StudentId == userid)?.RatingValue ?? 0;
-                }
-
-
-            }
-
-            await EnrichCourses(mappedCourses, userid);
-            return mappedCourses;
+            var normalizedName = name?.Trim() ?? string.Empty;
+            var query = CoursesManagment.Query().Where(c =>
+                !c.IsDeleted &&
+                (c.Name.Contains(normalizedName) || c.Title.Contains(normalizedName)));
+            query = await ScopeCoursesAsync(query, userid, isAdmin, isOrganizationAdmin, isInstructor);
+            return await LoadCourseDtosAsync(query, userid);
         }
 
-        private async Task EnrichCourses(List<GetCourse> mappedCourses, string? userid)
+        private async Task<List<GetCourse>> LoadCourseDtosAsync(
+            IQueryable<Course> query,
+            string? userId,
+            int page = 1,
+            int pageSize = 100)
         {
-            if (mappedCourses == null || mappedCourses.Count == 0)
-            {
-                return;
-            }
+            var stopwatch = Stopwatch.StartNew();
+            var mappedCourses = await query
+                .OrderBy(course => course.Name)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(course => new GetCourse
+                {
+                    Id = course.Id,
+                    Name = course.Name,
+                    Description = course.Description,
+                    Title = course.Title,
+                    Price = course.Price,
+                    Duration = course.Duration,
+                    ImageUrl = course.ImageUrl,
+                    OrgId = course.OrgId,
+                    OrganizationId = course.OrganizationId,
+                    OrganizationName = OrganizationManagment.Query(false)
+                        .Where(organization => course.OrganizationId.HasValue && organization.Id == course.OrganizationId.Value)
+                        .Select(organization => organization.Name)
+                        .FirstOrDefault() ?? "EduVerseOrganization",
+                    OrganizationOwnerName = OrganizationManagment.Query(false)
+                        .Where(organization => course.OrganizationId.HasValue && organization.Id == course.OrganizationId.Value)
+                        .Select(organization => organization.Name)
+                        .FirstOrDefault() ?? "EduVerseOrganization",
+                    OrganizationOwnerEmail = OrganizationManagment.Query(false)
+                        .Where(organization => course.OrganizationId.HasValue && organization.Id == course.OrganizationId.Value)
+                        .Select(organization => organization.Email)
+                        .FirstOrDefault(),
+                    InstructorId = course.InstructorId,
+                    InstructorName = UserManagment.QueryUsers(false)
+                        .Where(instructor => instructor.Id ==
+                            (course.InstructorId ?? SessionManagment.Query(false)
+                                .Where(session => session.CourseId == course.Id && session.TrainerId != null)
+                                .Select(session => session.TrainerId)
+                                .FirstOrDefault()))
+                        .Select(instructor => instructor.FullName ?? instructor.Email)
+                        .FirstOrDefault(),
+                    StudentsCount = EnrollmentManagment.Query(false)
+                        .Where(enrollment => enrollment.CourseId == course.Id)
+                        .Select(enrollment => enrollment.StudentId)
+                        .Distinct()
+                        .Count(),
+                    SessionsCount = SessionManagment.Query(false).Count(session => session.CourseId == course.Id),
+                    RatingCount = RatingManagment.Query(false).Count(rating => rating.CourseId == course.Id),
+                    Rating = RatingManagment.Query(false)
+                        .Where(rating => rating.CourseId == course.Id)
+                        .Select(rating => (float?)rating.RatingValue)
+                        .Average() ?? 0,
+                    UserRating = string.IsNullOrWhiteSpace(userId)
+                        ? 0
+                        : RatingManagment.Query(false)
+                            .Where(rating => rating.CourseId == course.Id && rating.StudentId == userId)
+                            .Select(rating => rating.RatingValue)
+                            .FirstOrDefault(),
+                    IsDeleted = course.IsDeleted,
+                    DeletedAt = course.DeletedAt,
+                    DeletedById = course.DeletedById,
+                    DeletedByName = course.DeletedByName,
+                    RestoredAt = course.RestoredAt,
+                    RestoredById = course.RestoredById,
+                    RestoredByName = course.RestoredByName,
+                    Tags = course.Tags,
+                    Level = course.Level,
+                    Categories = new List<GetCategory>()
+                })
+                .ToListAsync();
 
-            var courseIds = mappedCourses.Select(c => c.Id).ToHashSet();
-            var sessions = (await SessionManagment.GetAllAsync())
-                .Where(s => courseIds.Contains(s.CourseId))
-                .ToList();
-            var enrollments = (await EnrollmentManagment.GetAllAsync())
-                .Where(e => courseIds.Contains(e.CourseId))
-                .ToList();
-            var ratings = (await RatingManagment.GetAllAsync())
-                .Where(r => courseIds.Contains(r.CourseId))
-                .ToList();
+            if (mappedCourses.Count == 0)
+                return [];
+
+            var courseIds = mappedCourses.Select(course => course.Id).ToList();
+            var categoryRows = await (
+                from link in CoursesCatManagment.Query()
+                join category in CategoryManagment.Query() on link.CategoryId equals category.Id
+                where courseIds.Contains(link.CourseId)
+                select new
+                {
+                    link.CourseId,
+                    Category = new GetCategory
+                    {
+                        Id = category.Id,
+                        Name = category.Name,
+                        Description = category.Description
+                    }
+                })
+                .ToListAsync();
+            var categoriesByCourse = categoryRows
+                .GroupBy(row => row.CourseId)
+                .ToDictionary(group => group.Key, group => group.Select(row => row.Category).ToList());
 
             foreach (var course in mappedCourses)
             {
-                var courseSessions = sessions.Where(s => s.CourseId == course.Id).ToList();
-                var courseRatings = ratings.Where(r => r.CourseId == course.Id).ToList();
-                course.SessionsCount = courseSessions.Count;
-                course.StudentsCount = enrollments.Where(e => e.CourseId == course.Id).Select(e => e.StudentId).Distinct().Count();
-                course.Rating = courseRatings.Any() ? (float)courseRatings.Average(r => r.RatingValue) : 0;
-                course.RatingCount = courseRatings.Count;
-                course.UserRating = !string.IsNullOrEmpty(userid)
-                    ? courseRatings.FirstOrDefault(r => r.StudentId == userid)?.RatingValue ?? 0
-                    : 0;
-                course.Category = course.Categories?.FirstOrDefault()?.Name;
-                course.IsDeleted = course.IsDeleted;
-
-                if (course.OrganizationId.HasValue)
-                {
-                    var organization = await OrganizationManagment.GetByIdAsync(course.OrganizationId.Value);
-                    course.OrganizationId = organization?.Id;
-                    course.OrganizationName = organization?.Name ?? "EduVerseOrganization";
-                    course.OrganizationOwnerName = course.OrganizationName;
-                    course.OrganizationOwnerEmail = organization?.Email;
-                }
-                else if (!string.IsNullOrWhiteSpace(course.OrgId))
-                {
-                    course.OrganizationName = "EduVerseOrganization";
-                    course.OrganizationOwnerName = "EduVerseOrganization";
-                    course.OrganizationOwnerEmail = null;
-                }
-                else
-                {
-                    course.OrganizationName = "EduVerseOrganization";
-                    course.OrganizationOwnerName = "EduVerseOrganization";
-                    course.OrganizationOwnerEmail = null;
-                }
-
-                var sourceCourse = (await CoursesManagment.GetAllAsync()).FirstOrDefault(c => c.Id == course.Id);
-                course.InstructorId = sourceCourse?.InstructorId;
-                var trainerId = sourceCourse?.InstructorId ?? courseSessions.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.TrainerId))?.TrainerId;
-                if (!string.IsNullOrWhiteSpace(trainerId))
-                {
-                    var trainer = await UserManagment.GetUserById(trainerId);
-                    course.InstructorName = trainer?.FullName;
-                }
+                course.Categories = categoriesByCourse.GetValueOrDefault(course.Id) ?? [];
+                course.Category = course.Categories.FirstOrDefault()?.Name;
             }
+
+            stopwatch.Stop();
+            logger.LogInformation(
+                "Course read returned {CourseCount} courses in {ElapsedMs}ms",
+                mappedCourses.Count,
+                stopwatch.ElapsedMilliseconds);
+            return mappedCourses;
         }
 
         public async Task<GetCourse> GetCourseById(Guid id, string? userid)
         {
-            var ratings = await RatingManagment.GetAllAsync();
-            var course = await CoursesManagment.GetByIdAsync(id);
-            if (course == null || course.IsDeleted)
-                return null;
-            var mappedCourse = mapper.Map<GetCourse>(course);
-            var categoryLinks = await CoursesCatManagment.GetAllAsync();
-            var courseCategories = categoryLinks.Where(cc => cc.CourseId == id).ToList();
-            var categories = new List<GetCategory>();
-            foreach (var courseCategory in courseCategories)
-            {
-                var category = await CategoryManagment.GetByIdAsync(courseCategory.CategoryId);
-                if (category != null)
-                {
-                    categories.Add(mapper.Map<GetCategory>(category));
-                }
-            }
-            mappedCourse.Categories = categories;
-
-            var courseRatings = ratings.Where(r => r.CourseId == course.Id).ToList();
-            mappedCourse.RatingCount = courseRatings.Count;
-            if (courseRatings.Any())
-            {
-                mappedCourse.Rating = (float)courseRatings.Average(r => r.RatingValue);
-            }
-            else
-            {
-                mappedCourse.Rating = 0;
-            }
-            if (!string.IsNullOrEmpty(userid))
-            {
-                mappedCourse.UserRating = courseRatings.FirstOrDefault(r => r.StudentId == userid)?.RatingValue ?? 0;
-            }
-            await EnrichCourses(new List<GetCourse> { mappedCourse }, userid);
-            return mappedCourse;
-
+            return (await LoadCourseDtosAsync(
+                CoursesManagment.Query().Where(course => course.Id == id && !course.IsDeleted),
+                userid,
+                1)).FirstOrDefault();
         }
 
         public async Task<GetCourse> GetCourseByName(string name, string? userid)
         {
-            var courses = await CoursesManagment.GetAllAsync();
-            var course = courses.FirstOrDefault(c => !c.IsDeleted && c.Name==name);
-            if (course == null )
-                return null;
-            var mappedCourse = mapper.Map<GetCourse>(course);
-            var categoryLinks = await CoursesCatManagment.GetAllAsync();
-            var courseCategories = categoryLinks.Where(cc => cc.CourseId == course.Id).ToList();
-            var categories = new List<GetCategory>();
-            foreach (var courseCategory in courseCategories)
-            {
-                var category = await CategoryManagment.GetByIdAsync(courseCategory.CategoryId);
-                if (category != null)
-                {
-                    categories.Add(mapper.Map<GetCategory>(category));
-                }
-            }
-            mappedCourse.Categories = categories;
-            var ratings = await RatingManagment.GetAllAsync();
-            var courseRatings = ratings.Where(r => r.CourseId == course.Id).ToList();
-            mappedCourse.RatingCount = courseRatings.Count;
-            if (courseRatings.Any())
-            {
-                mappedCourse.Rating = (float)courseRatings.Average(r => r.RatingValue);
-            }
-            else
-            {
-                mappedCourse.Rating = 0;
-            }
-        
-            if (!string.IsNullOrEmpty(userid))
-            {
-                mappedCourse.UserRating = courseRatings.FirstOrDefault(r => r.StudentId == userid)?.RatingValue ?? 0;
-            }
-
-            await EnrichCourses(new List<GetCourse> { mappedCourse }, userid);
-
-            return mappedCourse;
+            return (await LoadCourseDtosAsync(
+                CoursesManagment.Query().Where(course => !course.IsDeleted && course.Name == name),
+                userid,
+                1)).FirstOrDefault();
         }
 
         public async Task<AdminCourseDetailsDto?> GetAdminCourseDetails(Guid id, string? currentUserId, bool isAdmin, bool isOrganizationAdmin, bool isInstructor)

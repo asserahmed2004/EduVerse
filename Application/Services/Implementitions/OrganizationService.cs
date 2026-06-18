@@ -3,6 +3,7 @@ using Application.DTOs.Responses;
 using Application.Services.Interfaces;
 using Domain.Entities;
 using Domain.Interfaces;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Services.Implementitions
 {
@@ -18,9 +19,10 @@ namespace Application.Services.Implementitions
     {
         public async Task<ServiceResponse> GetAllAsync()
         {
-            var organizations = (await organizationsManagement.GetAllAsync())
+            var organizations = await organizationsManagement.Query()
                 .OrderBy(o => o.Name)
-                .ToList();
+                .Take(200)
+                .ToListAsync();
 
             var result = new List<OrganizationDto>();
             foreach (var organization in organizations)
@@ -169,19 +171,19 @@ namespace Application.Services.Implementitions
 
         private async Task<OrganizationDto> MapOrganizationAsync(Organization organization, bool includeUsers)
         {
-            var activeCourses = (await coursesManagement.GetAllAsync())
+            var activeCourses = await coursesManagement.Query()
                 .Where(c => !c.IsDeleted && c.OrganizationId == organization.Id)
-                .ToList();
-            var activeCourseIds = activeCourses.Select(c => c.Id).ToHashSet();
-            var enrollments = (await enrollmentsManagement.GetAllAsync())
+                .ToListAsync();
+            var activeCourseIds = activeCourses.Select(c => c.Id).ToList();
+            var enrollments = await enrollmentsManagement.Query()
                 .Where(e => activeCourseIds.Contains(e.CourseId))
-                .ToList();
-            var payments = (await paymentsManagement.GetAllAsync())
+                .ToListAsync();
+            var payments = await paymentsManagement.Query()
                 .Where(p => activeCourseIds.Contains(p.CourseId))
-                .ToList();
-            var ratings = (await ratingsManagement.GetAllAsync())
+                .ToListAsync();
+            var ratings = await ratingsManagement.Query()
                 .Where(r => activeCourseIds.Contains(r.CourseId))
-                .ToList();
+                .ToListAsync();
 
             var dto = new OrganizationDto
             {
@@ -206,9 +208,9 @@ namespace Application.Services.Implementitions
 
             if (includeUsers)
             {
-                var users = (await userManagement.GetAllUsers())
+                var users = await userManagement.QueryUsers()
                     .Where(u => u.OrganizationId == organization.Id)
-                    .ToList();
+                    .ToListAsync();
 
                 var admins = new List<OrganizationUserDto>();
                 var instructors = new List<OrganizationUserDto>();

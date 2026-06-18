@@ -80,6 +80,25 @@ namespace InfraStructure.Repositories
             return role.FirstOrDefault() ?? string.Empty;
         }
 
+        public async Task<int> CountUsersInRoleAsync(string roleName)
+        {
+            var exactRoleName = await ResolveRoleNameAsync(roleName);
+            if (exactRoleName == null)
+                return 0;
+
+            var users = await userManager.GetUsersInRoleAsync(exactRoleName);
+            return users.Count;
+        }
+
+        public async Task<List<AppUser>> GetUsersInRoleAsync(string roleName)
+        {
+            var exactRoleName = await ResolveRoleNameAsync(roleName);
+            if (exactRoleName == null)
+                return [];
+
+            return (await userManager.GetUsersInRoleAsync(exactRoleName)).ToList();
+        }
+
         private async Task<string?> ResolveRoleNameAsync(string roleName)
         {
             if (string.IsNullOrWhiteSpace(roleName))

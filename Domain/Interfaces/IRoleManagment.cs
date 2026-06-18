@@ -9,5 +9,7 @@ namespace Domain.Interfaces
         Task<IdentityResult> AddUserToRole(AppUser user, string roleName);
         Task<IdentityResult> AddRole(string roleName);
         Task<bool> DeleteRole(string roleName);
+        Task<int> CountUsersInRoleAsync(string roleName);
+        Task<List<AppUser>> GetUsersInRoleAsync(string roleName);
     }
 }

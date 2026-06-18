@@ -11,6 +11,7 @@ namespace Domain.Interfaces
 {
     public interface IUserManagment
     {
+        IQueryable<AppUser> QueryUsers(bool tracking = false);
         Task<IdentityResult> RegisterUser(AppUser user);
         Task<AppUser?> GetUserByEmail(string email);
         Task<bool> LoginUser(AppUser user);

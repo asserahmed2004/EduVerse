@@ -3,6 +3,7 @@ using Application.DTOs.Responses;
 using Application.Services.Interfaces;
 using Domain.Entities;
 using Domain.Interfaces;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Services.Implementitions
 {
@@ -22,24 +23,24 @@ namespace Application.Services.Implementitions
             if (assignedCourses.Count == 0)
                 return new ServiceResponse(true, "Instructor courses retrieved successfully", new List<InstructorCourseDto>());
 
-            var courseIds = assignedCourses.Select(c => c.Id).ToHashSet();
-            var sessionRows = (await sessions.GetAllAsync())
+            var courseIds = assignedCourses.Select(c => c.Id).ToList();
+            var sessionRows = await sessions.Query()
                 .Where(s => courseIds.Contains(s.CourseId))
-                .ToList();
+                .ToListAsync();
             var sessionIds = sessionRows.Select(s => s.Id).ToHashSet();
-            var assignmentRows = (await assignments.GetAllAsync())
+            var assignmentRows = await assignments.Query()
                 .Where(a => sessionIds.Contains(a.SessionId))
-                .ToList();
-            var enrollmentRows = (await enrollments.GetAllAsync())
+                .ToListAsync();
+            var enrollmentRows = await enrollments.Query()
                 .Where(e => courseIds.Contains(e.CourseId))
-                .ToList();
+                .ToListAsync();
             var organizationIds = assignedCourses
                 .Where(c => c.OrganizationId.HasValue)
                 .Select(c => c.OrganizationId!.Value)
                 .ToHashSet();
-            var organizationRows = (await organizations.GetAllAsync())
+            var organizationRows = await organizations.Query()
                 .Where(o => organizationIds.Contains(o.Id))
-                .ToDictionary(o => o.Id);
+                .ToDictionaryAsync(o => o.Id);
 
             var rows = assignedCourses.Select(course =>
             {
@@ -67,11 +68,16 @@ namespace Application.Services.Implementitions
         {
             var assignedCourses = await GetAssignedCourses(instructorId);
             var courseSessions = (await GetManagedSessions(instructorId)).OrderBy(s => s.Date).ToList();
-            var managedSessionIds = courseSessions.Select(s => s.Id).ToHashSet();
-            var assignmentRows = (await assignments.GetAllAsync()).Where(a => managedSessionIds.Contains(a.SessionId)).ToList();
-            var submissionRows = (await submissions.GetAllAsync()).Where(s => assignmentRows.Any(a => a.Id == s.AssignmentId)).ToList();
-            var courseIds = assignedCourses.Select(c => c.Id).ToHashSet();
-            var studentCount = (await enrollments.GetAllAsync()).Where(e => courseIds.Contains(e.CourseId)).Select(e => e.StudentId).Distinct().Count();
+            var managedSessionIds = courseSessions.Select(s => s.Id).ToList();
+            var assignmentRows = await assignments.Query().Where(a => managedSessionIds.Contains(a.SessionId)).ToListAsync();
+            var assignmentIds = assignmentRows.Select(a => a.Id).ToList();
+            var submissionRows = await submissions.Query().Where(s => assignmentIds.Contains(s.AssignmentId)).ToListAsync();
+            var courseIds = assignedCourses.Select(c => c.Id).ToList();
+            var studentCount = await enrollments.Query()
+                .Where(e => courseIds.Contains(e.CourseId))
+                .Select(e => e.StudentId)
+                .Distinct()
+                .CountAsync();
 
             var overview = new InstructorOverviewDto
             {
@@ -96,20 +102,35 @@ namespace Application.Services.Implementitions
         public async Task<ServiceResponse> GetStudentsAsync(string instructorId)
         {
             var assignedCourses = await GetAssignedCourses(instructorId);
-            var courseIds = assignedCourses.Select(c => c.Id).ToHashSet();
-            var submissionRows = (await submissions.GetAllAsync()).ToList();
+            var courseIds = assignedCourses.Select(c => c.Id).ToList();
             var sessionRows = await GetManagedSessions(instructorId);
-            var managedSessionIds = sessionRows.Select(s => s.Id).ToHashSet();
-            var assignmentRows = (await assignments.GetAllAsync()).Where(a => managedSessionIds.Contains(a.SessionId)).ToList();
-            var rows = new List<InstructorStudentDto>();
+            var managedSessionIds = sessionRows.Select(s => s.Id).ToList();
+            var assignmentRows = await assignments.Query().Where(a => managedSessionIds.Contains(a.SessionId)).ToListAsync();
+            var assignmentIds = assignmentRows.Select(a => a.Id).ToList();
+            var enrollmentRows = await enrollments.Query().Where(e => courseIds.Contains(e.CourseId)).ToListAsync();
+            var studentIds = enrollmentRows.Select(e => e.StudentId).Distinct().ToList();
+            var studentsById = await userManagement.QueryUsers()
+                .Where(u => studentIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id);
+            var submissionRows = await submissions.Query()
+                .Where(s => studentIds.Contains(s.StudentId) && assignmentIds.Contains(s.AssignmentId))
+                .Select(s => new { s.StudentId, s.AssignmentId })
+                .ToListAsync();
+            var courseById = assignedCourses.ToDictionary(c => c.Id);
+            var sessionCourseById = sessionRows.ToDictionary(s => s.Id, s => s.CourseId);
+            var assignmentCourseById = assignmentRows.ToDictionary(a => a.Id, a => sessionCourseById[a.SessionId]);
+            var assignmentCountByCourse = assignmentCourseById.Values.GroupBy(id => id).ToDictionary(g => g.Key, g => g.Count());
+            var submittedByStudentCourse = submissionRows
+                .GroupBy(s => new { s.StudentId, CourseId = assignmentCourseById[s.AssignmentId] })
+                .ToDictionary(g => (g.Key.StudentId, g.Key.CourseId), g => g.Select(x => x.AssignmentId).Distinct().Count());
 
-            foreach (var enrollment in (await enrollments.GetAllAsync()).Where(e => courseIds.Contains(e.CourseId)))
-            {
-                var student = await userManagement.GetUserById(enrollment.StudentId);
-                var course = assignedCourses.FirstOrDefault(c => c.Id == enrollment.CourseId);
-                var courseAssignments = assignmentRows.Where(a => sessionRows.Any(s => s.Id == a.SessionId && s.CourseId == enrollment.CourseId)).ToList();
-                var submitted = submissionRows.Count(s => s.StudentId == enrollment.StudentId && courseAssignments.Any(a => a.Id == s.AssignmentId));
-                rows.Add(new InstructorStudentDto
+            var rows = enrollmentRows.Select(enrollment =>
+                {
+                    studentsById.TryGetValue(enrollment.StudentId, out var student);
+                    courseById.TryGetValue(enrollment.CourseId, out var course);
+                    assignmentCountByCourse.TryGetValue(enrollment.CourseId, out var assignmentCount);
+                    submittedByStudentCourse.TryGetValue((enrollment.StudentId, enrollment.CourseId), out var submitted);
+                    return new InstructorStudentDto
                 {
                     StudentId = enrollment.StudentId,
                     StudentName = student?.FullName ?? string.Empty,
@@ -118,9 +139,9 @@ namespace Application.Services.Implementitions
                     CourseName = course?.Name ?? string.Empty,
                     EnrollmentDate = enrollment.EnrollmentDate,
                     ProgressPercentage = enrollment.ProgressPercentage > 0 ? enrollment.ProgressPercentage : enrollment.Progression,
-                    SubmissionSummary = $"{submitted}/{courseAssignments.Count} submitted"
-                });
-            }
+                    SubmissionSummary = $"{submitted}/{assignmentCount} submitted"
+                };
+            }).ToList();
 
             return new ServiceResponse(true, "Instructor students retrieved successfully", rows);
         }
@@ -129,9 +150,10 @@ namespace Application.Services.Implementitions
         {
             var assignedCourses = await GetAssignedCourses(instructorId);
             var courseSessions = await GetManagedSessions(instructorId);
-            var managedSessionIds = courseSessions.Select(s => s.Id).ToHashSet();
-            var assignmentRows = (await assignments.GetAllAsync()).Where(a => managedSessionIds.Contains(a.SessionId)).ToList();
-            var submissionRows = (await submissions.GetAllAsync()).Where(s => assignmentRows.Any(a => a.Id == s.AssignmentId)).ToList();
+            var managedSessionIds = courseSessions.Select(s => s.Id).ToList();
+            var assignmentRows = await assignments.Query().Where(a => managedSessionIds.Contains(a.SessionId)).ToListAsync();
+            var assignmentIds = assignmentRows.Select(a => a.Id).ToList();
+            var submissionRows = await submissions.Query().Where(s => assignmentIds.Contains(s.AssignmentId)).ToListAsync();
             return new ServiceResponse(true, "Instructor submissions retrieved successfully", await BuildSubmissionDtos(submissionRows, assignmentRows, courseSessions, assignedCourses));
         }
 
@@ -140,7 +162,7 @@ namespace Application.Services.Implementitions
             if (!await CanAccessAssignment(assignmentId, instructorId))
                 return new ServiceResponse(false, "You cannot access this submission");
 
-            var submission = (await submissions.GetAllAsync()).FirstOrDefault(s => s.AssignmentId == assignmentId && s.StudentId == studentId);
+            var submission = await submissions.Query().FirstOrDefaultAsync(s => s.AssignmentId == assignmentId && s.StudentId == studentId);
             if (submission == null)
                 return new ServiceResponse(false, "Submission not found");
 
@@ -177,7 +199,7 @@ namespace Application.Services.Implementitions
             if (request == null || double.IsNaN(request.Grade) || double.IsInfinity(request.Grade) || request.Grade < 0 || request.Grade > 100)
                 return new ServiceResponse(false, "Grade must be between 0 and 100");
 
-            var submission = (await submissions.GetAllAsync()).FirstOrDefault(s => s.AssignmentId == assignmentId && s.StudentId == studentId);
+            var submission = await submissions.Query(true).FirstOrDefaultAsync(s => s.AssignmentId == assignmentId && s.StudentId == studentId);
             if (submission == null)
                 return new ServiceResponse(false, "Submission not found");
 
@@ -219,9 +241,14 @@ namespace Application.Services.Implementitions
                 return new ServiceResponse(false, "You cannot view attendance for this session");
 
             var rows = new List<AttendanceRecordDto>();
-            foreach (var record in (await attendanceRecords.GetAllAsync()).Where(a => a.SessionId == sessionId))
+            var attendance = await attendanceRecords.Query().Where(a => a.SessionId == sessionId).ToListAsync();
+            var studentIds = attendance.Select(a => a.StudentId).Distinct().ToList();
+            var students = await userManagement.QueryUsers()
+                .Where(u => studentIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id);
+            foreach (var record in attendance)
             {
-                var student = await userManagement.GetUserById(record.StudentId);
+                students.TryGetValue(record.StudentId, out var student);
                 rows.Add(new AttendanceRecordDto
                 {
                     SessionId = record.SessionId,
@@ -236,7 +263,9 @@ namespace Application.Services.Implementitions
         }
         public async Task<ServiceResponse> MarkAttendance(Guid sessionId, string userId)
         {
-            var attendance = (await attendanceRecords.GetAllAsync()).FirstOrDefault(a => a.SessionId == sessionId && a.StudentId == userId);
+            var attendance = await attendanceRecords.Query(true).FirstOrDefaultAsync(a => a.SessionId == sessionId && a.StudentId == userId);
+            if (attendance == null)
+                return new ServiceResponse(false, "Attendance record not found.");
             if (attendance.Attended)
             {
                 attendance.Attended = false;
@@ -254,8 +283,7 @@ namespace Application.Services.Implementitions
         }
         public async Task<IEnumerable<AttendanceRecord>> GetAttendanceRecords(Guid sessionId)
         {
-            var result = await attendanceRecords.GetAllAsync();
-            return result;
+            return await attendanceRecords.Query().Where(a => a.SessionId == sessionId).ToListAsync();
         }
         private async Task<List<Course>> GetAssignedCourses(string instructorId)
         {
@@ -263,28 +291,30 @@ namespace Application.Services.Implementitions
             if (instructor?.OrganizationId.HasValue != true)
                 return [];
 
-            var activeCourses = (await courses.GetAllAsync()).Where(c => !c.IsDeleted).ToList();
-            var fallbackCourseIds = (await sessions.GetAllAsync()).Where(s => s.TrainerId == instructorId).Select(s => s.CourseId).ToHashSet();
-            return activeCourses
-                .Where(c => c.OrganizationId == instructor.OrganizationId &&
+            var fallbackCourseIds = sessions.Query()
+                .Where(s => s.TrainerId == instructorId)
+                .Select(s => s.CourseId);
+            return await courses.Query()
+                .Where(c => !c.IsDeleted &&
+                    c.OrganizationId == instructor.OrganizationId &&
                     (c.InstructorId == instructorId || fallbackCourseIds.Contains(c.Id)))
-                .ToList();
+                .ToListAsync();
         }
 
         private async Task<List<Session>> GetManagedSessions(string instructorId)
         {
             var assignedCourses = await GetAssignedCourses(instructorId);
-            var ownedCourseIds = assignedCourses.Where(c => c.InstructorId == instructorId).Select(c => c.Id).ToHashSet();
-            var assignedCourseIds = assignedCourses.Select(c => c.Id).ToHashSet();
-            return (await sessions.GetAllAsync())
+            var ownedCourseIds = assignedCourses.Where(c => c.InstructorId == instructorId).Select(c => c.Id).ToList();
+            var assignedCourseIds = assignedCourses.Select(c => c.Id).ToList();
+            return await sessions.Query()
                 .Where(s => assignedCourseIds.Contains(s.CourseId) && (ownedCourseIds.Contains(s.CourseId) || s.TrainerId == instructorId))
-                .ToList();
+                .ToListAsync();
         }
 
         private async Task<List<Assignment>> GetAssignmentsForCourses(HashSet<Guid> courseIds)
         {
-            var sessionIds = (await sessions.GetAllAsync()).Where(s => courseIds.Contains(s.CourseId)).Select(s => s.Id).ToHashSet();
-            return (await assignments.GetAllAsync()).Where(a => sessionIds.Contains(a.SessionId)).ToList();
+            var sessionIds = sessions.Query().Where(s => courseIds.Contains(s.CourseId)).Select(s => s.Id);
+            return await assignments.Query().Where(a => sessionIds.Contains(a.SessionId)).ToListAsync();
         }
 
         private async Task<bool> CanAccessAssignment(Guid assignmentId, string instructorId)
@@ -302,7 +332,7 @@ namespace Application.Services.Implementitions
             if (course?.InstructorId == instructorId)
                 return true;
 
-            return (await sessions.GetAllAsync()).Any(s => s.CourseId == courseId && s.TrainerId == instructorId);
+            return await sessions.Query().AnyAsync(s => s.CourseId == courseId && s.TrainerId == instructorId);
         }
 
         private static InstructorSessionDto ToSessionDto(Session session, IEnumerable<Course> assignedCourses)
@@ -320,13 +350,18 @@ namespace Application.Services.Implementitions
 
         private async Task<List<InstructorSubmissionDto>> BuildSubmissionDtos(IEnumerable<AssignmentSubmission> submissionRows, List<Assignment> assignmentRows, List<Session> courseSessions, List<Course> assignedCourses)
         {
+            var submissionsList = submissionRows.ToList();
+            var studentIds = submissionsList.Select(s => s.StudentId).Distinct().ToList();
+            var students = await userManagement.QueryUsers()
+                .Where(u => studentIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id);
             var rows = new List<InstructorSubmissionDto>();
-            foreach (var submission in submissionRows)
+            foreach (var submission in submissionsList)
             {
                 var assignment = assignmentRows.FirstOrDefault(a => a.Id == submission.AssignmentId);
                 var session = assignment == null ? null : courseSessions.FirstOrDefault(s => s.Id == assignment.SessionId);
                 var course = session == null ? null : assignedCourses.FirstOrDefault(c => c.Id == session.CourseId);
-                var student = await userManagement.GetUserById(submission.StudentId);
+                students.TryGetValue(submission.StudentId, out var student);
                 rows.Add(new InstructorSubmissionDto
                 {
                     SubmissionId = $"{submission.AssignmentId}:{submission.StudentId}",

@@ -8,6 +8,7 @@ namespace InfraStructure.Data.Seed
     {
         public const string MarkerEmail = "seed.marker@demo.eduverse.app";
         public const string EmailDomain = "demo.eduverse.app";
+        public const string OrganizationAdminEmail = "OrgAdminMigo@eduverse.com";
         public const int StudentCount = 100;
         public const int InstructorCount = 20;
         public const int AdminCount = 5;

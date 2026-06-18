@@ -98,6 +98,7 @@ namespace InfraStructure.Data.Seed
             var students = await SeedStudentsAsync(counters, cancellationToken);
             var courses = await SeedCoursesAsync(categories, organizations, admins, instructors, counters, cancellationToken);
             var enrollments = await SeedEnrollmentsAsync(students, courses, counters, cancellationToken);
+            await EnsureOrganizationAdminDemoLinkAsync(counters, cancellationToken);
             var ratingsCreated = await SeedRatingsAsync(counters, cancellationToken);
             await EnsureMarkerUserAsync(counters, cancellationToken);
 
@@ -550,6 +551,102 @@ namespace InfraStructure.Data.Seed
             }
 
             return enrollments;
+        }
+
+        private async Task EnsureOrganizationAdminDemoLinkAsync(
+            SeedCreationCounters counters,
+            CancellationToken cancellationToken)
+        {
+            var organizationAdmin = await _userManager.FindByEmailAsync(SeedCatalog.OrganizationAdminEmail);
+            if (organizationAdmin == null)
+            {
+                _logger.LogInformation(
+                    "Organization admin demo link skipped because '{Email}' does not exist.",
+                    SeedCatalog.OrganizationAdminEmail);
+                return;
+            }
+
+            var instructor = await _userManager.FindByEmailAsync($"instructor.001@{SeedCatalog.EmailDomain}");
+            var student = await _userManager.FindByEmailAsync($"student.001@{SeedCatalog.EmailDomain}");
+            if (instructor == null || student == null)
+            {
+                _logger.LogWarning(
+                    "Organization admin demo link skipped because the primary instructor or student is missing.");
+                return;
+            }
+
+            var targetCourse = await _context.Courses
+                .Where(course =>
+                    !course.IsDeleted &&
+                    course.InstructorId == instructor.Id &&
+                    course.OrganizationId.HasValue)
+                .OrderBy(course => course.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (targetCourse?.OrganizationId is not Guid organizationId)
+            {
+                _logger.LogWarning(
+                    "Organization admin demo link skipped because instructor '{Email}' has no organization course.",
+                    instructor.Email);
+                return;
+            }
+
+            var changedUsers = false;
+
+            if (organizationAdmin.OrganizationId != organizationId)
+            {
+                organizationAdmin.OrganizationId = organizationId;
+                changedUsers = true;
+            }
+
+            if (instructor.OrganizationId != organizationId)
+            {
+                instructor.OrganizationId = organizationId;
+                changedUsers = true;
+            }
+
+            if (changedUsers)
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+
+            if (!await _userManager.IsInRoleAsync(organizationAdmin, "organizationAdmin"))
+            {
+                var roleResult = await _userManager.AddToRoleAsync(organizationAdmin, "organizationAdmin");
+                if (!roleResult.Succeeded)
+                {
+                    var errors = string.Join(", ", roleResult.Errors.Select(error => error.Description));
+                    throw new InvalidOperationException(
+                        $"Failed to assign organizationAdmin role to '{SeedCatalog.OrganizationAdminEmail}': {errors}");
+                }
+            }
+
+            var enrollmentExists = await _context.Enrollments.AnyAsync(
+                enrollment => enrollment.CourseId == targetCourse.Id && enrollment.StudentId == student.Id,
+                cancellationToken);
+
+            if (!enrollmentExists)
+            {
+                _context.Enrollments.Add(new Enrollment
+                {
+                    CourseId = targetCourse.Id,
+                    StudentId = student.Id,
+                    EnrollmentDate = DateTime.UtcNow,
+                    Progression = 0,
+                    ProgressPercentage = 0,
+                    IsCompleted = false
+                });
+                counters.EnrollmentsCreated++;
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+
+            _logger.LogInformation(
+                "Linked organization admin '{OrganizationAdminEmail}' to organization {OrganizationId}; instructor '{InstructorEmail}' teaches course {CourseId}, and student '{StudentEmail}' is enrolled.",
+                organizationAdmin.Email,
+                organizationId,
+                instructor.Email,
+                targetCourse.Id,
+                student.Email);
         }
 
         private async Task<List<Enrollment>> TopUpEnrollmentsAsync(

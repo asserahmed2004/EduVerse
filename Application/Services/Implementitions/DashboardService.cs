@@ -3,6 +3,7 @@ using Application.DTOs.Responses;
 using Application.Services.Interfaces;
 using Domain.Entities;
 using Domain.Interfaces;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Services.Implementitions
 {
@@ -29,8 +30,14 @@ namespace Application.Services.Implementitions
                 return new ServiceResponse(false, "User id claim is missing");
             }
 
-            var allCourses = (await coursesManagement.GetAllAsync()).ToList();
-            var allSessions = (await sessionsManagement.GetAllAsync()).ToList();
+            if (isAdmin)
+            {
+                var adminStats = await BuildAdminStatsAsync();
+                return new ServiceResponse(true, "Organization stats retrieved successfully", adminStats);
+            }
+
+            var allCourses = await coursesManagement.Query().ToListAsync();
+            var allSessions = await sessionsManagement.Query().ToListAsync();
 
             var scopedCourses = await ResolveScopedCourses(
                 allCourses,
@@ -42,7 +49,7 @@ namespace Application.Services.Implementitions
 
             var activeCourses = scopedCourses.Where(c => !c.IsDeleted).ToList();
             var deletedCourses = scopedCourses.Count(c => c.IsDeleted);
-            var activeCourseIds = activeCourses.Select(c => c.Id).ToHashSet();
+            var activeCourseIds = activeCourses.Select(c => c.Id).ToList();
 
             var sessions = allSessions
                 .Where(s => activeCourseIds.Contains(s.CourseId))
@@ -55,23 +62,23 @@ namespace Application.Services.Implementitions
                     activeCourses.Any(c => c.Id == s.CourseId && c.InstructorId == currentUserId)).ToList();
             }
 
-            var sessionIds = sessions.Select(s => s.Id).ToHashSet();
+            var sessionIds = sessions.Select(s => s.Id).ToList();
 
-            var assignments = (await assignmentsManagement.GetAllAsync())
+            var assignments = await assignmentsManagement.Query()
                 .Where(a => sessionIds.Contains(a.SessionId))
-                .ToList();
+                .ToListAsync();
 
-            var enrollments = (await enrollmentsManagement.GetAllAsync())
+            var enrollments = await enrollmentsManagement.Query()
                 .Where(e => activeCourseIds.Contains(e.CourseId))
-                .ToList();
+                .ToListAsync();
 
-            var payments = (await paymentsManagement.GetAllAsync())
+            var payments = await paymentsManagement.Query()
                 .Where(p => activeCourseIds.Contains(p.CourseId))
-                .ToList();
+                .ToListAsync();
 
-            var ratings = (await ratingsManagement.GetAllAsync())
+            var ratings = await ratingsManagement.Query()
                 .Where(r => activeCourseIds.Contains(r.CourseId))
-                .ToList();
+                .ToListAsync();
 
             var totalInstructors = isAdmin
                 ? await CountUsersInRoleAsync("instructor")
@@ -92,8 +99,8 @@ namespace Application.Services.Implementitions
 
             var stats = new OrganizationStatsDto
             {
-                TotalUsers = isAdmin ? (await userManagement.GetAllUsers()).Count() : 0,
-                TotalOrganizations = isAdmin ? (await organizationsManagement.GetAllAsync()).Count() : isOrganizationAdmin ? 1 : 0,
+                TotalUsers = isAdmin ? await userManagement.QueryUsers().CountAsync() : 0,
+                TotalOrganizations = isAdmin ? await organizationsManagement.Query().CountAsync() : isOrganizationAdmin ? 1 : 0,
                 TotalCourses = activeCourses.Count,
                 DeletedCourses = deletedCourses,
                 TotalInstructors = totalInstructors,
@@ -118,77 +125,63 @@ namespace Application.Services.Implementitions
 
         public async Task<ServiceResponse> GetRecentEnrollmentsAsync()
         {
-            var courses = (await coursesManagement.GetAllAsync())
-                .Where(c => !c.IsDeleted)
-                .ToDictionary(c => c.Id, c => c);
-
-            var recentEnrollments = (await enrollmentsManagement.GetAllAsync())
-                .Where(e => courses.ContainsKey(e.CourseId))
-                .OrderByDescending(e => e.EnrollmentDate)
-                .Take(5)
-                .ToList();
-
-            var result = new List<RecentEnrollmentDto>();
-            foreach (var enrollment in recentEnrollments)
-            {
-                courses.TryGetValue(enrollment.CourseId, out var course);
-                var student = await userManagement.GetUserById(enrollment.StudentId);
-                result.Add(new RecentEnrollmentDto
+            var recentEnrollments = await (
+                from enrollment in enrollmentsManagement.Query()
+                join course in coursesManagement.Query().Where(c => !c.IsDeleted)
+                    on enrollment.CourseId equals course.Id
+                join student in userManagement.QueryUsers()
+                    on enrollment.StudentId equals student.Id
+                select new RecentEnrollmentDto
                 {
                     CourseId = enrollment.CourseId,
-                    CourseName = course?.Name ?? string.Empty,
+                    CourseName = course.Name,
                     StudentId = enrollment.StudentId,
-                    StudentName = student?.FullName ?? string.Empty,
-                    StudentEmail = student?.Email ?? string.Empty,
+                    StudentName = student.FullName ?? string.Empty,
+                    StudentEmail = student.Email ?? string.Empty,
                     EnrollmentDate = enrollment.EnrollmentDate,
                     Progression = enrollment.Progression
-                });
-            }
+                })
+                .OrderByDescending(e => e.EnrollmentDate)
+                .Take(5)
+                .ToListAsync();
 
-            return new ServiceResponse(true, "Recent enrollments retrieved successfully", result);
+            return new ServiceResponse(true, "Recent enrollments retrieved successfully", recentEnrollments);
         }
 
         public async Task<ServiceResponse> GetRecentPaymentsAsync()
         {
-            var courses = (await coursesManagement.GetAllAsync())
-                .Where(c => !c.IsDeleted)
-                .ToDictionary(c => c.Id, c => c);
-
-            var recentPayments = (await paymentsManagement.GetAllAsync())
-                .Where(p => courses.ContainsKey(p.CourseId))
-                .OrderByDescending(p => p.SubmittingDate)
-                .Take(5)
-                .ToList();
-
-            var result = new List<RecentPaymentDto>();
-            foreach (var payment in recentPayments)
-            {
-                courses.TryGetValue(payment.CourseId, out var course);
-                var student = await userManagement.GetUserById(payment.StudentId);
-                result.Add(new RecentPaymentDto
+            var recentPayments = await (
+                from payment in paymentsManagement.Query()
+                join course in coursesManagement.Query().Where(c => !c.IsDeleted)
+                    on payment.CourseId equals course.Id
+                join student in userManagement.QueryUsers()
+                    on payment.StudentId equals student.Id
+                select new RecentPaymentDto
                 {
                     CourseId = payment.CourseId,
-                    CourseName = course?.Name ?? string.Empty,
+                    CourseName = course.Name,
                     StudentId = payment.StudentId,
-                    StudentName = student?.FullName ?? string.Empty,
-                    StudentEmail = student?.Email ?? string.Empty,
+                    StudentName = student.FullName ?? string.Empty,
+                    StudentEmail = student.Email ?? string.Empty,
                     SubmittingDate = payment.SubmittingDate,
                     TotalPrice = payment.TotalPrice,
                     PaymentStatus = payment.PaymentStatus,
                     MerchantOrderId = payment.MerchantOrderId,
                     SpecialReference = payment.SpecialReference
-                });
-            }
+                })
+                .OrderByDescending(p => p.SubmittingDate)
+                .Take(5)
+                .ToListAsync();
 
-            return new ServiceResponse(true, "Recent payments retrieved successfully", result);
+            return new ServiceResponse(true, "Recent payments retrieved successfully", recentPayments);
         }
 
         public async Task<ServiceResponse> GetRecentCoursesAsync()
         {
-            var courses = (await coursesManagement.GetAllAsync())
+            var courses = await coursesManagement.Query()
                 .Where(c => !c.IsDeleted)
                 .Take(5)
-                .ToList();
+                .ToListAsync();
 
             var result = new List<RecentCourseDto>();
             foreach (var course in courses)
@@ -212,22 +205,22 @@ namespace Application.Services.Implementitions
 
         public async Task<ServiceResponse> GetTopCoursesAsync()
         {
-            var courses = (await coursesManagement.GetAllAsync())
+            var courses = await coursesManagement.Query()
                 .Where(c => !c.IsDeleted)
-                .ToList();
-            var courseIds = courses.Select(c => c.Id).ToHashSet();
-            var enrollments = (await enrollmentsManagement.GetAllAsync())
+                .ToListAsync();
+            var courseIds = courses.Select(c => c.Id).ToList();
+            var enrollments = await enrollmentsManagement.Query()
                 .Where(e => courseIds.Contains(e.CourseId))
-                .ToList();
-            var sessions = (await sessionsManagement.GetAllAsync())
+                .ToListAsync();
+            var sessions = await sessionsManagement.Query()
                 .Where(s => courseIds.Contains(s.CourseId))
-                .ToList();
-            var payments = (await paymentsManagement.GetAllAsync())
+                .ToListAsync();
+            var payments = await paymentsManagement.Query()
                 .Where(p => courseIds.Contains(p.CourseId))
-                .ToList();
-            var ratings = (await ratingsManagement.GetAllAsync())
+                .ToListAsync();
+            var ratings = await ratingsManagement.Query()
                 .Where(r => courseIds.Contains(r.CourseId))
-                .ToList();
+                .ToListAsync();
 
             var result = new List<TopCourseDto>();
             foreach (var course in courses)
@@ -278,21 +271,25 @@ namespace Application.Services.Implementitions
 
         public async Task<ServiceResponse> GetTopInstructorsAsync()
         {
-            var activeCourseIds = (await coursesManagement.GetAllAsync())
+            var activeCourseIds = await coursesManagement.Query()
                 .Where(c => !c.IsDeleted)
                 .Select(c => c.Id)
-                .ToHashSet();
-            var sessions = (await sessionsManagement.GetAllAsync())
+                .ToListAsync();
+            var sessions = await sessionsManagement.Query()
                 .Where(s => activeCourseIds.Contains(s.CourseId) && !string.IsNullOrWhiteSpace(s.TrainerId))
-                .ToList();
-            var enrollments = (await enrollmentsManagement.GetAllAsync())
+                .ToListAsync();
+            var enrollments = await enrollmentsManagement.Query()
                 .Where(e => activeCourseIds.Contains(e.CourseId))
-                .ToList();
+                .ToListAsync();
+            var instructorIds = sessions.Select(s => s.TrainerId).Distinct().ToList();
+            var instructors = await userManagement.QueryUsers()
+                .Where(u => instructorIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id);
 
             var result = new List<TopInstructorDto>();
             foreach (var group in sessions.GroupBy(s => s.TrainerId))
             {
-                var instructor = await userManagement.GetUserById(group.Key);
+                instructors.TryGetValue(group.Key, out var instructor);
                 var instructorCourseIds = group.Select(s => s.CourseId).Distinct().ToHashSet();
                 result.Add(new TopInstructorDto
                 {
@@ -328,22 +325,22 @@ namespace Application.Services.Implementitions
                 return new ServiceResponse(false, "Organization not found");
             }
 
-            var courses = (await coursesManagement.GetAllAsync())
+            var courses = await coursesManagement.Query()
                 .Where(c => !c.IsDeleted && c.OrganizationId == organization.Id)
-                .ToList();
-            var courseIds = courses.Select(c => c.Id).ToHashSet();
-            var enrollments = (await enrollmentsManagement.GetAllAsync())
+                .ToListAsync();
+            var courseIds = courses.Select(c => c.Id).ToList();
+            var enrollments = await enrollmentsManagement.Query()
                 .Where(e => courseIds.Contains(e.CourseId))
-                .ToList();
-            var sessions = (await sessionsManagement.GetAllAsync())
+                .ToListAsync();
+            var sessions = await sessionsManagement.Query()
                 .Where(s => courseIds.Contains(s.CourseId))
-                .ToList();
-            var payments = (await paymentsManagement.GetAllAsync())
+                .ToListAsync();
+            var payments = await paymentsManagement.Query()
                 .Where(p => courseIds.Contains(p.CourseId))
-                .ToList();
-            var ratings = (await ratingsManagement.GetAllAsync())
+                .ToListAsync();
+            var ratings = await ratingsManagement.Query()
                 .Where(r => courseIds.Contains(r.CourseId))
-                .ToList();
+                .ToListAsync();
 
             var recentEnrollments = new List<RecentEnrollmentDto>();
             foreach (var enrollment in enrollments.OrderByDescending(e => e.EnrollmentDate).Take(5))
@@ -450,15 +447,16 @@ namespace Application.Services.Implementitions
 
         public async Task<ServiceResponse> GetRecentSessionsAsync()
         {
-            var activeCourses = (await coursesManagement.GetAllAsync())
+            var activeCourses = await coursesManagement.Query()
                 .Where(c => !c.IsDeleted)
-                .ToDictionary(c => c.Id, c => c);
-            var sessions = (await sessionsManagement.GetAllAsync())
-                .Where(s => activeCourses.ContainsKey(s.CourseId))
+                .ToDictionaryAsync(c => c.Id);
+            var activeCourseIds = activeCourses.Keys.ToList();
+            var sessions = await sessionsManagement.Query()
+                .Where(s => activeCourseIds.Contains(s.CourseId))
                 .OrderByDescending(s => s.Date)
                 .ThenByDescending(s => s.SessionNumber)
                 .Take(10)
-                .ToList();
+                .ToListAsync();
 
             var result = new List<AdminSessionDto>();
             foreach (var session in sessions)
@@ -482,16 +480,18 @@ namespace Application.Services.Implementitions
 
         public async Task<ServiceResponse> GetRecentAssignmentsAsync()
         {
-            var activeCourses = (await coursesManagement.GetAllAsync())
+            var activeCourses = await coursesManagement.Query()
                 .Where(c => !c.IsDeleted)
-                .ToDictionary(c => c.Id, c => c);
-            var sessions = (await sessionsManagement.GetAllAsync())
-                .Where(s => activeCourses.ContainsKey(s.CourseId))
-                .ToDictionary(s => s.Id, s => s);
-            var assignments = (await assignmentsManagement.GetAllAsync())
-                .Where(a => sessions.ContainsKey(a.SessionId))
+                .ToDictionaryAsync(c => c.Id);
+            var activeCourseIds = activeCourses.Keys.ToList();
+            var sessions = await sessionsManagement.Query()
+                .Where(s => activeCourseIds.Contains(s.CourseId))
+                .ToDictionaryAsync(s => s.Id);
+            var sessionIds = sessions.Keys.ToList();
+            var assignments = await assignmentsManagement.Query()
+                .Where(a => sessionIds.Contains(a.SessionId))
                 .Take(10)
-                .ToList();
+                .ToListAsync();
 
             var result = assignments.Select(assignment =>
             {
@@ -515,19 +515,19 @@ namespace Application.Services.Implementitions
 
         public async Task<ServiceResponse> GetTopRatedCoursesAsync()
         {
-            var courses = (await coursesManagement.GetAllAsync())
+            var courses = await coursesManagement.Query()
                 .Where(c => !c.IsDeleted)
-                .ToList();
-            var courseIds = courses.Select(c => c.Id).ToHashSet();
-            var ratings = (await ratingsManagement.GetAllAsync())
+                .ToListAsync();
+            var courseIds = courses.Select(c => c.Id).ToList();
+            var ratings = await ratingsManagement.Query()
                 .Where(r => courseIds.Contains(r.CourseId))
-                .ToList();
-            var enrollments = (await enrollmentsManagement.GetAllAsync())
+                .ToListAsync();
+            var enrollments = await enrollmentsManagement.Query()
                 .Where(e => courseIds.Contains(e.CourseId))
-                .ToList();
-            var sessions = (await sessionsManagement.GetAllAsync())
+                .ToListAsync();
+            var sessions = await sessionsManagement.Query()
                 .Where(s => courseIds.Contains(s.CourseId))
-                .ToList();
+                .ToListAsync();
 
             var result = new List<TopCourseDto>();
             foreach (var course in courses)
@@ -565,10 +565,10 @@ namespace Application.Services.Implementitions
             }
 
             var role = string.IsNullOrWhiteSpace(user.Email) ? string.Empty : await roleManagement.GetUserRole(user.Email);
-            var activeCourses = (await coursesManagement.GetAllAsync()).Where(c => !c.IsDeleted).ToList();
-            var activeCourseIds = activeCourses.Select(c => c.Id).ToHashSet();
-            var sessions = (await sessionsManagement.GetAllAsync()).Where(s => activeCourseIds.Contains(s.CourseId)).ToList();
-            var enrollments = (await enrollmentsManagement.GetAllAsync()).Where(e => activeCourseIds.Contains(e.CourseId)).ToList();
+            var activeCourses = await coursesManagement.Query().Where(c => !c.IsDeleted).ToListAsync();
+            var activeCourseIds = activeCourses.Select(c => c.Id).ToList();
+            var sessions = await sessionsManagement.Query().Where(s => activeCourseIds.Contains(s.CourseId)).ToListAsync();
+            var enrollments = await enrollmentsManagement.Query().Where(e => activeCourseIds.Contains(e.CourseId)).ToListAsync();
 
             var details = new AdminUserDetailsDto
             {
@@ -590,13 +590,13 @@ namespace Application.Services.Implementitions
         {
             var normalizedDays = Math.Clamp(days, 7, 365);
             var fromDate = DateTime.UtcNow.Date.AddDays(-(normalizedDays - 1));
-            var activeCourseIds = (await coursesManagement.GetAllAsync())
+            var activeCourseIds = await coursesManagement.Query()
                 .Where(c => !c.IsDeleted)
                 .Select(c => c.Id)
-                .ToHashSet();
-            var payments = (await paymentsManagement.GetAllAsync())
-                .Where(p => activeCourseIds.Contains(p.CourseId) && IsPaid(p) && p.SubmittingDate.Date >= fromDate)
-                .ToList();
+                .ToListAsync();
+            var payments = await paymentsManagement.Query()
+                .Where(p => activeCourseIds.Contains(p.CourseId) && p.PaymentStatus == "Paid" && p.SubmittingDate >= fromDate)
+                .ToListAsync();
 
             var points = Enumerable.Range(0, normalizedDays)
                 .Select(offset =>
@@ -618,13 +618,13 @@ namespace Application.Services.Implementitions
         {
             var normalizedDays = Math.Clamp(days, 7, 365);
             var fromDate = DateTime.UtcNow.Date.AddDays(-(normalizedDays - 1));
-            var activeCourseIds = (await coursesManagement.GetAllAsync())
+            var activeCourseIds = await coursesManagement.Query()
                 .Where(c => !c.IsDeleted)
                 .Select(c => c.Id)
-                .ToHashSet();
-            var enrollments = (await enrollmentsManagement.GetAllAsync())
-                .Where(e => activeCourseIds.Contains(e.CourseId) && e.EnrollmentDate.Date >= fromDate)
-                .ToList();
+                .ToListAsync();
+            var enrollments = await enrollmentsManagement.Query()
+                .Where(e => activeCourseIds.Contains(e.CourseId) && e.EnrollmentDate >= fromDate)
+                .ToListAsync();
 
             var points = Enumerable.Range(0, normalizedDays)
                 .Select(offset =>
@@ -660,11 +660,11 @@ namespace Application.Services.Implementitions
 
         public async Task<ServiceResponse> GetTopCoursesChartAsync()
         {
-            var courses = (await coursesManagement.GetAllAsync()).Where(c => !c.IsDeleted).ToList();
-            var courseIds = courses.Select(c => c.Id).ToHashSet();
-            var enrollments = (await enrollmentsManagement.GetAllAsync()).Where(e => courseIds.Contains(e.CourseId)).ToList();
-            var payments = (await paymentsManagement.GetAllAsync()).Where(p => courseIds.Contains(p.CourseId) && IsPaid(p)).ToList();
-            var ratings = (await ratingsManagement.GetAllAsync()).Where(r => courseIds.Contains(r.CourseId)).ToList();
+            var courses = await coursesManagement.Query().Where(c => !c.IsDeleted).ToListAsync();
+            var courseIds = courses.Select(c => c.Id).ToList();
+            var enrollments = await enrollmentsManagement.Query().Where(e => courseIds.Contains(e.CourseId)).ToListAsync();
+            var payments = await paymentsManagement.Query().Where(p => courseIds.Contains(p.CourseId) && p.PaymentStatus == "Paid").ToListAsync();
+            var ratings = await ratingsManagement.Query().Where(r => courseIds.Contains(r.CourseId)).ToListAsync();
 
             var result = courses.Select(course =>
             {
@@ -688,37 +688,26 @@ namespace Application.Services.Implementitions
 
         private async Task<List<OrganizationOverviewDto>> BuildOrganizationsOverviewAsync()
         {
-            var organizations = (await organizationsManagement.GetAllAsync()).ToList();
-            var users = (await userManagement.GetAllUsers()).ToList();
-            var courses = (await coursesManagement.GetAllAsync()).ToList();
+            var organizations = await organizationsManagement.Query().ToListAsync();
+            var organizationAdmins = await roleManagement.GetUsersInRoleAsync("organizationAdmin");
+            var courses = await coursesManagement.Query().ToListAsync();
             var activeCourses = courses.Where(c => !c.IsDeleted).ToList();
-            var activeCourseIds = activeCourses.Select(c => c.Id).ToHashSet();
-            var enrollments = (await enrollmentsManagement.GetAllAsync())
+            var activeCourseIds = activeCourses.Select(c => c.Id).ToList();
+            var enrollments = await enrollmentsManagement.Query()
                 .Where(e => activeCourseIds.Contains(e.CourseId))
-                .ToList();
-            var payments = (await paymentsManagement.GetAllAsync())
+                .ToListAsync();
+            var payments = await paymentsManagement.Query()
                 .Where(p => activeCourseIds.Contains(p.CourseId))
-                .ToList();
-            var ratings = (await ratingsManagement.GetAllAsync())
+                .ToListAsync();
+            var ratings = await ratingsManagement.Query()
                 .Where(r => activeCourseIds.Contains(r.CourseId))
-                .ToList();
+                .ToListAsync();
 
             var result = new List<OrganizationOverviewDto>();
             foreach (var organization in organizations)
             {
-                AppUser? primaryAdmin = null;
-                foreach (var user in users.Where(u => u.OrganizationId == organization.Id))
-                {
-                    if (string.IsNullOrWhiteSpace(user.Email))
-                        continue;
-
-                    var role = await roleManagement.GetUserRole(user.Email);
-                    if (string.Equals(role, "organizationAdmin", StringComparison.OrdinalIgnoreCase))
-                    {
-                        primaryAdmin = user;
-                        break;
-                    }
-                }
+                var primaryAdmin = organizationAdmins.FirstOrDefault(
+                    user => user.OrganizationId == organization.Id);
                 var organizationCourses = activeCourses.Where(c => c.OrganizationId == organization.Id).ToList();
                 var organizationCourseIds = organizationCourses.Select(c => c.Id).ToHashSet();
                 var organizationRatings = ratings.Where(r => organizationCourseIds.Contains(r.CourseId)).ToList();
@@ -749,6 +738,45 @@ namespace Application.Services.Implementitions
             }
 
             return result;
+        }
+
+        private async Task<OrganizationStatsDto> BuildAdminStatsAsync()
+        {
+            var activeCourses = coursesManagement.Query().Where(course => !course.IsDeleted);
+            var activeCourseIds = activeCourses.Select(course => course.Id);
+            var activeSessions = sessionsManagement.Query()
+                .Where(session => activeCourseIds.Contains(session.CourseId));
+            var activeSessionIds = activeSessions.Select(session => session.Id);
+            var activeEnrollments = enrollmentsManagement.Query()
+                .Where(enrollment => activeCourseIds.Contains(enrollment.CourseId));
+            var activePayments = paymentsManagement.Query()
+                .Where(payment => activeCourseIds.Contains(payment.CourseId));
+            var activeRatings = ratingsManagement.Query()
+                .Where(rating => activeCourseIds.Contains(rating.CourseId));
+
+            var ratingCount = await activeRatings.CountAsync();
+
+            return new OrganizationStatsDto
+            {
+                TotalUsers = await userManagement.QueryUsers().AsNoTracking().CountAsync(),
+                TotalOrganizations = await organizationsManagement.Query().CountAsync(),
+                TotalCourses = await activeCourses.CountAsync(),
+                DeletedCourses = await coursesManagement.Query().CountAsync(course => course.IsDeleted),
+                TotalInstructors = await CountUsersInRoleAsync("instructor"),
+                TotalStudents = await CountUsersInRoleAsync("student"),
+                TotalEnrollments = await activeEnrollments.CountAsync(),
+                TotalSessions = await activeSessions.CountAsync(),
+                TotalAssignments = await assignmentsManagement.Query()
+                    .CountAsync(assignment => activeSessionIds.Contains(assignment.SessionId)),
+                TotalPayments = await activePayments.CountAsync(),
+                PendingPayments = await activePayments.CountAsync(payment => payment.PaymentStatus == "Pending"),
+                TotalRevenue = await activePayments
+                    .Where(payment => payment.PaymentStatus == "Paid")
+                    .SumAsync(payment => payment.TotalPrice),
+                AverageRating = ratingCount == 0
+                    ? 0
+                    : Math.Round(await activeRatings.AverageAsync(rating => (double)rating.RatingValue), 2)
+            };
         }
 
         private async Task<List<Course>> ResolveScopedCourses(
@@ -805,56 +833,22 @@ namespace Application.Services.Implementitions
 
         private async Task<int> CountUsersInRoleAsync(string roleName)
         {
-            var users = await userManagement.GetAllUsers();
-            var count = 0;
-
-            foreach (var user in users)
-            {
-                if (string.IsNullOrWhiteSpace(user.Email))
-                {
-                    continue;
-                }
-
-                var role = await roleManagement.GetUserRole(user.Email);
-                if (string.Equals(role, roleName, StringComparison.OrdinalIgnoreCase))
-                {
-                    count++;
-                }
-            }
-
-            return count;
+            return await roleManagement.CountUsersInRoleAsync(roleName);
         }
 
         private async Task<List<AdminUserDetailsDto>> GetUsersInRoleAsync(string roleName)
         {
-            var users = await userManagement.GetAllUsers();
-            var result = new List<AdminUserDetailsDto>();
-
-            foreach (var user in users)
-            {
-                if (string.IsNullOrWhiteSpace(user.Email))
-                {
-                    continue;
-                }
-
-                var role = await roleManagement.GetUserRole(user.Email);
-                if (!string.Equals(role, roleName, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                result.Add(new AdminUserDetailsDto
+            var users = await roleManagement.GetUsersInRoleAsync(roleName);
+            return users.Select(user => new AdminUserDetailsDto
                 {
                     UserId = user.Id,
                     FullName = user.FullName,
                     UserName = user.UserName ?? string.Empty,
-                    Email = user.Email,
-                    Role = role,
+                    Email = user.Email ?? string.Empty,
+                    Role = roleName,
                     Phone = user.PhoneNumber
-                });
-            }
-
-            return result;
+                })
+                .ToList();
         }
 
         private static bool IsPaid(Payment payment)

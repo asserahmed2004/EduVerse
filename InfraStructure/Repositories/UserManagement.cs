@@ -10,9 +10,14 @@ namespace InfraStructure.Repositories
 {
     public class UserManagement(UserManager<AppUser> userManager, IRoleManagment roleManagment, AppDbContext context) : IUserManagment
     {
+        public IQueryable<AppUser> QueryUsers(bool tracking = false)
+        {
+            return tracking ? context.Users : context.Users.AsNoTracking();
+        }
+
         public async Task<IEnumerable<AppUser>> GetAllUsers()
         {
-           return await context.Users.ToListAsync();
+           return await QueryUsers().ToListAsync();
         }
 
         public async Task<AppUser?> GetUserByEmail(string email)

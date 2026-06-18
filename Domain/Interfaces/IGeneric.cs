@@ -8,6 +8,7 @@ namespace Domain.Interfaces
 {
     public interface IGeneric<TEntity> where TEntity : class
     {
+        IQueryable<TEntity> Query(bool tracking = false);
         Task<TEntity> GetByIdAsync(Guid id);
         Task<IEnumerable<TEntity>> GetAllAsync();
         Task<TEntity> AddAsync(TEntity entity);

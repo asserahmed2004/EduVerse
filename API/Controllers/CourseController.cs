@@ -116,7 +116,7 @@ namespace API.Controllers
         }
 
         [HttpGet("GetAll")]
-        public async Task<IActionResult> GetAllCourses()
+        public async Task<IActionResult> GetAllCourses([FromQuery] int page = 1, [FromQuery] int pageSize = 50)
         {
             string userId;
             if (User.Identity.IsAuthenticated)
@@ -132,7 +132,9 @@ namespace API.Controllers
                 userId,
                 User.HasRole(AppRoles.Admin),
                 User.HasRole(AppRoles.OrganizationAdmin),
-                User.HasRole(AppRoles.Instructor));
+                User.HasRole(AppRoles.Instructor),
+                page,
+                pageSize);
             return Ok(result);
         }
         [HttpGet("GetByCategory/{category}")]

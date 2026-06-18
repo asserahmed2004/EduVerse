@@ -11,6 +11,7 @@ using Application.Services.Interfaces;
 using AutoMapper;
 using Domain.Entities;
 using Domain.Interfaces;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -134,7 +135,7 @@ namespace Application.Services.Implementitions
         {
             var user = await userManagment.GetUserByEmail(Email);
             var userId = user.Id.ToString();
-            var enrollment = (await Enrollment.GetAllAsync()).FirstOrDefault(e => e.CourseId == courseId && e.StudentId == userId);
+            var enrollment = await Enrollment.Query().FirstOrDefaultAsync(e => e.CourseId == courseId && e.StudentId == userId);
             if (enrollment == null || string.IsNullOrEmpty(enrollment.FileUrl))
             {
                 return null;
@@ -145,12 +146,20 @@ namespace Application.Services.Implementitions
 
         public async Task<IEnumerable<GetCourse>> GetEnrolledCourses(string userId)
         {
-            var enrollments = (await Enrollment.GetAllAsync()).Where(e => e.StudentId == userId).ToList();
+            var enrollments = await Enrollment.Query().Where(e => e.StudentId == userId).ToListAsync();
             var enrollmentByCourseId = enrollments.GroupBy(e => e.CourseId).ToDictionary(group => group.Key, group => group.First());
-            var courseIds = enrollments.Select(e => e.CourseId).ToHashSet();
-            var courses = (await Courses.GetAllAsync()).Where(c => !c.IsDeleted && courseIds.Contains(c.Id)).ToList();
-            var sessions = (await Sessions.GetAllAsync()).Where(s => courseIds.Contains(s.CourseId)).ToList();
-            var progressRows = (await Progresses.GetAllAsync()).Where(p => p.StudentId == userId && courseIds.Contains(p.CourseId)).ToList();
+            var courseIds = enrollments.Select(e => e.CourseId).ToList();
+            var courses = await Courses.Query().Where(c => !c.IsDeleted && courseIds.Contains(c.Id)).ToListAsync();
+            var sessions = await Sessions.Query().Where(s => courseIds.Contains(s.CourseId)).ToListAsync();
+            var progressRows = await Progresses.Query().Where(p => p.StudentId == userId && courseIds.Contains(p.CourseId)).ToListAsync();
+            var trainerIds = courses.Select(c => c.InstructorId)
+                .Concat(sessions.Select(s => s.TrainerId))
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct()
+                .ToList();
+            var trainers = await userManagment.QueryUsers()
+                .Where(u => trainerIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id);
             var enrolledCourses = mapper.Map<List<GetCourse>>(courses);
 
             foreach (var course in enrolledCourses)
@@ -161,23 +170,11 @@ namespace Application.Services.Implementitions
                 var progressPercent = CalculatePercentage(doneSessions, courseSessions.Count);
                 course.ProgressPercent = progressPercent;
 
-                if (enrollmentByCourseId.TryGetValue(course.Id, out var enrollment))
-                {
-                    enrollment.Progression = progressPercent;
-                    enrollment.ProgressPercentage = progressPercent;
-                    if (courseSessions.Count > 0 && doneSessions == courseSessions.Count)
-                    {
-                        MarkEnrollmentCompleted(enrollment);
-                    }
-                    await Enrollment.UpdateAsync(enrollment);
-                }
-
                 var trainerId = courses.FirstOrDefault(c => c.Id == course.Id)?.InstructorId
                     ?? courseSessions.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.TrainerId))?.TrainerId;
                 course.InstructorId = trainerId;
-                if (!string.IsNullOrWhiteSpace(trainerId))
+                if (!string.IsNullOrWhiteSpace(trainerId) && trainers.TryGetValue(trainerId, out var trainer))
                 {
-                    var trainer = await userManagment.GetUserById(trainerId);
                     course.InstructorName = trainer?.FullName ?? trainer?.UserName ?? trainer?.Email;
                 }
             }
@@ -186,9 +183,9 @@ namespace Application.Services.Implementitions
 
         public async Task<IEnumerable<GetUser>> GetEnrolledUsers(Guid courseId)
         {
-            var enrollments = (await Enrollment.GetAllAsync()).Where(e => e.CourseId == courseId).ToList();
+            var enrollments = await Enrollment.Query().Where(e => e.CourseId == courseId).ToListAsync();
             var userIds = enrollments.Select(e => e.StudentId).ToList();
-            var users = (await userManagment.GetAllUsers()).Where(u => userIds.Contains(u.Id)).ToList();
+            var users = await userManagment.QueryUsers().Where(u => userIds.Contains(u.Id)).ToListAsync();
             var enrolledUsers = mapper.Map<IEnumerable<GetUser>>(users);
             return enrolledUsers;
         }
@@ -197,7 +194,7 @@ namespace Application.Services.Implementitions
         {
             var user = await userManagment.GetUserByEmail(Email);
             var userId = user.Id.ToString();
-            var enrollment = (await Enrollment.GetAllAsync()).FirstOrDefault(e => e.CourseId == courseId && e.StudentId == userId);
+            var enrollment = await Enrollment.Query().FirstOrDefaultAsync(e => e.CourseId == courseId && e.StudentId == userId);
             return enrollment;
         }
         public async Task<IEnumerable<Enrollment>> EnrollmentData()
@@ -212,15 +209,16 @@ namespace Application.Services.Implementitions
             var user = await userManagment.GetUserByEmail(Email);
             var userId = user.Id.ToString();
 
-            var enrollments = (await Enrollment.GetAllAsync()).Where(e => e.StudentId == userId && !string.IsNullOrEmpty(e.FileUrl)).ToList();
+            var enrollments = await Enrollment.Query().Where(e => e.StudentId == userId && !string.IsNullOrEmpty(e.FileUrl)).ToListAsync();
             var certificateUrls = enrollments.Select(e => e.FileUrl).ToList();
             return certificateUrls;
         }
 
         public async Task<IEnumerable<CertificateDto>> GetMyCertificates(string userId, string baseUrl)
         {
-            var certificates = (await Certificates.GetAllAsync()).Where(c => c.StudentId == userId).OrderByDescending(c => c.IssuedAt).ToList();
-            var courses = (await Courses.GetAllAsync()).ToDictionary(c => c.Id, c => c);
+            var certificates = await Certificates.Query().Where(c => c.StudentId == userId).OrderByDescending(c => c.IssuedAt).ToListAsync();
+            var courseIds = certificates.Select(c => c.CourseId).Distinct().ToList();
+            var courses = await Courses.Query().Where(c => courseIds.Contains(c.Id)).ToDictionaryAsync(c => c.Id);
             var user = await userManagment.GetUserById(userId);
             return certificates.Select(c => new CertificateDto
             {
@@ -238,7 +236,7 @@ namespace Application.Services.Implementitions
 
         public async Task<ServiceResponse> GenerateCertificate(Guid courseId, string userId, string baseUrl)
         {
-            var enrollment = (await Enrollment.GetAllAsync()).FirstOrDefault(e => e.CourseId == courseId && e.StudentId == userId);
+            var enrollment = await Enrollment.Query().FirstOrDefaultAsync(e => e.CourseId == courseId && e.StudentId == userId);
             if (enrollment == null)
                 return new ServiceResponse(false, "Enrollment not found.");
 
@@ -334,12 +332,13 @@ namespace Application.Services.Implementitions
             if (course == null || course.IsDeleted)
                 return null;
 
-            var sessions = (await Sessions.GetAllAsync()).Where(s => s.CourseId == courseId).OrderBy(s => s.SessionNumber).ToList();
-            var progressRows = (await Progresses.GetAllAsync()).Where(p => p.CourseId == courseId && p.StudentId == userId).ToList();
-            var sessionIds = sessions.Select(s => s.Id).ToHashSet();
-            var assignments = (await Assignments.GetAllAsync()).Where(a => sessionIds.Contains(a.SessionId)).ToList();
-            var submissions = (await AssignmentSubmission.GetAllAsync()).Where(s => s.StudentId == userId).ToList();
-            var materials = (await SessionMaterials.GetAllAsync()).Where(m => sessionIds.Contains(m.SessionId)).ToList();
+            var sessions = await Sessions.Query().Where(s => s.CourseId == courseId).OrderBy(s => s.SessionNumber).ToListAsync();
+            var progressRows = await Progresses.Query().Where(p => p.CourseId == courseId && p.StudentId == userId).ToListAsync();
+            var sessionIds = sessions.Select(s => s.Id).ToList();
+            var assignments = await Assignments.Query().Where(a => sessionIds.Contains(a.SessionId)).ToListAsync();
+            var assignmentIds = assignments.Select(a => a.Id).ToList();
+            var submissions = await AssignmentSubmission.Query().Where(s => s.StudentId == userId && assignmentIds.Contains(s.AssignmentId)).ToListAsync();
+            var materials = await SessionMaterials.Query().Where(m => sessionIds.Contains(m.SessionId)).ToListAsync();
             var totalSessions = sessions.Count;
             var doneSessions = progressRows.Count(p => p.IsDone && sessionIds.Contains(p.SessionId));
             var progressPercentage = CalculatePercentage(doneSessions, totalSessions);
@@ -564,14 +563,16 @@ namespace Application.Services.Implementitions
 
         public async Task<IEnumerable<StudentAssignmentDto>> GetMyAssignments(string userId)
         {
-            var enrollments = (await Enrollment.GetAllAsync()).Where(e => e.StudentId == userId).ToList();
-            var courseIds = enrollments.Select(e => e.CourseId).ToHashSet();
-            var courses = (await Courses.GetAllAsync()).Where(c => !c.IsDeleted && courseIds.Contains(c.Id)).ToDictionary(c => c.Id, c => c);
-            var activeCourseIds = courses.Keys.ToHashSet();
-            var sessions = (await Sessions.GetAllAsync()).Where(s => activeCourseIds.Contains(s.CourseId)).ToList();
+            var enrollments = await Enrollment.Query().Where(e => e.StudentId == userId).ToListAsync();
+            var courseIds = enrollments.Select(e => e.CourseId).ToList();
+            var courses = await Courses.Query().Where(c => !c.IsDeleted && courseIds.Contains(c.Id)).ToDictionaryAsync(c => c.Id);
+            var activeCourseIds = courses.Keys.ToList();
+            var sessions = await Sessions.Query().Where(s => activeCourseIds.Contains(s.CourseId)).ToListAsync();
             var sessionById = sessions.ToDictionary(s => s.Id, s => s);
-            var assignments = (await Assignments.GetAllAsync()).Where(a => sessionById.ContainsKey(a.SessionId)).ToList();
-            var submissions = (await AssignmentSubmission.GetAllAsync()).Where(s => s.StudentId == userId).ToList();
+            var sessionIds = sessionById.Keys.ToList();
+            var assignments = await Assignments.Query().Where(a => sessionIds.Contains(a.SessionId)).ToListAsync();
+            var assignmentIds = assignments.Select(a => a.Id).ToList();
+            var submissions = await AssignmentSubmission.Query().Where(s => s.StudentId == userId && assignmentIds.Contains(s.AssignmentId)).ToListAsync();
 
             return assignments.Select(assignment =>
             {
@@ -601,7 +602,7 @@ namespace Application.Services.Implementitions
             if (session == null)
                 return new ServiceResponse(false, "Session not found.");
 
-            var enrolled = (await Enrollment.GetAllAsync()).Any(e => e.CourseId == session.CourseId && e.StudentId == userId);
+            var enrolled = await Enrollment.Query().AnyAsync(e => e.CourseId == session.CourseId && e.StudentId == userId);
             if (!enrolled)
                 return new ServiceResponse(false, "You can submit assignments only for enrolled courses.");
 
@@ -621,7 +622,7 @@ namespace Application.Services.Implementitions
             {
                 return null;
             }
-            var submissions = (await AssignmentSubmission.GetAllAsync()).Where(s => s.AssignmentId == Id).ToList();
+            var submissions = await AssignmentSubmission.Query().Where(s => s.AssignmentId == Id).ToListAsync();
             if (submissions == null || submissions.Count == 0)
             {
                 return null;
@@ -637,10 +638,10 @@ namespace Application.Services.Implementitions
                 return [];
             }
 
-            var payments = (await Payments.GetAllAsync())
+            var payments = await Payments.Query()
                 .Where(p => p.StudentId == userId)
                 .OrderByDescending(p => p.SubmittingDate)
-                .ToList();
+                .ToListAsync();
 
             return mapper.Map<IEnumerable<GetPayment>>(payments);
         }
@@ -652,10 +653,10 @@ namespace Application.Services.Implementitions
                 return [];
             }
 
-            var payments = (await Payments.GetAllAsync())
+            var payments = await Payments.Query()
                 .Where(p => p.CourseId == courseId)
                 .OrderByDescending(p => p.SubmittingDate)
-                .ToList();
+                .ToListAsync();
 
             return mapper.Map<IEnumerable<GetPayment>>(payments);
         }
@@ -667,8 +668,8 @@ namespace Application.Services.Implementitions
                 return null;
             }
 
-            var payment = (await Payments.GetAllAsync())
-                .FirstOrDefault(p => p.CourseId == courseId && p.StudentId == userId);
+            var payment = await Payments.Query()
+                .FirstOrDefaultAsync(p => p.CourseId == courseId && p.StudentId == userId);
 
             return payment == null ? null : mapper.Map<GetPayment>(payment);
         }
@@ -681,7 +682,7 @@ namespace Application.Services.Implementitions
             }
             var user = await userManagment.GetUserByEmail(Email);
             var userId = user.Id.ToString();
-            var submissions = (await AssignmentSubmission.GetAllAsync()).Where(s => s.StudentId == userId).ToList();
+            var submissions = await AssignmentSubmission.Query().Where(s => s.StudentId == userId).ToListAsync();
             if (submissions == null || submissions.Count == 0)
             {
                 return null;
@@ -827,7 +828,7 @@ namespace Application.Services.Implementitions
             }
             var user = await userManagment.GetUserByEmail(Email);
             var userId = user.Id.ToString();
-            var submission = (await AssignmentSubmission.GetAllAsync()).FirstOrDefault(s => s.AssignmentId == Id && s.StudentId == userId);
+            var submission = await AssignmentSubmission.Query().FirstOrDefaultAsync(s => s.AssignmentId == Id && s.StudentId == userId);
             if (submission == null)
             {
                 return null;
@@ -953,8 +954,7 @@ namespace Application.Services.Implementitions
                 ?? FindJsonPropertyAsString(callbackData, "payment_intention_id")
                 ?? FindJsonPropertyAsString(callbackData, "id");
 
-            var payments = await Payments.GetAllAsync();
-            var payment = payments.FirstOrDefault(p =>
+            var payment = await Payments.Query(true).FirstOrDefaultAsync(p =>
                 (!string.IsNullOrEmpty(merchantOrderId) && p.MerchantOrderId == merchantOrderId) ||
                 (!string.IsNullOrEmpty(specialReference) && p.SpecialReference == specialReference) ||
                 (!string.IsNullOrEmpty(intentionId) && p.ProviderIntentionId == intentionId));
@@ -994,7 +994,7 @@ namespace Application.Services.Implementitions
             await Payments.UpdateAsync(payment);
             if (payment.PaymentStatus == "Paid")
             {
-                var existingEnrollment = (await Enrollment.GetAllAsync()).FirstOrDefault(e => e.CourseId == payment.CourseId && e.StudentId == payment.StudentId);
+                var existingEnrollment = await Enrollment.Query().FirstOrDefaultAsync(e => e.CourseId == payment.CourseId && e.StudentId == payment.StudentId);
                 if (existingEnrollment == null)
                 {
                     await Enrollment.AddAsync(new Enrollment
@@ -1013,7 +1013,7 @@ namespace Application.Services.Implementitions
 
         public async Task<IEnumerable<NotificationDto>> GetMyNotifications(string userId)
         {
-            return (await Notifications.GetAllAsync())
+            return await Notifications.Query()
                 .Where(n => n.UserId == userId)
                 .OrderByDescending(n => n.CreatedAt)
                 .Select(n => new NotificationDto
@@ -1024,7 +1024,7 @@ namespace Application.Services.Implementitions
                     IsRead = n.IsRead,
                     CreatedAt = n.CreatedAt
                 })
-                .ToList();
+                .ToListAsync();
         }
 
         public async Task<ServiceResponse> MarkNotificationAsRead(Guid id, string userId)
@@ -1080,15 +1080,15 @@ namespace Application.Services.Implementitions
             Enrollment enrollment,
             HashSet<Guid>? courseSessionIds = null)
         {
-            var sessionIds = courseSessionIds ?? (await Sessions.GetAllAsync())
+            var sessionIds = courseSessionIds ?? (await Sessions.Query()
                 .Where(s => s.CourseId == courseId)
                 .Select(s => s.Id)
-                .ToHashSet();
+                .ToListAsync()).ToHashSet();
 
             var totalSessions = sessionIds.Count;
-            var progressRows = (await Progresses.GetAllAsync())
+            var progressRows = await Progresses.Query()
                 .Where(p => p.CourseId == courseId && p.StudentId == userId)
-                .ToList();
+                .ToListAsync();
             var doneSessions = progressRows.Count(p => p.IsDone && sessionIds.Contains(p.SessionId));
             var percentage = CalculatePercentage(doneSessions, totalSessions);
 
@@ -1189,8 +1189,8 @@ namespace Application.Services.Implementitions
 
         private async Task SavePaymentAsync(Payment payment)
         {
-            var existingPayment = (await Payments.GetAllAsync())
-                .FirstOrDefault(p => p.CourseId == payment.CourseId && p.StudentId == payment.StudentId);
+            var existingPayment = await Payments.Query(true)
+                .FirstOrDefaultAsync(p => p.CourseId == payment.CourseId && p.StudentId == payment.StudentId);
 
             if (existingPayment == null)
             {

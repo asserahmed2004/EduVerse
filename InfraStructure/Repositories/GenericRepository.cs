@@ -13,6 +13,12 @@ namespace InfraStructure.Repositries
 {
     class GenericRepository<TEntity>(AppDbContext context) : IGeneric<TEntity> where TEntity : class
     {
+        public IQueryable<TEntity> Query(bool tracking = false)
+        {
+            var query = context.Set<TEntity>().AsQueryable();
+            return tracking ? query : query.AsNoTracking();
+        }
+
         public async Task<TEntity> AddAsync(TEntity entity)
         {
             var result = context.Set<TEntity>().Add(entity);
@@ -33,7 +39,7 @@ namespace InfraStructure.Repositries
 
         public async Task<IEnumerable<TEntity>> GetAllAsync()
         {
-            return await context.Set<TEntity>().AsNoTracking().ToListAsync();
+            return await Query().ToListAsync();
         }
 
         public async Task<TEntity> GetByIdAsync(Guid id)

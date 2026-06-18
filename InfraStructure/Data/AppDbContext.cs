@@ -31,6 +31,24 @@ namespace InfraStructure.Data
             modelBuilder.Entity<Rating>()
                 .HasKey(r => new { r.CourseId, r.StudentId });
 
+            modelBuilder.Entity<Course>().HasIndex(c => c.InstructorId);
+            modelBuilder.Entity<Course>().HasIndex(c => c.OrganizationId);
+            modelBuilder.Entity<Course>().HasIndex(c => c.OrgId);
+            modelBuilder.Entity<Course>().HasIndex(c => c.IsDeleted);
+            modelBuilder.Entity<Enrollment>().HasIndex(e => e.StudentId);
+            modelBuilder.Entity<Payment>().HasIndex(p => p.StudentId);
+            modelBuilder.Entity<Payment>().HasIndex(p => p.PaymentStatus);
+            modelBuilder.Entity<Payment>().HasIndex(p => p.MerchantOrderId);
+            modelBuilder.Entity<Payment>().HasIndex(p => p.ProviderIntentionId);
+            modelBuilder.Entity<Payment>().HasIndex(p => p.SubmittingDate);
+            modelBuilder.Entity<Assignment>().HasIndex(a => a.SessionId);
+            modelBuilder.Entity<AssignmentSubmission>().HasIndex(s => s.AssignmentId);
+            modelBuilder.Entity<Session>().HasIndex(s => s.CourseId);
+            modelBuilder.Entity<Session>().HasIndex(s => new { s.CourseId, s.SessionNumber });
+            modelBuilder.Entity<CertificateRecord>().HasIndex(c => c.StudentId);
+            modelBuilder.Entity<CertificateRecord>().HasIndex(c => c.CourseId);
+            modelBuilder.Entity<Rating>().HasIndex(r => r.StudentId);
+
             modelBuilder.Entity<Course>()
                 .HasOne<AppUser>()
                 .WithMany()

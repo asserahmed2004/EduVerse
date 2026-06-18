@@ -2,6 +2,7 @@
 using Application.Dependencyinjection;
 using InfraStructure.Data.Seed;
 using InfraStructure.DependencyInjection;
+using API.Middleware;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.OpenApi.Models;
 using Scalar.AspNetCore;
@@ -87,6 +88,7 @@ namespace API
             app.UseHttpsRedirection();
             app.UseAuthentication();
             app.UseAuthorization();
+            app.UseMiddleware<RequestPerformanceMiddleware>();
             app.MapControllers();
 
             await SeedDatabaseAsync(app);
