@@ -20,7 +20,7 @@ namespace Application.DTOs.Auth
 
 
         public string role { get; set; }
-        public string ConfirmationCode { get; set; }
+        public string? ConfirmationCode { get; set; }
 
 
     }

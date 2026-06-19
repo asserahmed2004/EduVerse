@@ -1078,17 +1078,9 @@ export const authService = {
     formData.append("phoneNumber", payload.phoneNumber.trim());
     formData.append("Birth", payload.birth);
     formData.append("role", toBackendRole(payload.role));
-    formData.append("ConfirmationCode", payload.confirmationCode?.trim() ?? "");
 
     const response = await api.post("/Auth/Register", formData);
     return ensureSuccessfulResult(response.data, "Registration failed.");
-  },
-
-  async sendConfirmationEmail(email: string): Promise<ServiceResult> {
-    const normalizedEmail = email.trim();
-    if (!normalizedEmail) throw new Error("Enter your email address first.");
-    const response = await api.post(`/Auth/SendConfirmationEmail/${encodeURIComponent(normalizedEmail)}`);
-    return ensureSuccessfulResult(response.data, "Could not send the confirmation code.");
   },
 
   async getProfile() {

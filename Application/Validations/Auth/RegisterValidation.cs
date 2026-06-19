@@ -23,11 +23,9 @@ namespace Application.Validations.Auth
                 .Must(value => DateOnly.TryParse(value, out _)).WithMessage("Birth date is invalid");
             RuleFor(x => x.role)
                 .NotEmpty().WithMessage("Role is required")
-                .Must(role => role != null && new[] { "student", "instructor", "organizationadmin" }
+                .Must(role => role != null && new[] { "student", "instructor" }
                     .Contains(role.Trim().ToLowerInvariant()))
-                .WithMessage("Role must be Student, Instructor, or OrganizationAdmin");
-            RuleFor(x => x.ConfirmationCode)
-                .NotEmpty().WithMessage("Confirmation code is required");
+                .WithMessage("Role must be Student or Instructor");
         }
     }
 }
