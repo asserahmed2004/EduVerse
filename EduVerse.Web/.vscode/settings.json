@@ -1,10 +1,13 @@
 {
     "appService.defaultWebAppToDeploy": "/subscriptions/908a23c6-70d5-4371-8d26-0e49d664f1a4/resourceGroups/EduVerse/providers/Microsoft.Web/sites/eduverseweb",
     "appService.deploySubpath": ".next",
-    "appService.zipIgnorePattern": [
-        "node_modules{,/**}",
-        ".next{,/**}",
-        ".git{,/**}",
-        ".env.local"
-    ]
+    
+        "appService.zipIgnorePattern": [
+            "node_modules{,/**}",
+            ".next{,/**}",
+            ".git{,/**}",
+            ".vscode{,/**}",
+            ".env.local"
+        ]
+    
 }
