@@ -54,6 +54,7 @@ namespace Application.Services.Interfaces
         Task<ServiceResponse> UpdatePaymentFromCallback(JsonElement callbackData);
         Task<IEnumerable<NotificationDto>> GetMyNotifications(string userId);
         Task<ServiceResponse> MarkNotificationAsRead(Guid id, string userId);
+        Task<ServiceResponse> MarkAttendance(Guid sessionId, string userId, string attendanceCode);
         
         
 

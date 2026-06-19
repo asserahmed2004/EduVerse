@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { recommendationService } from "@/lib/api";
+import { getApiErrorMessage, recommendationService } from "@/lib/api";
 import { isAuthenticatedStudent } from "@/lib/auth";
 import type { Course } from "@/lib/types";
 import { CourseCard, EmptyState, LoadingState } from "./ui";
@@ -71,10 +71,10 @@ export function RecommendationSection({
           );
           setCourses(uniqueCourses);
         }
-      } catch {
+      } catch (loadError) {
         if (!cancelled) {
           setCourses([]);
-          setError("Could not load recommendations from the API.");
+          setError(getApiErrorMessage(loadError, "Could not load recommendations from the API."));
         }
       } finally {
         if (!cancelled) {

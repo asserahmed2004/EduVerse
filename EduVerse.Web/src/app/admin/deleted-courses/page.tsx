@@ -6,7 +6,7 @@ import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
 import { useToast } from "@/components/toast-provider";
 import { Badge, Button, CourseCard, EmptyState, LoadingState, PageHeader, StatCard } from "@/components/ui";
-import { courseService } from "@/lib/api";
+import { courseService, getApiErrorMessage } from "@/lib/api";
 import type { Course } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 
@@ -21,9 +21,9 @@ export default function DeletedCoursesPage() {
     setError("");
     try {
       setCourses(await courseService.getDeleted());
-    } catch {
+    } catch (loadError) {
       setCourses([]);
-      setError("Could not load deleted courses from the API.");
+      setError(getApiErrorMessage(loadError, "Could not load deleted courses from the API."));
     } finally {
       setLoading(false);
     }

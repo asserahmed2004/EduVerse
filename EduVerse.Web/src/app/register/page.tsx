@@ -4,14 +4,32 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { Button } from "@/components/ui";
-import { authService } from "@/lib/api";
+import { authService, getApiErrorMessage } from "@/lib/api";
 import type { UserRole } from "@/lib/types";
 
 export default function RegisterPage() {
   const router = useRouter();
   const [role, setRole] = useState<UserRole>("Student");
   const [loading, setLoading] = useState(false);
+  const [sendingCode, setSendingCode] = useState(false);
+  const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
+  const [messageTone, setMessageTone] = useState<"success" | "error">("error");
+
+  async function sendConfirmationCode() {
+    setSendingCode(true);
+    setMessage("");
+    try {
+      const result = await authService.sendConfirmationEmail(email);
+      setMessageTone("success");
+      setMessage(result.message ?? "Confirmation code sent. Check your email.");
+    } catch (error) {
+      setMessageTone("error");
+      setMessage(getApiErrorMessage(error, "Could not send the confirmation code."));
+    } finally {
+      setSendingCode(false);
+    }
+  }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -20,20 +38,27 @@ export default function RegisterPage() {
     const form = new FormData(event.currentTarget);
 
     try {
+      const password = String(form.get("password") ?? "");
+      const confirmPassword = String(form.get("confirmPassword") ?? "");
+      if (password !== confirmPassword) {
+        throw new Error("Passwords do not match.");
+      }
+
       await authService.register({
         fullName: String(form.get("fullName")),
         userName: String(form.get("userName")),
         email: String(form.get("email")),
-        password: String(form.get("password")),
-        confirmPassword: String(form.get("confirmPassword")),
+        password,
+        confirmPassword,
         phoneNumber: String(form.get("phoneNumber")),
         birth: String(form.get("birth")),
         role,
         confirmationCode: String(form.get("confirmationCode") ?? "")
       });
       router.push("/login");
-    } catch {
-      setMessage("Registration API is not available now. The form is ready for backend integration.");
+    } catch (error) {
+      setMessageTone("error");
+      setMessage(getApiErrorMessage(error, "Registration failed."));
     } finally {
       setLoading(false);
     }
@@ -46,7 +71,11 @@ export default function RegisterPage() {
         <h1 className="mt-2 text-3xl font-bold text-ink">Join EduVerse</h1>
         <p className="mt-3 text-sm text-muted">Register as a student, instructor, or organization admin. Platform admin accounts are managed from backend roles.</p>
 
-        {message && <div className="mt-6 rounded-xl bg-amber-100 px-4 py-3 text-sm font-semibold text-amber-500">{message}</div>}
+        {message && (
+          <div className={`mt-6 rounded-xl px-4 py-3 text-sm font-semibold ${messageTone === "success" ? "bg-teal-50 text-teal-700" : "bg-amber-100 text-amber-600"}`}>
+            {message}
+          </div>
+        )}
 
         <div className="mt-7 grid gap-4 sm:grid-cols-2">
           {[
@@ -64,12 +93,27 @@ export default function RegisterPage() {
               <input
                 name={name}
                 type={name.includes("password") ? "password" : name === "birth" ? "date" : name === "email" ? "email" : "text"}
+                value={name === "email" ? email : undefined}
+                onChange={name === "email" ? (event) => setEmail(event.target.value) : undefined}
                 className="mt-2 h-12 w-full rounded-xl bg-slate-50 px-4 text-sm outline-none ring-1 ring-slate-200 focus:ring-teal-500"
-                required={name !== "confirmationCode"}
+                required
               />
+              {name === "email" && (
+                <button
+                  type="button"
+                  onClick={sendConfirmationCode}
+                  disabled={sendingCode || !email.trim()}
+                  className="mt-2 text-sm font-semibold text-teal-600 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {sendingCode ? "Sending code..." : "Send confirmation code"}
+                </button>
+              )}
             </label>
           ))}
         </div>
+        <p className="mt-3 text-xs font-semibold text-muted">
+          Passwords need at least 8 characters, including uppercase, lowercase, a number, and a symbol.
+        </p>
 
         <div className="mt-6">
           <p className="text-sm font-semibold text-ink">Role</p>

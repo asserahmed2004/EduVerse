@@ -318,8 +318,8 @@ export default function CourseDetailsPage() {
       if (redirectUrl) {
         window.location.href = redirectUrl;
       }
-    } catch {
-      showToast({ title: "Payment service unavailable", message: "Payment service is currently unavailable. Please try again later.", tone: "error" });
+    } catch (error) {
+      showToast({ title: "Payment service unavailable", message: getApiErrorMessage(error, "Payment service is currently unavailable. Please try again later."), tone: "error" });
     } finally {
       setPaymentLoading(false);
     }

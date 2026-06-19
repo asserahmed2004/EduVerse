@@ -7,7 +7,7 @@ import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
 import { useToast } from "@/components/toast-provider";
 import { Badge, Button, EmptyState, LoadingState, PageHeader, StatCard } from "@/components/ui";
-import { organizationService } from "@/lib/api";
+import { getApiErrorMessage, organizationService } from "@/lib/api";
 import type { OrganizationOverview } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils";
 
@@ -24,8 +24,8 @@ export default function OrganizationsPage() {
     setError("");
     try {
       setOrganizations(await organizationService.getAll());
-    } catch {
-      setError("Could not load organizations from the API.");
+    } catch (loadError) {
+      setError(getApiErrorMessage(loadError, "Could not load organizations from the API."));
       setOrganizations([]);
     } finally {
       setLoading(false);
@@ -52,8 +52,8 @@ export default function OrganizationsPage() {
       setError("");
       showToast({ title: "Organization created", message: "The organization is now available.", tone: "success" });
       setShowCreate(false);
-    } catch {
-      showToast({ title: "Create failed", message: "Check required fields and Admin permissions.", tone: "error" });
+    } catch (error) {
+      showToast({ title: "Create failed", message: getApiErrorMessage(error, "Check required fields and Admin permissions."), tone: "error" });
     } finally {
       setSaving(false);
     }
@@ -72,8 +72,8 @@ export default function OrganizationsPage() {
       }));
       setError("");
       showToast({ title: isSuspended ? "Organization activated" : "Organization suspended", message: organization.organizationName ?? organization.organizationAdminName, tone: "success" });
-    } catch {
-      showToast({ title: "Status update failed", message: "The backend rejected the organization status update.", tone: "error" });
+    } catch (error) {
+      showToast({ title: "Status update failed", message: getApiErrorMessage(error, "The backend rejected the organization status update."), tone: "error" });
     }
   }
 

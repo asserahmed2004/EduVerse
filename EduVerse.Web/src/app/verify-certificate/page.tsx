@@ -4,7 +4,7 @@ import { ShieldCheck, Search } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import { Button, EmptyState, LoadingState } from "@/components/ui";
-import { studentService } from "@/lib/api";
+import { getApiErrorMessage, studentService } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
 
 type VerificationResult = {
@@ -43,9 +43,12 @@ function VerifyCertificateContent() {
     try {
       const data = await studentService.verifyCertificate(value.trim());
       setResult(data);
-    } catch {
+    } catch (verifyError) {
       setResult(null);
-      setError("Certificate not found or invalid.");
+      const status = (verifyError as { response?: { status?: number } })?.response?.status;
+      setError(status === 404
+        ? "Certificate not found or invalid."
+        : getApiErrorMessage(verifyError, "Certificate verification failed."));
     } finally {
       setLoading(false);
     }

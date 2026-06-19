@@ -34,7 +34,7 @@ http://localhost:3000
 Copy `.env.example` to `.env.local`:
 
 ```text
-NEXT_PUBLIC_API_BASE_URL=http://localhost:5153
+NEXT_PUBLIC_API_BASE_URL=http://localhost:5000
 ```
 
 ## Notes

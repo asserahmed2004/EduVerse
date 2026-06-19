@@ -6,7 +6,7 @@ import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
 import { useToast } from "@/components/toast-provider";
 import { Badge, Button, EmptyState, LoadingState, PageHeader, StatCard } from "@/components/ui";
-import { paymentService, studentService } from "@/lib/api";
+import { getApiErrorMessage, paymentService, studentService } from "@/lib/api";
 import { getStoredUser } from "@/lib/auth";
 import type { Payment } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -61,9 +61,10 @@ export default function PaymentsPage() {
       } else {
         setPayments([]);
       }
-    } catch {
-      setError("Could not load payments from the API.");
-      showToast({ title: "Payments unavailable", message: "Could not load real payment data from the backend.", tone: "error" });
+    } catch (loadError) {
+      const message = getApiErrorMessage(loadError, "Could not load payments from the API.");
+      setError(message);
+      showToast({ title: "Payments unavailable", message, tone: "error" });
     } finally {
       setLoading(false);
     }

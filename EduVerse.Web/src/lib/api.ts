@@ -48,7 +48,8 @@ import type {
   UpdateProfilePayload
 } from "./types";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5153";
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5000";
+const API_CONNECTION_MESSAGE = `Could not connect to API. Make sure the backend is running on ${API_BASE_URL}.`;
 
 function isCloudGetUrl(value: string) {
   try {
@@ -170,8 +171,35 @@ function readResponseMessage(data: any): string | undefined {
 }
 
 export function getApiErrorMessage(error: unknown, fallbackMessage = "Request failed."): string {
-  const responseData = (error as { response?: { data?: any } })?.response?.data;
-  return readResponseMessage(responseData) ?? (error instanceof Error ? error.message : fallbackMessage);
+  const axiosError = error as {
+    code?: string;
+    response?: { status?: number; data?: any };
+  };
+  const responseMessage = readResponseMessage(axiosError?.response?.data);
+  if (responseMessage) return responseMessage;
+
+  if (!axios.isAxiosError(error) && !axiosError?.response) {
+    return error instanceof Error ? error.message : fallbackMessage;
+  }
+
+  if (!axiosError?.response) {
+    return API_CONNECTION_MESSAGE;
+  }
+
+  if (axiosError.response.status === 401) {
+    return "You are not authenticated or your session has expired. Please sign in again.";
+  }
+  if (axiosError.response.status === 403) {
+    return "You do not have permission to perform this action.";
+  }
+  if (axiosError.response.status === 404) {
+    return "The requested API resource was not found.";
+  }
+  if (axiosError.response.status && axiosError.response.status >= 500) {
+    return "The API could not complete the request. Check the backend logs and try again.";
+  }
+
+  return error instanceof Error && error.message !== "Network Error" ? error.message : fallbackMessage;
 }
 
 export function getPreviewFileUrl(value?: string) {
@@ -401,6 +429,11 @@ function normalizeActivityLog(item: any): ActivityLog {
 
 function unwrapData(data: any) {
   return data?.data ?? data?.Data ?? data;
+}
+
+function unwrapArray(data: any): any[] {
+  const value = unwrapData(data);
+  return Array.isArray(value) ? value : [];
 }
 
 function toBackendRole(role: string) {
@@ -996,7 +1029,7 @@ export const authService = {
   async login(payload: LoginPayload) {
     clearAuth();
     const response = await api.post("/Auth/Login", payload);
-    const data = response.data;
+    const data = unwrapData(response.data);
     const token = data.token ?? data.Token ?? data.accessToken ?? data.AccessToken;
 
     if (!token) {
@@ -1037,12 +1070,25 @@ export const authService = {
 
   async register(payload: RegisterPayload) {
     const formData = new FormData();
-    Object.entries(payload).forEach(([key, value]) => {
-      if (value) formData.append(key, key === "role" && value === "OrganizationAdmin" ? "organizationAdmin" : String(value));
-    });
+    formData.append("FullName", payload.fullName.trim());
+    formData.append("UserName", payload.userName.trim());
+    formData.append("Email", payload.email.trim());
+    formData.append("Password", payload.password);
+    formData.append("confirmPassword", payload.confirmPassword);
+    formData.append("phoneNumber", payload.phoneNumber.trim());
+    formData.append("Birth", payload.birth);
+    formData.append("role", toBackendRole(payload.role));
+    formData.append("ConfirmationCode", payload.confirmationCode?.trim() ?? "");
 
     const response = await api.post("/Auth/Register", formData);
-    return response.data;
+    return ensureSuccessfulResult(response.data, "Registration failed.");
+  },
+
+  async sendConfirmationEmail(email: string): Promise<ServiceResult> {
+    const normalizedEmail = email.trim();
+    if (!normalizedEmail) throw new Error("Enter your email address first.");
+    const response = await api.post(`/Auth/SendConfirmationEmail/${encodeURIComponent(normalizedEmail)}`);
+    return ensureSuccessfulResult(response.data, "Could not send the confirmation code.");
   },
 
   async getProfile() {
@@ -1072,7 +1118,7 @@ export const authService = {
 
 export const courseService = {
   async getAll() {
-    const response = await api.get("/Course/GetAll", { timeout: 0 });
+    const response = await api.get("/Course/GetAll");
     return normalizeCourseList(response.data);
   },
 
@@ -1094,7 +1140,7 @@ export const courseService = {
 
   async getDeleted() {
     const response = await api.get("/Course/GetDeletedCourses");
-    return (response.data as any[]).map(normalizeCourse);
+    return unwrapArray(response.data).map(normalizeCourse);
   },
 
   async restore(id: string): Promise<ServiceResult> {
@@ -1132,13 +1178,12 @@ export const courseService = {
 
   async getSessions(courseId: string) {
     const response = await api.get(`/Course/GetAllSessions/${courseId}`);
-    return (response.data as any[]).map(normalizeSession);
+    return unwrapArray(response.data).map(normalizeSession);
   },
 
   async getAssignmentsCount(courseId: string) {
     const response = await api.get(`/Course/GetAllAssignments/${courseId}`);
-    const data = response.data;
-    return Array.isArray(data) ? data.length : 0;
+    return unwrapArray(response.data).length;
   },
 
   async search(query: string) {
@@ -1177,9 +1222,6 @@ export const courseService = {
         if (error.code === "ECONNABORTED") {
           throw new Error("The session upload timed out before the API responded. Check your connection and try again.");
         }
-        if (!error.response) {
-          throw new Error(`Could not reach the EduVerse API at ${API_BASE_URL}. Confirm the backend is running and try again.`);
-        }
       }
 
       throw new Error(getApiErrorMessage(error, "Session creation failed."));
@@ -1210,7 +1252,7 @@ export const courseService = {
 export const studentService = {
   async getEnrollments() {
     const response = await api.get("/User/my-enrolled-courses");
-    return (response.data as any[]).map(normalizeEnrollment);
+    return unwrapArray(response.data).map(normalizeEnrollment);
   },
 
   async getEnrollment(courseId: string): Promise<Enrollment> {
@@ -1220,17 +1262,17 @@ export const studentService = {
 
   async getCertificates() {
     const response = await api.get("/User/my-certificates");
-    return (response.data as any[]).map(normalizeCertificate);
+    return unwrapArray(response.data).map(normalizeCertificate);
   },
 
   async getSubmissions() {
     const response = await api.get("/User/my-submissions");
-    return response.data;
+    return unwrapArray(response.data).map(normalizeStudentSubmission);
   },
 
   async getAssignments(): Promise<StudentAssignment[]> {
     const response = await api.get("/User/my-assignments");
-    return (response.data as any[]).map(normalizeStudentAssignment);
+    return unwrapArray(response.data).map(normalizeStudentAssignment);
   },
 
   async getSubmission(assignmentId: string): Promise<StudentSubmission> {
@@ -1312,12 +1354,14 @@ export const studentService = {
 
   async getPayments(): Promise<Payment[]> {
     const response = await api.get("/User/payments");
-    return (response.data as any[]).map(normalizePayment);
+    return unwrapArray(response.data).map(normalizePayment);
   },
 
   async createPayment(courseId: string, method: "card" | "wallet") {
     const response = await api.post(`/User/payment/${courseId}/${method}`);
-    return response.data as string;
+    const value = unwrapData(response.data);
+    if (typeof value === "string") return value;
+    return value?.redirectUrl ?? value?.RedirectUrl ?? "";
   }
 };
 
@@ -1369,12 +1413,12 @@ export const instructorService = {
 
   async getCoursePayments(courseId: string) {
     const response = await api.get(`/User/payments/course/${courseId}`);
-    return (response.data as any[]).map(normalizePayment);
+    return unwrapArray(response.data).map(normalizePayment);
   },
 
   async getEnrolledUsers(courseId: string) {
     const response = await api.get(`/User/enrolledusers/${courseId}`);
-    return response.data;
+    return unwrapArray(response.data);
   }
 };
 
@@ -1594,7 +1638,7 @@ export const adminService = {
   async getUsers(role?: string): Promise<ManagedUser[]> {
     const url = role ? `/Auth/GetAllUsers/${toBackendRole(role)}` : "/Auth/GetAllUsers";
     const response = await api.get(url);
-    return (response.data as any[]).map(normalizeUser);
+    return unwrapArray(response.data).map(normalizeUser);
   },
 
   async addRole(role: string): Promise<ServiceResult> {

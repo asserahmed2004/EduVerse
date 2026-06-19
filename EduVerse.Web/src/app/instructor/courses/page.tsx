@@ -6,7 +6,7 @@ import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
 import { useToast } from "@/components/toast-provider";
 import { Badge, Button, EmptyState, LoadingState, PageHeader, StatCard } from "@/components/ui";
-import { courseService, organizationService } from "@/lib/api";
+import { courseService, getApiErrorMessage, organizationService } from "@/lib/api";
 import { getStoredUser } from "@/lib/auth";
 import type { Course, CourseSession, OrganizationDetails } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils";
@@ -33,8 +33,8 @@ export default function InstructorCoursesPage() {
       setError("");
       setAssignmentCourseId((current) => current || data[0]?.id || "");
       return true;
-    } catch {
-      if (showPageError) setError("Could not load courses.");
+    } catch (loadError) {
+      if (showPageError) setError(getApiErrorMessage(loadError, "Could not load courses."));
       return false;
     } finally {
       setLoading(false);
@@ -78,7 +78,10 @@ export default function InstructorCoursesPage() {
       showToast({ title: "Course created", message: result.message ?? "The course was sent to the backend successfully.", tone: "success" });
       formElement.reset();
 
-      await loadCourses(false);
+      const refreshed = await loadCourses(false);
+      if (!refreshed) {
+        showToast({ title: "Course created", message: "The course was saved, but the course list could not be refreshed.", tone: "info" });
+      }
     } catch (error) {
       showToast({
         title: "Course creation failed",
@@ -95,8 +98,8 @@ export default function InstructorCoursesPage() {
       await courseService.delete(id);
       setCourses((current) => current.filter((course) => course.id !== id));
       showToast({ title: "Course deleted", tone: "success" });
-    } catch {
-      showToast({ title: "Delete failed", message: "You may not own this course or the backend rejected the request.", tone: "error" });
+    } catch (error) {
+      showToast({ title: "Delete failed", message: getApiErrorMessage(error, "You may not own this course or the backend rejected the request."), tone: "error" });
     }
   }
 

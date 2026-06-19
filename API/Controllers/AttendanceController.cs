@@ -35,5 +35,17 @@ namespace API.Controllers
             var result = await instructorService.GetSessionAttendanceAsync(sessionId, userId, User.HasRole(AppRoles.Admin) || User.HasRole(AppRoles.OrganizationAdmin));
             return result.success ? Ok(result) : BadRequest(result);
         }
+
+        [HttpPost("Mark/{sessionId}")]
+        [Authorize(Roles = AppRoles.StudentAccess)]
+        public async Task<IActionResult> Mark(Guid sessionId, [FromBody] MarkAttendanceRequest request)
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrWhiteSpace(userId))
+                return Unauthorized(new { success = false, message = "User id was not found in token." });
+
+            var result = await userService.MarkAttendance(sessionId, userId, request?.AttendanceCode ?? string.Empty);
+            return result.success ? Ok(result) : BadRequest(result);
+        }
     }
 }

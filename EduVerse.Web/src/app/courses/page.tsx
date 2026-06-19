@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { RecommendationSection } from "@/components/recommendation-section";
 import { CourseCard, EmptyState, LoadingState, PageHeader } from "@/components/ui";
-import { courseService } from "@/lib/api";
+import { courseService, getApiErrorMessage } from "@/lib/api";
 import type { Course } from "@/lib/types";
 
 export default function CoursesPage() {
@@ -22,7 +22,7 @@ export default function CoursesPage() {
         setCourses(Array.from(new Map(data.filter((course) => Boolean(course.id)).map((course) => [course.id, course])).values()));
         setError("");
       })
-      .catch(() => setError("Could not load courses from the API."))
+      .catch((loadError) => setError(getApiErrorMessage(loadError, "Could not load courses from the API.")))
       .finally(() => setLoading(false));
   }, []);
 
@@ -81,7 +81,7 @@ export default function CoursesPage() {
 
       {error && (
         <div role="alert" className="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
-          The course catalog is temporarily unavailable. Please try again shortly.
+          {error}
         </div>
       )}
 

@@ -85,6 +85,7 @@ namespace API
 
             app.UseInfraStructureService();
             app.UseCors();
+            app.UseMiddleware<ApiExceptionMiddleware>();
             app.UseHttpsRedirection();
             app.UseAuthentication();
             app.UseAuthorization();

@@ -98,10 +98,14 @@ namespace Api.Controllers
         [HttpPost("SendConfirmationEmail/{email}")]
         public async Task<IActionResult> SendConfirmationEmail(string email)
         {
+            if (string.IsNullOrWhiteSpace(email))
+                return BadRequest(new { success = false, message = "Email is required" });
+
             var result = await authServices.SendConfirmationEmail(email);
-            if (result != null)
-                return Ok(result);
-            return BadRequest(result);
+            if (result?.ConfirmationCode == null)
+                return BadRequest(new { success = false, message = "Could not send the confirmation code. Check the email address and mail configuration." });
+
+            return Ok(new { success = true, message = "Confirmation code sent. Check your email." });
         }
         [HttpGet("GetAllUsers/{Role?}")]
         [Authorize(Roles = AppRoles.AdminAccess)]

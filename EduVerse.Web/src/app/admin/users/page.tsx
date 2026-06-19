@@ -35,10 +35,10 @@ export default function AdminUsersPage() {
     try {
       setUsers(await adminService.getUsers(role || undefined));
       setError("");
-    } catch {
+    } catch (loadError) {
       if (showPageError) {
         setUsers([]);
-        setError("Could not load users from the API.");
+        setError(getApiErrorMessage(loadError, "Could not load users from the API."));
       }
     } finally {
       setLoading(false);

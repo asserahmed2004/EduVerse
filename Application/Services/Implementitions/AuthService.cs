@@ -341,13 +341,40 @@ namespace Application.Services.Implementitions.Auth
                 return new LoginResponse
                 {
                     succeed= false,
-                    message = "Not Valid",
+                    message = response.message,
                 };
             }
-            
+
+            if (!DateOnly.TryParse(user.Birth, out var birthDate))
+            {
+                return new LoginResponse
+                {
+                    succeed = false,
+                    message = "Birth date is invalid"
+                };
+            }
+
+            var normalizedRole = user.role.Trim().ToLowerInvariant() switch
+            {
+                "student" => "student",
+                "instructor" => "instructor",
+                "organizationadmin" => "organizationAdmin",
+                _ => null
+            };
+            if (normalizedRole == null)
+            {
+                return new LoginResponse
+                {
+                    succeed = false,
+                    message = "Role must be Student, Instructor, or OrganizationAdmin"
+                };
+            }
+
+            user.Email = user.Email.Trim();
+            user.UserName = user.UserName.Trim();
+            user.FullName = user.FullName.Trim();
             var mappedUser = mapper.Map<AppUser>(user);
-            DateOnly date = DateOnly.Parse(user.Birth);
-            mappedUser.Birthdate = date;
+            mappedUser.Birthdate = birthDate;
             var confirmationResult = await emailConfirmation.GetConfirmationByEmail(user.Email);
             if (confirmationResult == null)
             {
@@ -365,8 +392,6 @@ namespace Application.Services.Implementitions.Auth
                     message = "confirmation code is not correct"
                 };
             }
-            var mappedconfirmation = mapper.Map<EmailConfirmation>(confirmationResult);
-
             mappedUser.EmailConfirmed = true;
             if (user.ProfilePicture != null)
             {
@@ -403,15 +428,16 @@ namespace Application.Services.Implementitions.Auth
             
             var _user = await userManagment.GetUserByEmail(user.Email);
            
-            var roleAssign = await roleManagment.AddUserToRole(_user, user.role);
+            var roleAssign = await roleManagment.AddUserToRole(_user, normalizedRole);
             if (!roleAssign.Succeeded)
             {
                 var removeUser = await userManagment.RemoveUser(user.Email);
                 return new LoginResponse(false, message: "Role assignment failed", errors: roleAssign.Errors.Select(e => e.Description));
             }
-            var login= await LoginUser(new LoginUser { Email = user.Email, Password = user.Password });
-            
-            return login;
+
+            return new LoginResponse(
+                succeed: true,
+                message: "Registration successful. You can now sign in.");
 
 
 
@@ -511,14 +537,15 @@ namespace Application.Services.Implementitions.Auth
                     
                 };
             }
-            var smtpClient = new SmtpClient("smtp.gmail.com")
+            using var smtpClient = new SmtpClient("smtp.gmail.com")
             {
                 Port = 587,
                 Credentials = new NetworkCredential("EduVerse1311@gmail.com", "xikj ywxu qcpu dlnb"),
                 EnableSsl = true,
+                Timeout = 20_000
             };
 
-            var mailMessage = new MailMessage
+            using var mailMessage = new MailMessage
             {
                 From = new MailAddress("EduVerse1311@gmail.com"),
                 Subject = "Confirmation Code",
@@ -528,11 +555,20 @@ namespace Application.Services.Implementitions.Auth
             };
             mailMessage.To.Add(confirmation.Email);
 
-            smtpClient.Send(mailMessage);
-
-
-
-            return mapper.Map<ConfirmEmail>(confirmation);
+            try
+            {
+                await smtpClient.SendMailAsync(mailMessage).WaitAsync(TimeSpan.FromSeconds(20));
+                return mapper.Map<ConfirmEmail>(confirmation);
+            }
+            catch
+            {
+                await emailConfirmation.RemoveConfirmation(email);
+                return new ConfirmEmail
+                {
+                    Email = email,
+                    ConfirmationCode = null
+                };
+            }
 
 
         }

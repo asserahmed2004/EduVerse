@@ -7,7 +7,7 @@ import { AuthGuard } from "@/components/auth-guard";
 import { FileActionButtons } from "@/components/file-actions";
 import { useToast } from "@/components/toast-provider";
 import { Badge, Button, EmptyState, LinkButton, LoadingState, PageHeader, StatCard } from "@/components/ui";
-import { studentService } from "@/lib/api";
+import { getApiErrorMessage, studentService } from "@/lib/api";
 import type { StudentAssignment } from "@/lib/types";
 import { cn, formatDate, gradeTextColor } from "@/lib/utils";
 
@@ -62,11 +62,13 @@ export default function StudentAssignmentsPage() {
     setLoading(true);
     try {
       setAssignments(await studentService.getAssignments());
-    } catch {
+      return true;
+    } catch (loadError) {
       if (notifyOnError) {
         setAssignments([]);
-        showToast({ title: "Assignments unavailable", message: "Could not load your assignments from the backend.", tone: "error" });
+        showToast({ title: "Assignments unavailable", message: getApiErrorMessage(loadError, "Could not load your assignments from the backend."), tone: "error" });
       }
+      return false;
     } finally {
       setLoading(false);
     }
@@ -91,7 +93,10 @@ export default function StudentAssignmentsPage() {
       const result = await studentService.submitAssignment(selected.assignmentId, { textAnswer, file });
       showToast({ title: "Submitted", message: result.message ?? "Assignment submitted successfully.", tone: "success" });
       setSelected(null);
-      await load(false);
+      const refreshed = await load(false);
+      if (!refreshed) {
+        showToast({ title: "Submission saved", message: "Your submission was saved, but the assignment list could not be refreshed.", tone: "info" });
+      }
     } catch (error) {
       showToast({ title: "Submit failed", message: error instanceof Error ? error.message : "Could not submit assignment.", tone: "error" });
     } finally {
