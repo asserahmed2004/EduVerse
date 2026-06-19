@@ -10,6 +10,7 @@ namespace Application.Validations.Auth
             RuleFor(x => x.FullName).NotEmpty().WithMessage("Full name is required");
             RuleFor(x => x.UserName).NotEmpty().WithMessage("Username is required");
             RuleFor(x => x.Email).NotEmpty().EmailAddress().WithMessage("Invalid email format");
+            RuleFor(x => x.phoneNumber).NotEmpty().WithMessage("Phone number is required");
             RuleFor(x => x.Password)
                 .NotEmpty().WithMessage("Password is required")
                 .MinimumLength(8).WithMessage("Password must be at least 8 characters long")
@@ -26,8 +27,6 @@ namespace Application.Validations.Auth
                 .Must(role => role != null && new[] { "student", "instructor" }
                     .Contains(role.Trim().ToLowerInvariant()))
                 .WithMessage("Role must be Student or Instructor");
-            RuleFor(x => x.ConfirmationCode)
-                .NotEmpty().WithMessage("Confirmation code is required");
         }
     }
 }

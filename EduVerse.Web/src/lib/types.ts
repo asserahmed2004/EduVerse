@@ -100,7 +100,7 @@ export type LoginPayload = {
   password: string;
 };
 
-export type RegisterPayload = {
+export type RegistrationDetails = {
   fullName: string;
   userName: string;
   email: string;
@@ -109,6 +109,9 @@ export type RegisterPayload = {
   phoneNumber: string;
   birth: string;
   role: UserRole;
+};
+
+export type RegisterPayload = RegistrationDetails & {
   confirmationCode: string;
 };
 

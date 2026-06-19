@@ -16,6 +16,13 @@ namespace Api.Controllers
     [ApiController]
     public class AuthController(IAuthServices authServices, ICloudService cloudService) : ControllerBase
     {
+        [HttpPost("StartRegistration")]
+        public async Task<IActionResult> StartRegistration([FromForm] RegisterUser registerUser)
+        {
+            var result = await authServices.StartRegistration(registerUser);
+            return result.success ? Ok(result) : BadRequest(result);
+        }
+
         [HttpPost("Register")]
         public async Task<IActionResult> Register([FromForm]RegisterUser registerUser)
         {

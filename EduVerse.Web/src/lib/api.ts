@@ -34,6 +34,7 @@ import type {
   RecentActivity,
   RecentEnrollment,
   RegisterPayload,
+  RegistrationDetails,
   RatingResult,
   RoleCount,
   ServiceResult,
@@ -1025,6 +1026,19 @@ function normalizeUser(user: any): ManagedUser {
   };
 }
 
+function createRegistrationFormData(payload: RegistrationDetails) {
+  const formData = new FormData();
+  formData.append("FullName", payload.fullName.trim());
+  formData.append("UserName", payload.userName.trim());
+  formData.append("Email", payload.email.trim());
+  formData.append("Password", payload.password);
+  formData.append("confirmPassword", payload.confirmPassword);
+  formData.append("phoneNumber", payload.phoneNumber.trim());
+  formData.append("Birth", payload.birth);
+  formData.append("role", toBackendRole(payload.role));
+  return formData;
+}
+
 export const authService = {
   async login(payload: LoginPayload) {
     clearAuth();
@@ -1068,16 +1082,14 @@ export const authService = {
     return user;
   },
 
+  async startRegistration(payload: RegistrationDetails): Promise<ServiceResult> {
+    const formData = createRegistrationFormData(payload);
+    const response = await api.post("/Auth/StartRegistration", formData);
+    return ensureSuccessfulResult(response.data, "Could not start registration.");
+  },
+
   async register(payload: RegisterPayload) {
-    const formData = new FormData();
-    formData.append("FullName", payload.fullName.trim());
-    formData.append("UserName", payload.userName.trim());
-    formData.append("Email", payload.email.trim());
-    formData.append("Password", payload.password);
-    formData.append("confirmPassword", payload.confirmPassword);
-    formData.append("phoneNumber", payload.phoneNumber.trim());
-    formData.append("Birth", payload.birth);
-    formData.append("role", toBackendRole(payload.role));
+    const formData = createRegistrationFormData(payload);
     formData.append("ConfirmationCode", payload.confirmationCode.trim());
 
     const response = await api.post("/Auth/Register", formData);

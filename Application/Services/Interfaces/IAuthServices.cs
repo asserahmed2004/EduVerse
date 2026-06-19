@@ -15,6 +15,7 @@ namespace Application.Services.Interfaces.Auth
         Task<ServiceResponse> UpdateProfile(string userId, UpdateProfileRequest request);
         Task<ServiceResponse> ChangePassword(string userId, ChangePasswordRequest request);
         Task<IEnumerable<GetUser>> GetAllUsers(string? roleName);
+        Task<ServiceResponse> StartRegistration(RegisterUser user);
         Task<LoginResponse> RegisterUser(RegisterUser user);
         Task<LoginResponse> LoginUser(LoginUser user);
         Task<bool> VerifyCurrentUserPasswordAsync(ClaimsPrincipal userClaims, string password);

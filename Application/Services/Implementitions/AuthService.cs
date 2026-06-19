@@ -332,6 +332,34 @@ namespace Application.Services.Implementitions.Auth
         
 
 
+        public async Task<ServiceResponse> StartRegistration(RegisterUser user)
+        {
+            var validation = await validationService.ValidateAsync(user, RegisterValidator);
+            if (!validation.success)
+                return new ServiceResponse(false, validation.message);
+
+            var normalizedRole = user.role.Trim().ToLowerInvariant();
+            if (normalizedRole is not ("student" or "instructor"))
+                return new ServiceResponse(false, "Public registration is available only for Student and Instructor accounts");
+
+            user.Email = user.Email.Trim();
+            user.UserName = user.UserName.Trim();
+            user.FullName = user.FullName.Trim();
+
+            if (await userManagment.GetUserByEmail(user.Email) != null)
+                return new ServiceResponse(false, "Email already exists");
+
+            var normalizedUserName = user.UserName.ToUpperInvariant();
+            if (userManagment.QueryUsers().Any(existing => existing.NormalizedUserName == normalizedUserName))
+                return new ServiceResponse(false, "Username already exists");
+
+            var confirmation = await SendConfirmationEmail(user.Email);
+            if (string.IsNullOrWhiteSpace(confirmation?.ConfirmationCode))
+                return new ServiceResponse(false, "Could not send the confirmation code. Check the email address and mail configuration.");
+
+            return new ServiceResponse(true, "Confirmation code sent to your email.");
+        }
+
         public async Task<LoginResponse> RegisterUser(RegisterUser user)
         {
             var response = await validationService.ValidateAsync<RegisterUser>(user, RegisterValidator);
@@ -342,6 +370,15 @@ namespace Application.Services.Implementitions.Auth
                 {
                     succeed= false,
                     message = response.message,
+                };
+            }
+
+            if (string.IsNullOrWhiteSpace(user.ConfirmationCode))
+            {
+                return new LoginResponse
+                {
+                    succeed = false,
+                    message = "Confirmation code is required"
                 };
             }
 
@@ -389,7 +426,7 @@ namespace Application.Services.Implementitions.Auth
                 return new LoginResponse
                 {
                     succeed = false,
-                    message = "Confirmation code is not correct"
+                    message = "Confirmation code is incorrect or no longer valid"
                 };
             }
 
@@ -419,8 +456,6 @@ namespace Application.Services.Implementitions.Auth
                 mappedUser.ProfilePicture = details.FileName;
             }
             var isRegistered = await userManagment.RegisterUser(mappedUser);
-            if(isRegistered.Succeeded)
-                await emailConfirmation.RemoveConfirmation(user.Email);
             if (!isRegistered.Succeeded)
             {
                 var errors = isRegistered.Errors.Select(e => e.Description).ToList();
@@ -435,6 +470,8 @@ namespace Application.Services.Implementitions.Auth
                 var removeUser = await userManagment.RemoveUser(user.Email);
                 return new LoginResponse(false, message: "Role assignment failed", errors: roleAssign.Errors.Select(e => e.Description));
             }
+
+            await emailConfirmation.RemoveConfirmation(user.Email);
 
             return new LoginResponse(
                 succeed: true,
