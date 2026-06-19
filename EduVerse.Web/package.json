@@ -2,6 +2,7 @@
   "name": "eduverse-web",
   "version": "0.1.0",
   "private": true,
+  "start": "next start -p 8080",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
