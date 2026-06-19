@@ -1164,8 +1164,26 @@ export const courseService = {
   },
 
   async addSession(formData: FormData): Promise<ServiceResult> {
-    const response = await api.post("/Course/AddSession", formData);
-    return ensureSuccessfulResult(response.data, "Session creation failed.");
+    const file = formData.get("File");
+    if (typeof File !== "undefined" && file instanceof File && file.size === 0) {
+      formData.delete("File");
+    }
+
+    try {
+      const response = await api.post("/Course/AddSession", formData, { timeout: 180_000 });
+      return ensureSuccessfulResult(response.data, "Session creation failed.");
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        if (error.code === "ECONNABORTED") {
+          throw new Error("The session upload timed out before the API responded. Check your connection and try again.");
+        }
+        if (!error.response) {
+          throw new Error(`Could not reach the EduVerse API at ${API_BASE_URL}. Confirm the backend is running and try again.`);
+        }
+      }
+
+      throw new Error(getApiErrorMessage(error, "Session creation failed."));
+    }
   },
 
   async addAssignment(formData: FormData): Promise<ServiceResult> {

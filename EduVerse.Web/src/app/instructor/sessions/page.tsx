@@ -16,6 +16,7 @@ export default function InstructorSessionsPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [qrCodes, setQrCodes] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -32,16 +33,17 @@ export default function InstructorSessionsPage() {
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
+    setSaving(true);
     try {
-      await courseService.addSession(form);
+      const result = await courseService.addSession(form);
+      showToast({ title: "Session added", message: result.message ?? "The session was added to your assigned course.", tone: "success" });
+      formElement.reset();
+      instructorService.getSessions().then(setSessions).catch(() => undefined);
     } catch (error) {
       showToast({ title: "Session failed", message: error instanceof Error ? error.message : "Could not add session to this course.", tone: "error" });
-      return;
+    } finally {
+      setSaving(false);
     }
-
-    showToast({ title: "Session added", message: "The session was added to your assigned course.", tone: "success" });
-    formElement?.reset();
-    instructorService.getSessions().then(setSessions).catch(() => undefined);
   }
 
   async function generateQr(sessionId: string) {
@@ -93,9 +95,9 @@ export default function InstructorSessionsPage() {
               <input name="File" type="file" className="mt-2 w-full rounded-xl bg-slate-50 px-4 py-3 text-sm ring-1 ring-slate-200" />
             </label>
           </div>
-          <Button className="mt-5" variant="ghost">
+          <Button className="mt-5" variant="ghost" disabled={saving}>
             <Plus size={18} />
-            Add session
+            {saving ? "Adding session..." : "Add session"}
           </Button>
         </form>
 

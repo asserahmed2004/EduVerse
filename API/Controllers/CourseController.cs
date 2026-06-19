@@ -276,6 +276,8 @@ namespace API.Controllers
         }
         [HttpPost("AddSession")]
         [Authorize(Roles = AppRoles.AdminOrganizationAdminOrInstructor)]
+        [RequestSizeLimit(262_144_000)]
+        [RequestFormLimits(MultipartBodyLengthLimit = 262_144_000)]
         public async Task<IActionResult> AddSession([FromForm]CreateSessionRequest session)
         {
             var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;

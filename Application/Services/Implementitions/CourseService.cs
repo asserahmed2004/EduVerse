@@ -810,42 +810,103 @@ namespace Application.Services.Implementitions
 
             var mappedSession = mapper.Map<Session>(session);
             mappedSession.TrainerId = course.InstructorId;
-            mappedSession.Date= DateTime .Today;
-            var duration = GetVideoDuration(session.File);
+            mappedSession.Date = DateTime.Today;
+            var uploadedFile = session.File?.Length > 0 ? session.File : null;
+            var duration = IsVideoFile(uploadedFile) ? GetVideoDuration(uploadedFile) : TimeSpan.Zero;
             mappedSession.Duration = duration.TotalMinutes;
-            await UpdateDuration(mappedSession.CourseId, duration.TotalMinutes);
-            if (session.File != null && session.File.Length > 0)
+            mappedSession.FileUrl = string.Empty;
+
+            string? uploadedFileName = null;
+            if (uploadedFile != null)
             {
-                var fileDetails = new FileDetails { FileName = $"{mappedSession.Id}-SessionMaterial{Path.GetExtension(session.File.FileName)}", Folder = "sessions" };
-                var addCloudFile = new AddCloudFile { Details = fileDetails, File = session.File };
+                var extension = Path.GetExtension(uploadedFile.FileName);
+                var fileDetails = new FileDetails
+                {
+                    FileName = $"{mappedSession.Id}-SessionMaterial{extension}",
+                    Folder = "sessions"
+                };
+                var addCloudFile = new AddCloudFile { Details = fileDetails, File = uploadedFile };
                 var uploadResult = await cloud.UploadFileAsync(addCloudFile);
                 if (!uploadResult.success)
-                    return new ServiceResponse { success = false, message = "Failed to upload session material to cloud" };
-                mappedSession.FileUrl = fileDetails.FileName;
-            }
-            else
-            {
-                mappedSession.FileUrl = string.Empty;
-            }
-            var result = await SessionManagment.AddAsync(mappedSession);
-            if (result == null)
-                return new ServiceResponse { success = false, message = "Failed to add session" };
+                    return new ServiceResponse { success = false, message = uploadResult.message ?? "Failed to upload session material to cloud" };
 
-            var enrolled = (await EnrollmentManagment.GetAllAsync())
-                .Where(enrollment => enrollment.CourseId == mappedSession.CourseId);
-            var attendances = enrolled
-                .Select(enrollment => new AttendanceRecord
+                mappedSession.FileUrl = fileDetails.FileName;
+                uploadedFileName = fileDetails.FileName;
+            }
+
+            Session? result;
+            try
+            {
+                result = await SessionManagment.AddAsync(mappedSession);
+            }
+            catch (Exception exception)
+            {
+                logger.LogError(exception, "Failed to add session {SessionId} to course {CourseId}", mappedSession.Id, mappedSession.CourseId);
+                if (!string.IsNullOrWhiteSpace(uploadedFileName))
                 {
+                    await cloud.DeleteFileAsync(new FileDetails { FileName = uploadedFileName, Folder = "sessions" });
+                }
+
+                return new ServiceResponse { success = false, message = $"Session could not be saved: {exception.GetBaseException().Message}" };
+            }
+
+            if (result == null)
+            {
+                if (!string.IsNullOrWhiteSpace(uploadedFileName))
+                {
+                    await cloud.DeleteFileAsync(new FileDetails { FileName = uploadedFileName, Folder = "sessions" });
+                }
+
+                return new ServiceResponse { success = false, message = "Failed to add session" };
+            }
+
+            if (duration > TimeSpan.Zero)
+            {
+                var durationResult = await UpdateDuration(mappedSession.CourseId, duration.TotalMinutes);
+                if (!durationResult.success)
+                {
+                    logger.LogWarning(
+                        "Session {SessionId} was saved, but course duration was not updated: {Message}",
+                        mappedSession.Id,
+                        durationResult.message);
+                }
+            }
+
+            var enrolledStudentIds = await EnrollmentManagment.Query()
+                .Where(enrollment => enrollment.CourseId == mappedSession.CourseId)
+                .Select(enrollment => enrollment.StudentId)
+                .ToListAsync();
+            var attendances = enrolledStudentIds
+                .Select(studentId => new AttendanceRecord
+                {
+                    Id = Guid.NewGuid(),
                     SessionId = mappedSession.Id,
-                    StudentId = enrollment.StudentId,
+                    StudentId = studentId,
                     Attended = false
                 })
                 .ToList();
 
             if (attendances.Count > 0)
-                await attendencemanagment.MassAdd(attendances);
+            {
+                try
+                {
+                    await attendencemanagment.MassAdd(attendances);
+                }
+                catch (Exception exception)
+                {
+                    logger.LogWarning(
+                        exception,
+                        "Session {SessionId} was saved, but attendance rows could not be initialized",
+                        mappedSession.Id);
+                }
+            }
 
-            return new ServiceResponse { success = true, message = "Session added successfully" };
+            return new ServiceResponse
+            {
+                success = true,
+                message = "Session added successfully",
+                data = new { sessionId = mappedSession.Id, fileUrl = mappedSession.FileUrl }
+            };
 
         }
 
@@ -885,7 +946,22 @@ namespace Application.Services.Implementitions
             return new ServiceResponse { success = true, message = "Session updated successfully" };
 
         }
-        private TimeSpan GetVideoDuration(IFormFile videoFile)
+        private static bool IsVideoFile(IFormFile? file)
+        {
+            if (file == null || file.Length == 0)
+                return false;
+
+            var extension = Path.GetExtension(file.FileName);
+            return extension.Equals(".mp4", StringComparison.OrdinalIgnoreCase)
+                || extension.Equals(".webm", StringComparison.OrdinalIgnoreCase)
+                || extension.Equals(".mov", StringComparison.OrdinalIgnoreCase)
+                || extension.Equals(".m4v", StringComparison.OrdinalIgnoreCase)
+                || extension.Equals(".ogg", StringComparison.OrdinalIgnoreCase)
+                || extension.Equals(".ogv", StringComparison.OrdinalIgnoreCase)
+                || extension.Equals(".mkv", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private TimeSpan GetVideoDuration(IFormFile? videoFile)
         {
             // Ensure the file is a video and has content
             if (videoFile == null || videoFile.Length == 0)
