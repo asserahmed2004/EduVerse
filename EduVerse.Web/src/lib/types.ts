@@ -109,6 +109,7 @@ export type RegisterPayload = {
   phoneNumber: string;
   birth: string;
   role: UserRole;
+  confirmationCode: string;
 };
 
 export type UpdateProfilePayload = {

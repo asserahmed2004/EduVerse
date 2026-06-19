@@ -26,6 +26,8 @@ namespace Application.Validations.Auth
                 .Must(role => role != null && new[] { "student", "instructor" }
                     .Contains(role.Trim().ToLowerInvariant()))
                 .WithMessage("Role must be Student or Instructor");
+            RuleFor(x => x.ConfirmationCode)
+                .NotEmpty().WithMessage("Confirmation code is required");
         }
     }
 }

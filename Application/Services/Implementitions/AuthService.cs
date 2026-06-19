@@ -17,7 +17,6 @@ using System.Net;
 using Application.Services.Interfaces;
 using Application.DTOs.Cloud;
 using System.Security.Claims;
-using Microsoft.Extensions.Hosting;
 
 namespace Application.Services.Implementitions.Auth
 {
@@ -27,8 +26,7 @@ namespace Application.Services.Implementitions.Auth
         ,IMapper mapper,IValidator<RegisterUser> RegisterValidator ,IConfirmation emailConfirmation,
         IValidator<LoginUser> LoginValidator, IValidationService validationService , ICloudService cloudService,
         IActivityLogService activityLogService,
-        Domain.Interfaces.IGeneric<Organization> organizationManagement,
-        IHostEnvironment environment): IAuthServices
+        Domain.Interfaces.IGeneric<Organization> organizationManagement): IAuthServices
     {
         public async Task<bool> VerifyCurrentUserPasswordAsync(ClaimsPrincipal userClaims, string password)
         {
@@ -377,27 +375,22 @@ namespace Application.Services.Implementitions.Auth
             var mappedUser = mapper.Map<AppUser>(user);
             mappedUser.Birthdate = birthDate;
 
-            var requiresEmailConfirmation = !environment.IsDevelopment();
-            EmailConfirmation? confirmationResult = null;
-            if (requiresEmailConfirmation || !string.IsNullOrWhiteSpace(user.ConfirmationCode))
+            var confirmationResult = await emailConfirmation.GetConfirmationByEmail(user.Email);
+            if (confirmationResult == null)
             {
-                confirmationResult = await emailConfirmation.GetConfirmationByEmail(user.Email);
-                if (confirmationResult == null)
+                return new LoginResponse
                 {
-                    return new LoginResponse
-                    {
-                        succeed = false,
-                        message = "Request a confirmation code before registering"
-                    };
-                }
-                if (!string.Equals(confirmationResult.ConfirmationCode, user.ConfirmationCode, StringComparison.Ordinal))
+                    succeed = false,
+                    message = "Request a confirmation code before registering"
+                };
+            }
+            if (!string.Equals(confirmationResult.ConfirmationCode, user.ConfirmationCode, StringComparison.Ordinal))
+            {
+                return new LoginResponse
                 {
-                    return new LoginResponse
-                    {
-                        succeed = false,
-                        message = "Confirmation code is not correct"
-                    };
-                }
+                    succeed = false,
+                    message = "Confirmation code is not correct"
+                };
             }
 
             mappedUser.EmailConfirmed = true;
@@ -426,7 +419,7 @@ namespace Application.Services.Implementitions.Auth
                 mappedUser.ProfilePicture = details.FileName;
             }
             var isRegistered = await userManagment.RegisterUser(mappedUser);
-            if(isRegistered.Succeeded && confirmationResult != null)
+            if(isRegistered.Succeeded)
                 await emailConfirmation.RemoveConfirmation(user.Email);
             if (!isRegistered.Succeeded)
             {
@@ -509,6 +502,16 @@ namespace Application.Services.Implementitions.Auth
 
         public async Task<ConfirmEmail> SendConfirmationEmail(string email)
         {
+            email = email?.Trim();
+            if (string.IsNullOrWhiteSpace(email) || !MailAddress.TryCreate(email, out _))
+            {
+                return new ConfirmEmail
+                {
+                    Email = email,
+                    ConfirmationCode = null
+                };
+            }
+
             var existingConfirmation = await emailConfirmation.GetConfirmationByEmail(email);
             string confirmationCode;
             if (existingConfirmation != null)

@@ -105,7 +105,7 @@ namespace Api.Controllers
             if (result?.ConfirmationCode == null)
                 return BadRequest(new { success = false, message = "Could not send the confirmation code. Check the email address and mail configuration." });
 
-            return Ok(new { success = true, message = "Confirmation code sent. Check your email." });
+            return Ok(new { success = true, message = "Confirmation code sent to your email." });
         }
         [HttpGet("GetAllUsers/{Role?}")]
         [Authorize(Roles = AppRoles.AdminAccess)]
