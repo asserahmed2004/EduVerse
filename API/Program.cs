@@ -22,7 +22,8 @@ namespace API
                             "http://localhost:3000",
                             "https://localhost:3000",
                             "http://localhost:3001",
-                            "https://localhost:3001")
+                            "https://localhost:3001",
+                            "https://eduverseapi.azurewebsites.net")
                           .AllowAnyHeader()
                           .AllowAnyMethod()
                           .AllowCredentials();
