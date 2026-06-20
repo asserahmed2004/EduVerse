@@ -16,7 +16,7 @@ namespace API
             var builder = WebApplication.CreateBuilder(args);
             builder.Services.AddCors(options =>
             {
-                options.AddDefaultPolicy(policy =>
+                options.AddPolicy("Front",policy =>
                 {
                     policy.WithOrigins(
                             "http://localhost:3000",
@@ -85,9 +85,10 @@ namespace API
             app.MapOpenApi();
 
             app.UseInfraStructureService();
-            app.UseCors();
+            
             app.UseMiddleware<ApiExceptionMiddleware>();
             app.UseHttpsRedirection();
+            app.UseCors("Front");
             app.UseAuthentication();
             app.UseAuthorization();
             app.UseMiddleware<RequestPerformanceMiddleware>();
