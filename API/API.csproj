@@ -22,4 +22,10 @@
     <ProjectReference Include="..\InfraStructure\InfraStructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="..\EduVerse.Web\public\eduverse-logo.png" Link="Assets\eduverse-logo.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

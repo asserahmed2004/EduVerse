@@ -30,6 +30,7 @@ namespace Application.Services.Interfaces
         Task<IEnumerable<string>> GetUserCertificates(string userId);
         Task<IEnumerable<CertificateDto>> GetMyCertificates(string userId, string baseUrl);
         Task<ServiceResponse> GenerateCertificate(Guid courseId, string userId, string baseUrl);
+        Task<CertificateDownloadDto?> GetCertificateDownload(Guid certificateId, string userId);
         Task<ServiceResponse> VerifyCertificate(string code);
         Task<Enrollment>GetEnrollmentData(Guid courseId,string userId);
         Task<IEnumerable<Enrollment>> EnrollmentData();

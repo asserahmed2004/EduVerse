@@ -851,6 +851,7 @@ function normalizeCertificateEligibility(data: any): CertificateEligibility {
     assignmentProgressPercentage: value.assignmentProgressPercentage ?? value.AssignmentProgressPercentage ?? 0,
     requiredPercentage: value.requiredPercentage ?? value.RequiredPercentage ?? 80,
     hasRequiredAssignmentProgress: value.hasRequiredAssignmentProgress ?? value.HasRequiredAssignmentProgress ?? false,
+    isCourseCompleted: value.isCourseCompleted ?? value.IsCourseCompleted ?? false,
     isCourseDurationFinished: value.isCourseDurationFinished ?? value.IsCourseDurationFinished ?? false,
     canReceiveCertificate: value.canReceiveCertificate ?? value.CanReceiveCertificate ?? false,
     message: value.message ?? value.Message ?? ""
@@ -1004,9 +1005,11 @@ function normalizeCertificate(certificate: any, index: number): Certificate {
     courseId: certificate.courseId ?? certificate.CourseId,
     courseName: certificate.courseName ?? certificate.CourseName ?? certificate.name ?? certificate.Name ?? `Certificate ${index + 1}`,
     studentName: certificate.studentName ?? certificate.StudentName,
+    organizationName: certificate.organizationName ?? certificate.OrganizationName,
     certificateCode: certificate.certificateCode ?? certificate.CertificateCode,
     issuedAt: certificate.issuedAt ?? certificate.IssuedAt ?? certificate.graduationDate ?? certificate.GraduationDate ?? new Date().toISOString(),
     fileUrl: normalizeCertificateUrl(certificate.fileUrl ?? certificate.FileUrl ?? certificate.certificateFile ?? certificate.CertificateFile) ?? "",
+    downloadUrl: normalizeCertificateUrl(certificate.downloadUrl ?? certificate.DownloadUrl),
     status: certificate.status ?? certificate.Status,
     verificationUrl: certificate.verificationUrl ?? certificate.VerificationUrl
   };
@@ -1342,6 +1345,27 @@ export const studentService = {
     const response = await api.post(`/Certificate/Generate/${courseId}`);
     ensureSuccessfulResult(response.data, "Certificate generation failed.");
     return normalizeCertificate(unwrapData(response.data), 0);
+  },
+
+  async downloadCertificate(certificateId: string, fallbackFileName?: string) {
+    const response = await api.get(`/Certificate/Download/${certificateId}`, {
+      responseType: "blob"
+    });
+    const contentDisposition = response.headers["content-disposition"] as string | undefined;
+    const encodedFileName = contentDisposition?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+    const quotedFileName = contentDisposition?.match(/filename="?([^";]+)"?/i)?.[1];
+    const fileName = encodedFileName
+      ? decodeURIComponent(encodedFileName)
+      : quotedFileName ?? fallbackFileName ?? "EduVerse-Certificate.pdf";
+
+    const blobUrl = URL.createObjectURL(new Blob([response.data], { type: "application/pdf" }));
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
   },
 
   async verifyCertificate(code: string) {

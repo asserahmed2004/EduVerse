@@ -7,6 +7,7 @@ using Application.DTOs.Learning;
 using Application.DTOs.Payment;
 using Application.DTOs.Responses;
 using Application.DTOs.Submission;
+using Application.Services;
 using Application.Services.Interfaces;
 using AutoMapper;
 using Domain.Entities;
@@ -30,8 +31,9 @@ namespace Application.Services.Implementitions
         IGeneric<Session> Sessions, IGeneric<Assignment> Assignments,
         IGeneric<StudentSessionProgress> Progresses, IGeneric<CertificateRecord> Certificates,
         IGeneric<Notification> Notifications, IGeneric<AttendanceRecord> AttendanceRecords,
-        IGeneric<SessionMaterial> SessionMaterials) : IUserService
+        IGeneric<SessionMaterial> SessionMaterials, IGeneric<Organization> Organizations) : IUserService
     {
+        private static readonly SemaphoreSlim CertificateGenerationLock = new(1, 1);
         private readonly string PaymobApi = "ZXlKaGJHY2lPaUpJVXpVeE1pSXNJblI1Y0NJNklrcFhWQ0o5LmV5SmpiR0Z6Y3lJNklrMWxjbU5vWVc1MElpd2ljSEp2Wm1sc1pWOXdheUk2TVRFME16UTBNeXdpYm1GdFpTSTZJbWx1YVhScFlXd2lmUS5rSm9SRWNtUG8xVHhjR3lKMFg2NXViM0VXYnZ3SEJMVnRSQ1FCMEthZHlCajRJRHRLMWZyU3A3NFE2Z3o2MjhENnVZOWszUnhKYWVfSnNKalhvTUV3QQ==";
         private readonly string PaymobSecret = "egy_sk_test_9a566c37c5a5706e567093e1bb650191de352802284e30fd7f6b0bd1c18d7a7e";
         private readonly string PaymobPublic = "egy_pk_test_3toKrv5jW8B0FcHVRTZYI12gK33a5Yvn";
@@ -219,6 +221,14 @@ namespace Application.Services.Implementitions
             var certificates = await Certificates.Query().Where(c => c.StudentId == userId).OrderByDescending(c => c.IssuedAt).ToListAsync();
             var courseIds = certificates.Select(c => c.CourseId).Distinct().ToList();
             var courses = await Courses.Query().Where(c => courseIds.Contains(c.Id)).ToDictionaryAsync(c => c.Id);
+            var organizationIds = courses.Values
+                .Where(course => course.OrganizationId.HasValue)
+                .Select(course => course.OrganizationId!.Value)
+                .Distinct()
+                .ToList();
+            var organizations = await Organizations.Query()
+                .Where(organization => organizationIds.Contains(organization.Id))
+                .ToDictionaryAsync(organization => organization.Id);
             var user = await userManagment.GetUserById(userId);
             return certificates.Select(c => new CertificateDto
             {
@@ -226,9 +236,14 @@ namespace Application.Services.Implementitions
                 CourseId = c.CourseId,
                 CourseName = courses.TryGetValue(c.CourseId, out var course) ? course.Name : "Course",
                 StudentName = user?.FullName ?? user?.Email ?? "Student",
+                OrganizationName = course?.OrganizationId is Guid organizationId
+                    && organizations.TryGetValue(organizationId, out var organization)
+                        ? organization.Name
+                        : "EduVerse",
                 CertificateCode = c.CertificateCode,
                 IssuedAt = c.IssuedAt,
-                FileUrl = c.FileUrl,
+                FileUrl = BuildCertificateDownloadUrl(baseUrl, c.Id),
+                DownloadUrl = BuildCertificateDownloadUrl(baseUrl, c.Id),
                 Status = c.Status,
                 VerificationUrl = $"{baseUrl.TrimEnd('/')}/Certificate/Verify/{Uri.EscapeDataString(c.CertificateCode)}"
             });
@@ -240,32 +255,90 @@ namespace Application.Services.Implementitions
             if (enrollment == null)
                 return new ServiceResponse(false, "Enrollment not found.");
 
-            var eligibility = await GetCertificateEligibility(courseId, userId);
-            if (eligibility == null)
-                return new ServiceResponse(false, "Certificate eligibility could not be checked.");
-
-            if (!eligibility.CanReceiveCertificate)
-                return new ServiceResponse(false, eligibility.Message);
-
-            var existing = (await Certificates.GetAllAsync()).FirstOrDefault(c => c.CourseId == courseId && c.StudentId == userId);
-            if (existing != null)
-                return new ServiceResponse(true, "Certificate already exists.", (await GetMyCertificates(userId, baseUrl)).FirstOrDefault(c => c.CourseId == courseId));
-
-            var code = $"EDU-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid():N}"[..24].ToUpperInvariant();
-            var certificate = new CertificateRecord
+            await CertificateGenerationLock.WaitAsync();
+            try
             {
-                StudentId = userId,
-                CourseId = courseId,
-                CertificateCode = code,
-                IssuedAt = DateTime.UtcNow,
-                Status = "Valid"
+                var existing = await Certificates.Query(true)
+                    .FirstOrDefaultAsync(c => c.CourseId == courseId && c.StudentId == userId);
+                if (existing != null)
+                {
+                    var expectedFileUrl = BuildCertificateDownloadPath(existing.Id);
+                    if (!string.Equals(existing.FileUrl, expectedFileUrl, StringComparison.Ordinal))
+                    {
+                        existing.FileUrl = expectedFileUrl;
+                        await Certificates.UpdateAsync(existing);
+                    }
+
+                    return new ServiceResponse(
+                        true,
+                        "Certificate already exists.",
+                        (await GetMyCertificates(userId, baseUrl)).FirstOrDefault(c => c.CourseId == courseId));
+                }
+
+                var eligibility = await GetCertificateEligibility(courseId, userId);
+                if (eligibility == null)
+                    return new ServiceResponse(false, "Certificate eligibility could not be checked.");
+
+                if (!eligibility.CanReceiveCertificate)
+                    return new ServiceResponse(false, eligibility.Message);
+
+                var code = $"EDU-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid():N}"[..24].ToUpperInvariant();
+                var certificate = new CertificateRecord
+                {
+                    StudentId = userId,
+                    CourseId = courseId,
+                    CertificateCode = code,
+                    IssuedAt = DateTime.UtcNow,
+                    Status = "Valid"
+                };
+                certificate.FileUrl = BuildCertificateDownloadPath(certificate.Id);
+                await Certificates.AddAsync(certificate);
+                enrollment.CertificateCode = code;
+                enrollment.GraduationDate ??= DateTime.UtcNow;
+                await Enrollment.UpdateAsync(enrollment);
+                await CreateNotification(userId, "Certificate issued", "Your course certificate is ready.");
+                return new ServiceResponse(true, "Certificate generated successfully.", (await GetMyCertificates(userId, baseUrl)).FirstOrDefault(c => c.CourseId == courseId));
+            }
+            finally
+            {
+                CertificateGenerationLock.Release();
+            }
+        }
+
+        public async Task<CertificateDownloadDto?> GetCertificateDownload(Guid certificateId, string userId)
+        {
+            if (certificateId == Guid.Empty || string.IsNullOrWhiteSpace(userId))
+                return null;
+
+            var certificate = await Certificates.Query()
+                .FirstOrDefaultAsync(c => c.Id == certificateId && c.StudentId == userId && c.Status == "Valid");
+            if (certificate == null)
+                return null;
+
+            var course = await Courses.Query().FirstOrDefaultAsync(c => c.Id == certificate.CourseId);
+            var student = await userManagment.GetUserById(userId);
+            if (course == null || student == null)
+                return null;
+
+            Organization? organization = null;
+            if (course.OrganizationId.HasValue)
+                organization = await Organizations.Query().FirstOrDefaultAsync(o => o.Id == course.OrganizationId.Value);
+
+            var studentName = student.FullName ?? student.UserName ?? student.Email ?? "Student";
+            var courseName = string.IsNullOrWhiteSpace(course.Name) ? course.Title : course.Name;
+            var organizationName = organization?.Name ?? "EduVerse";
+            var content = CertificatePdfGenerator.Generate(
+                studentName,
+                courseName,
+                organizationName,
+                certificate.IssuedAt,
+                certificate.CertificateCode);
+
+            return new CertificateDownloadDto
+            {
+                Content = content,
+                FileName = $"EduVerse-Certificate-{SafeFileName(courseName)}-{SafeFileName(studentName)}.pdf"
             };
-            await Certificates.AddAsync(certificate);
-            enrollment.CertificateCode = code;
-            enrollment.GraduationDate ??= DateTime.UtcNow;
-            await Enrollment.UpdateAsync(enrollment);
-            await CreateNotification(userId, "Certificate issued", "Your course certificate is ready.");
-            return new ServiceResponse(true, "Certificate generated successfully.", (await GetMyCertificates(userId, baseUrl)).FirstOrDefault(c => c.CourseId == courseId));
         }
 
         public async Task<ServiceResponse> VerifyCertificate(string code)
@@ -444,24 +517,31 @@ namespace Application.Services.Implementitions
 
         public async Task<AssignmentProgressDto?> GetAssignmentProgress(Guid courseId, string userId)
         {
-            var enrollment = (await Enrollment.GetAllAsync()).FirstOrDefault(e => e.CourseId == courseId && e.StudentId == userId);
+            var enrollment = await Enrollment.Query().FirstOrDefaultAsync(e => e.CourseId == courseId && e.StudentId == userId);
             if (enrollment == null)
                 return null;
 
-            var course = await Courses.GetByIdAsync(courseId);
+            var course = await Courses.Query().FirstOrDefaultAsync(c => c.Id == courseId);
             if (course == null || course.IsDeleted)
                 return null;
 
-            var sessionIds = (await Sessions.GetAllAsync()).Where(s => s.CourseId == courseId).Select(s => s.Id).ToHashSet();
-            var assignments = (await Assignments.GetAllAsync()).Where(a => sessionIds.Contains(a.SessionId)).ToList();
-            var assignmentIds = assignments.Select(a => a.Id).ToHashSet();
+            var sessionIds = await Sessions.Query()
+                .Where(s => s.CourseId == courseId)
+                .Select(s => s.Id)
+                .ToListAsync();
+            var assignmentIds = await Assignments.Query()
+                .Where(a => sessionIds.Contains(a.SessionId))
+                .Select(a => a.Id)
+                .ToListAsync();
             var totalAssignments = assignmentIds.Count;
-            var submittedAssignments = (await AssignmentSubmission.GetAllAsync())
-                .Where(s => s.StudentId == userId && assignmentIds.Contains(s.AssignmentId))
-                .Select(s => s.AssignmentId)
-                .Distinct()
-                .Count();
-            var percentage = CalculatePercentage(submittedAssignments, totalAssignments);
+            var submittedAssignments = totalAssignments == 0
+                ? 0
+                : await AssignmentSubmission.Query()
+                    .Where(s => s.StudentId == userId && assignmentIds.Contains(s.AssignmentId))
+                    .Select(s => s.AssignmentId)
+                    .Distinct()
+                    .CountAsync();
+            var percentage = totalAssignments == 0 ? 100 : CalculatePercentage(submittedAssignments, totalAssignments);
 
             return new AssignmentProgressDto
             {
@@ -476,11 +556,11 @@ namespace Application.Services.Implementitions
 
         public async Task<CertificateEligibilityDto?> GetCertificateEligibility(Guid courseId, string userId)
         {
-            var enrollment = (await Enrollment.GetAllAsync()).FirstOrDefault(e => e.CourseId == courseId && e.StudentId == userId);
+            var enrollment = await Enrollment.Query().FirstOrDefaultAsync(e => e.CourseId == courseId && e.StudentId == userId);
             if (enrollment == null)
                 return null;
 
-            var course = await Courses.GetByIdAsync(courseId);
+            var course = await Courses.Query().FirstOrDefaultAsync(c => c.Id == courseId);
             if (course == null || course.IsDeleted)
                 return null;
 
@@ -488,11 +568,16 @@ namespace Application.Services.Implementitions
             if (assignmentProgress == null)
                 return null;
 
+            var isCourseCompleted = IsEnrollmentCompleted(enrollment);
             var isDurationFinished = IsCourseDurationFinished(course, enrollment);
-            var canReceiveCertificate = assignmentProgress.HasRequiredAssignmentProgress && isDurationFinished;
+            var canReceiveCertificate = isCourseCompleted
+                && assignmentProgress.HasRequiredAssignmentProgress
+                && isDurationFinished;
             var message = canReceiveCertificate
                 ? "You are eligible to receive the certificate."
-                : !assignmentProgress.HasRequiredAssignmentProgress
+                : !isCourseCompleted
+                    ? "Complete the course with 100% progress to unlock your certificate."
+                    : !assignmentProgress.HasRequiredAssignmentProgress
                     ? "You need to submit at least 80% of assignments to receive the certificate."
                     : "You have completed the required assignments, but the certificate will be available after the course duration ends.";
 
@@ -502,6 +587,7 @@ namespace Application.Services.Implementitions
                 AssignmentProgressPercentage = assignmentProgress.AssignmentProgressPercentage,
                 RequiredPercentage = assignmentProgress.RequiredPercentage,
                 HasRequiredAssignmentProgress = assignmentProgress.HasRequiredAssignmentProgress,
+                IsCourseCompleted = isCourseCompleted,
                 IsCourseDurationFinished = isDurationFinished,
                 CanReceiveCertificate = canReceiveCertificate,
                 Message = message
@@ -1162,6 +1248,26 @@ namespace Application.Services.Implementitions
             enrollment.IsCompleted = true;
             enrollment.CompletedAt ??= DateTime.UtcNow;
             enrollment.GraduationDate ??= enrollment.CompletedAt;
+        }
+
+        private static string BuildCertificateDownloadPath(Guid certificateId)
+        {
+            return $"/Certificate/Download/{certificateId}";
+        }
+
+        private static string BuildCertificateDownloadUrl(string baseUrl, Guid certificateId)
+        {
+            return $"{baseUrl.TrimEnd('/')}{BuildCertificateDownloadPath(certificateId)}";
+        }
+
+        private static string SafeFileName(string value)
+        {
+            var invalidCharacters = Path.GetInvalidFileNameChars().ToHashSet();
+            var safeValue = new string(value
+                .Select(character => invalidCharacters.Contains(character) ? '-' : character)
+                .ToArray());
+            safeValue = string.Join("-", safeValue.Split(' ', StringSplitOptions.RemoveEmptyEntries));
+            return string.IsNullOrWhiteSpace(safeValue) ? "Certificate" : safeValue[..Math.Min(safeValue.Length, 80)];
         }
 
         private static SessionMaterialDto ToMaterialDto(SessionMaterial material)

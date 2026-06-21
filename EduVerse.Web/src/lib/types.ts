@@ -434,9 +434,11 @@ export type Certificate = {
   courseId?: string;
   courseName: string;
   studentName?: string;
+  organizationName?: string;
   certificateCode?: string;
   issuedAt: string;
-  fileUrl: string;
+  fileUrl?: string;
+  downloadUrl?: string;
   status?: string;
   verificationUrl?: string;
 };
@@ -520,6 +522,7 @@ export type CertificateEligibility = {
   assignmentProgressPercentage: number;
   requiredPercentage: number;
   hasRequiredAssignmentProgress: boolean;
+  isCourseCompleted: boolean;
   isCourseDurationFinished: boolean;
   canReceiveCertificate: boolean;
   message: string;

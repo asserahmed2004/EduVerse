@@ -85,6 +85,7 @@ namespace Application.DTOs.Learning
         public double AssignmentProgressPercentage { get; set; }
         public int RequiredPercentage { get; set; } = 80;
         public bool HasRequiredAssignmentProgress { get; set; }
+        public bool IsCourseCompleted { get; set; }
         public bool IsCourseDurationFinished { get; set; }
         public bool CanReceiveCertificate { get; set; }
         public string Message { get; set; } = string.Empty;
@@ -96,11 +97,19 @@ namespace Application.DTOs.Learning
         public Guid CourseId { get; set; }
         public string CourseName { get; set; } = string.Empty;
         public string StudentName { get; set; } = string.Empty;
+        public string OrganizationName { get; set; } = string.Empty;
         public string CertificateCode { get; set; } = string.Empty;
         public DateTime IssuedAt { get; set; }
         public string? FileUrl { get; set; }
+        public string DownloadUrl { get; set; } = string.Empty;
         public string Status { get; set; } = "Valid";
         public string VerificationUrl { get; set; } = string.Empty;
+    }
+
+    public class CertificateDownloadDto
+    {
+        public byte[] Content { get; set; } = [];
+        public string FileName { get; set; } = "EduVerse-Certificate.pdf";
     }
 
     public class CertificateVerificationDto
