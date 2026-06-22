@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
+import { CourseImage } from "@/components/smart-image";
 import { EmptyState, LoadingState, PageHeader, StatCard } from "@/components/ui";
 import { instructorService } from "@/lib/api";
 import type { InstructorCourse } from "@/lib/types";
@@ -46,6 +47,11 @@ export default function InstructorMyCoursesPage() {
                   href={`/instructor/my-courses/${course.courseId}`}
                   className="group rounded-xl2 bg-white p-5 shadow-soft ring-1 ring-slate-100 transition hover:-translate-y-0.5 hover:shadow-lg"
                 >
+                  <CourseImage
+                    course={course}
+                    alt={course.title || course.name}
+                    className="mb-5 h-36 w-full rounded-xl object-cover"
+                  />
                   <h2 className="text-lg font-bold text-ink group-hover:text-teal-600">{course.title || course.name}</h2>
                   <p className="mt-1 text-sm font-semibold text-muted">{course.organizationName ?? "EduVerseOrganization"}</p>
                   <div className="mt-4 grid gap-2 text-sm font-semibold text-muted">

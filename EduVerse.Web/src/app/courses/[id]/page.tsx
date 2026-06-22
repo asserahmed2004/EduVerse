@@ -7,6 +7,7 @@ import { AppShell } from "@/components/app-shell";
 import { FileActionButtons } from "@/components/file-actions";
 import { useToast } from "@/components/toast-provider";
 import { RecommendationSection } from "@/components/recommendation-section";
+import { CourseImage } from "@/components/smart-image";
 import { Badge, Button, EmptyState, LoadingState, PageHeader, ProgressBar } from "@/components/ui";
 import { courseService, getApiErrorMessage, getFileResourceType, getPreviewFileUrl, isEmbeddableVideoFileUrl, isKnownExternalVideoUrl, openFile, studentService } from "@/lib/api";
 import { getStoredUser } from "@/lib/auth";
@@ -379,7 +380,7 @@ export default function CourseDetailsPage() {
 
       <div className="mt-8 grid gap-8 xl:grid-cols-[1fr_380px]">
         <section className="overflow-hidden rounded-xl2 bg-white shadow-soft ring-1 ring-slate-100">
-          {course.imageUrl ? <img src={course.imageUrl} alt={course.name} className="h-80 w-full object-cover" /> : <div className="grid h-80 place-items-center bg-teal-50 text-teal-600"><BookOpen size={42} /></div>}
+          <CourseImage course={course} alt={course.name} className="h-80 w-full object-cover" />
           <div className="p-6">
             <div className="flex flex-wrap gap-2">
               <Badge>{course.category ?? course.categories?.[0]?.name ?? "Course"}</Badge>

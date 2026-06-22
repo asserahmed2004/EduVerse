@@ -223,7 +223,8 @@ namespace Application.Services.Implementitions
                         FullName = user.FullName,
                         UserName = user.UserName ?? string.Empty,
                         Email = user.Email ?? string.Empty,
-                        Role = role
+                        Role = role,
+                        ProfilePicture = user.ProfilePicture
                     };
 
                     if (string.Equals(role, "organizationAdmin", StringComparison.OrdinalIgnoreCase))

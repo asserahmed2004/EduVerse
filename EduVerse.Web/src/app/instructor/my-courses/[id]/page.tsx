@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
+import { CourseImage } from "@/components/smart-image";
 import { Badge, EmptyState, LoadingState, PageHeader, StatCard } from "@/components/ui";
 import { courseService } from "@/lib/api";
 import type { CourseAdminDetails } from "@/lib/types";
@@ -58,11 +59,9 @@ export default function InstructorMyCourseDetailsPage() {
 
             <article className="mt-8 rounded-xl2 bg-white p-6 shadow-soft ring-1 ring-slate-100">
               <div className="flex flex-col gap-6 lg:flex-row">
-                {course.imageUrl ? (
-                  <div className="h-48 w-full shrink-0 overflow-hidden rounded-xl bg-slate-100 lg:h-56 lg:w-72">
-                    <img src={course.imageUrl} alt={course.title || course.name} className="size-full object-cover" />
-                  </div>
-                ) : null}
+                <div className="h-48 w-full shrink-0 overflow-hidden rounded-xl bg-slate-100 lg:h-56 lg:w-72">
+                  <CourseImage course={course} alt={course.title || course.name} className="size-full object-cover" />
+                </div>
                 <div className="flex-1">
                   <div className="flex flex-wrap gap-2">
                     {course.category ? <Badge>{course.category}</Badge> : null}

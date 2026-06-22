@@ -55,6 +55,7 @@ namespace Application.Services.Implementitions
                     OrganizationName = organizationRows.TryGetValue(course.OrganizationId.Value, out var organization)
                         ? organization.Name
                         : "EduVerseOrganization",
+                    ImageUrl = course.ImageUrl,
                     StudentsCount = enrollmentRows.Where(e => e.CourseId == course.Id).Select(e => e.StudentId).Distinct().Count(),
                     SessionsCount = courseSessions.Count,
                     AssignmentsCount = assignmentRows.Count(a => courseSessionIds.Contains(a.SessionId))

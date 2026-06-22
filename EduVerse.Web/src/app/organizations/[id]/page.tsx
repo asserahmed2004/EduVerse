@@ -5,8 +5,10 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
+import { SmartImage } from "@/components/smart-image";
 import { Badge, EmptyState, LoadingState, PageHeader, StatCard } from "@/components/ui";
 import { organizationService } from "@/lib/api";
+import { SEED_IMAGES } from "@/lib/image-fallbacks";
 import type { OrganizationDetails } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
@@ -32,7 +34,12 @@ export default function OrganizationDetailsPage() {
           <EmptyState title="Organization unavailable" description={error || "Organization details are not available."} />
         ) : (
           <>
-            <PageHeader eyebrow="Organization details" title={details.organizationName ?? details.organizationAdminName} description={details.description || details.email || "Organization profile"} />
+            <PageHeader
+              eyebrow="Organization details"
+              title={details.organizationName ?? details.organizationAdminName}
+              description={details.description || details.email || "Organization profile"}
+              action={<SmartImage src={details.logoUrl} fallbackSrc={SEED_IMAGES.organization} alt="" className="size-20 rounded-2xl object-cover shadow-soft ring-1 ring-slate-200" />}
+            />
 
             <div className="mt-8 grid gap-5 md:grid-cols-4">
               <StatCard label="Courses" value={`${details.coursesCount}`} icon={BookOpen} />
@@ -44,13 +51,13 @@ export default function OrganizationDetailsPage() {
             <section className="mt-8 grid gap-6 xl:grid-cols-2">
               <Panel title="Organization admins" icon={Users}>
                 {details.admins?.length ? details.admins.map((user) => (
-                  <Row key={user.userId} title={user.fullName || user.email} meta={`${user.email} - ${user.role}`} value="Admin" />
+                  <Row key={user.userId} title={user.fullName || user.email} meta={`${user.email} - ${user.role}`} value="Admin" imageUrl={user.profilePicture} />
                 )) : <Muted>No organization admins assigned yet</Muted>}
               </Panel>
 
               <Panel title="Instructors" icon={GraduationCap}>
                 {details.instructors?.length ? details.instructors.map((user) => (
-                  <Row key={user.userId} title={user.fullName || user.email} meta={`${user.email} - ${user.role}`} value="Instructor" />
+                  <Row key={user.userId} title={user.fullName || user.email} meta={`${user.email} - ${user.role}`} value="Instructor" imageUrl={user.profilePicture} />
                 )) : <Muted>No instructors assigned yet</Muted>}
               </Panel>
             </section>
@@ -130,12 +137,15 @@ function Panel({ title, icon: Icon, children }: { title: string; icon: any; chil
   );
 }
 
-function Row({ title, meta, value }: { title: string; meta: string; value: string }) {
+function Row({ title, meta, value, imageUrl }: { title: string; meta: string; value: string; imageUrl?: string }) {
   return (
     <div className="flex items-center justify-between gap-4 rounded-xl bg-slate-50 p-4">
-      <div className="min-w-0">
-        <p className="truncate text-sm font-bold text-ink">{title || "Not available"}</p>
-        <p className="mt-1 truncate text-xs text-muted">{meta}</p>
+      <div className="flex min-w-0 items-center gap-3">
+        {imageUrl && <SmartImage src={imageUrl} fallbackSrc={SEED_IMAGES.profile} alt="" className="size-10 shrink-0 rounded-xl object-cover" />}
+        <div className="min-w-0">
+          <p className="truncate text-sm font-bold text-ink">{title || "Not available"}</p>
+          <p className="mt-1 truncate text-xs text-muted">{meta}</p>
+        </div>
       </div>
       <p className="shrink-0 text-sm font-bold text-teal-600">{value}</p>
     </div>

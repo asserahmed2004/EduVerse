@@ -4,9 +4,11 @@ import { Award, CheckCircle2, Download, LockKeyhole } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
+import { SmartImage } from "@/components/smart-image";
 import { useToast } from "@/components/toast-provider";
 import { Button, EmptyState, LoadingState, PageHeader, StatCard } from "@/components/ui";
 import { studentService } from "@/lib/api";
+import { SEED_IMAGES } from "@/lib/image-fallbacks";
 import type { Certificate, CertificateEligibility, Enrollment } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 
@@ -155,6 +157,7 @@ export default function CertificatesPage() {
 
               return (
                 <article key={item.courseId} className="rounded-xl2 bg-white p-6 shadow-soft ring-1 ring-slate-100">
+                  <SmartImage src={SEED_IMAGES.certificate} fallbackSrc={SEED_IMAGES.certificate} alt="" className="mb-5 h-32 w-full rounded-xl object-cover" />
                   <div className={`grid size-14 place-items-center rounded-xl ${canDownload ? "bg-amber-100 text-amber-500" : "bg-slate-100 text-muted"}`}>
                     {canDownload ? <Award /> : <LockKeyhole />}
                   </div>

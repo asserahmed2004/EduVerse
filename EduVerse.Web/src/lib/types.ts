@@ -170,6 +170,7 @@ export type OrganizationOverview = {
   phoneNumber?: string;
   description?: string;
   websiteUrl?: string;
+  logoUrl?: string;
   status?: string;
   coursesCount: number;
   studentsCount: number;
@@ -187,6 +188,7 @@ export type OrganizationDetails = OrganizationOverview & {
     userName: string;
     email: string;
     role: string;
+    profilePicture?: string;
   }[];
   instructors?: {
     userId: string;
@@ -194,6 +196,7 @@ export type OrganizationDetails = OrganizationOverview & {
     userName: string;
     email: string;
     role: string;
+    profilePicture?: string;
   }[];
   courses: {
     courseId: string;
@@ -564,6 +567,7 @@ export type InstructorCourse = {
   title: string;
   organizationId: string;
   organizationName: string;
+  imageUrl?: string;
   studentsCount: number;
   sessionsCount: number;
   assignmentsCount: number;

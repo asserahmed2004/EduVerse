@@ -32,5 +32,6 @@ namespace InfraStructure.Data.Seed
         public int CourseCategoriesCreated { get; set; }
         public int EnrollmentsCreated { get; set; }
         public int RatingsCreated { get; set; }
+        public int ImagesFixed { get; set; }
     }
 }

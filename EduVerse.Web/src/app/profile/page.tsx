@@ -4,9 +4,11 @@ import { Camera, Lock, Mail, Phone, Shield, User } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
+import { SmartImage } from "@/components/smart-image";
 import { Badge, Button, PageHeader } from "@/components/ui";
 import { authService } from "@/lib/api";
 import { getStoredUser } from "@/lib/auth";
+import { SEED_IMAGES } from "@/lib/image-fallbacks";
 import type { AuthUser } from "@/lib/types";
 
 export default function ProfilePage() {
@@ -86,7 +88,7 @@ export default function ProfilePage() {
         <section className="mt-8 grid gap-8 lg:grid-cols-[340px_1fr]">
           <aside className="rounded-xl2 bg-white p-6 text-center shadow-soft ring-1 ring-slate-100">
             <div className="mx-auto grid size-24 place-items-center overflow-hidden rounded-3xl bg-teal-50 text-teal-600">
-              {user?.profilePicture ? <img src={user.profilePicture} alt={user.fullName ?? "Profile"} className="size-full object-cover" /> : <User size={42} />}
+              <SmartImage src={user?.profilePicture} fallbackSrc={SEED_IMAGES.profile} alt={user?.fullName ?? "Profile"} className="size-full object-cover" />
             </div>
             <h2 className="mt-5 text-2xl font-bold text-ink">{user?.fullName ?? user?.userName ?? "EduVerse user"}</h2>
             <p className="mt-2 text-sm text-muted">{user?.email ?? "Not available"}</p>

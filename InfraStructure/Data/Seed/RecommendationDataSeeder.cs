@@ -55,6 +55,8 @@ namespace InfraStructure.Data.Seed
 
             var demoStatus = await GetDemoSeedStatusAsync(cancellationToken);
             LogStartupContext(demoStatus);
+            var counters = new SeedCreationCounters();
+            await RepairMissingSeedImagesAsync(counters, cancellationToken);
 
             if (demoStatus.IsFullySeeded)
             {
@@ -63,8 +65,11 @@ namespace InfraStructure.Data.Seed
                     demoStatus.DemoCourseCount);
 
                 var existingReport = await BuildReportAsync(cancellationToken);
-                existingReport.Seeded = false;
-                existingReport.Message = "Demo seed data already present. Skipped.";
+                existingReport.Seeded = counters.ImagesFixed > 0;
+                existingReport.ImagesFixed = counters.ImagesFixed;
+                existingReport.Message = counters.ImagesFixed > 0
+                    ? $"Demo seed data already present. Repaired {counters.ImagesFixed} missing image references."
+                    : "Demo seed data already present. Skipped.";
                 LogReport(existingReport);
                 return existingReport;
             }
@@ -87,8 +92,6 @@ namespace InfraStructure.Data.Seed
             }
 
             _logger.LogInformation("RecommendationDataSeeder started.");
-
-            var counters = new SeedCreationCounters();
 
             await EnsureRolesAsync();
             var categories = await SeedCategoriesAsync(counters, cancellationToken);
@@ -113,15 +116,17 @@ namespace InfraStructure.Data.Seed
             report.CoursesCreated = counters.CoursesCreated;
             report.EnrollmentsCreated = counters.EnrollmentsCreated;
             report.RatingsCreated = counters.RatingsCreated;
+            report.ImagesFixed = counters.ImagesFixed;
 
             _logger.LogInformation(
-                "Seed completed successfully. Created: users={UsersCreated}, organizations={OrganizationsCreated}, categories={CategoriesCreated}, courses={CoursesCreated}, enrollments={EnrollmentsCreated}, ratings={RatingsCreated}, total demo ratings now={RatingCount}",
+                "Seed completed successfully. Created: users={UsersCreated}, organizations={OrganizationsCreated}, categories={CategoriesCreated}, courses={CoursesCreated}, enrollments={EnrollmentsCreated}, ratings={RatingsCreated}; repaired image references={ImagesFixed}; total demo ratings now={RatingCount}",
                 counters.UsersCreated,
                 counters.OrganizationsCreated,
                 counters.CategoriesCreated,
                 counters.CoursesCreated,
                 counters.EnrollmentsCreated,
                 ratingsCreated,
+                counters.ImagesFixed,
                 report.RatingCount);
 
             LogReport(report);
@@ -241,6 +246,7 @@ namespace InfraStructure.Data.Seed
                         Description = description,
                         Email = $"org.{index + 1:D2}@{SeedCatalog.EmailDomain}",
                         PhoneNumber = _faker.Phone.PhoneNumber(),
+                        LogoUrl = SeedImageCatalog.Organization,
                         WebsiteUrl = $"https://www.{Slugify(name)}.demo",
                         Status = "Active",
                         CreatedAt = DateTime.UtcNow.AddDays(-_faker.Random.Int(30, 400)),
@@ -353,6 +359,7 @@ namespace InfraStructure.Data.Seed
                     PhoneNumber = _faker.Phone.PhoneNumber(),
                     PhoneNumberConfirmed = false,
                     OrganizationId = organizationId,
+                    ProfilePicture = SeedImageCatalog.ProfileAvatar,
                     SecurityStamp = Guid.NewGuid().ToString()
                 };
 
@@ -424,7 +431,7 @@ namespace InfraStructure.Data.Seed
                         Description = template.Description,
                         Price = template.Price,
                         Duration = _faker.Random.Double(4, 40),
-                        ImageUrl = $"{courseId}-Thumbnail",
+                        ImageUrl = SeedImageCatalog.GetCourseImage(template.Title, template.Tags),
                         Tags = template.Tags,
                         Level = template.Level,
                         IsDeleted = false,
@@ -457,6 +464,52 @@ namespace InfraStructure.Data.Seed
 
             await _context.SaveChangesAsync(cancellationToken);
             return courses;
+        }
+
+        private async Task RepairMissingSeedImagesAsync(
+            SeedCreationCounters counters,
+            CancellationToken cancellationToken)
+        {
+            var seedCourses = await _context.Courses
+                .Where(course => course.Name.StartsWith("[SEED]"))
+                .ToListAsync(cancellationToken);
+            foreach (var course in seedCourses)
+            {
+                if (!SeedImageCatalog.NeedsFallback(course.ImageUrl, course.Id))
+                    continue;
+
+                course.ImageUrl = SeedImageCatalog.GetCourseImage(course.Title, course.Tags);
+                counters.ImagesFixed++;
+            }
+
+            var seedOrganizations = await _context.Organizations
+                .Where(organization => organization.Email != null
+                    && organization.Email.EndsWith($"@{SeedCatalog.EmailDomain}"))
+                .ToListAsync(cancellationToken);
+            foreach (var organization in seedOrganizations)
+            {
+                if (!SeedImageCatalog.NeedsFallback(organization.LogoUrl))
+                    continue;
+
+                organization.LogoUrl = SeedImageCatalog.Organization;
+                counters.ImagesFixed++;
+            }
+
+            var seedUsers = await _context.Users
+                .Where(user => user.Email != null
+                    && user.Email.EndsWith($"@{SeedCatalog.EmailDomain}"))
+                .ToListAsync(cancellationToken);
+            foreach (var user in seedUsers)
+            {
+                if (!SeedImageCatalog.NeedsFallback(user.ProfilePicture))
+                    continue;
+
+                user.ProfilePicture = SeedImageCatalog.ProfileAvatar;
+                counters.ImagesFixed++;
+            }
+
+            if (counters.ImagesFixed > 0)
+                await _context.SaveChangesAsync(cancellationToken);
         }
 
         private async Task<List<Enrollment>> SeedEnrollmentsAsync(
@@ -961,6 +1014,7 @@ namespace InfraStructure.Data.Seed
         public int CoursesCreated { get; set; }
         public int EnrollmentsCreated { get; set; }
         public int RatingsCreated { get; set; }
+        public int ImagesFixed { get; set; }
         public string SeedPassword { get; set; } = string.Empty;
         public List<string> SampleStudentEmails { get; set; } = [];
         public List<string> SampleCourses { get; set; } = [];

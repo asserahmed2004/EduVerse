@@ -3,9 +3,11 @@
 import { FormEvent, useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
+import { SmartImage } from "@/components/smart-image";
 import { useToast } from "@/components/toast-provider";
 import { Badge, Button, EmptyState, LoadingState, PageHeader } from "@/components/ui";
 import { adminService, getApiErrorMessage, organizationService } from "@/lib/api";
+import { SEED_IMAGES } from "@/lib/image-fallbacks";
 import type { AdminUserDetails, ManagedUser, OrganizationOverview, UserRole } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 
@@ -154,7 +156,12 @@ export default function AdminUsersPage() {
                     <tbody>
                       {users.map((user) => (
                         <tr key={`${user.email}-${user.id}`} className="border-b border-slate-100 last:border-0">
-                          <td className="px-4 py-4 text-sm font-semibold text-ink">{user.fullName}</td>
+                          <td className="px-4 py-4">
+                            <div className="flex items-center gap-3">
+                              <SmartImage src={user.profilePicture} fallbackSrc={SEED_IMAGES.profile} alt="" className="size-10 rounded-xl object-cover" />
+                              <span className="text-sm font-semibold text-ink">{user.fullName}</span>
+                            </div>
+                          </td>
                           <td className="px-4 py-4 text-sm text-muted">{user.email}</td>
                           <td className="px-4 py-4"><Badge>{user.role}</Badge></td>
                           <td className="px-4 py-4 text-sm font-semibold text-muted">{user.organizationName ?? "EduVerseOrganization"}</td>

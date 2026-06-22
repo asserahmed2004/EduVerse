@@ -5,8 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { BrandLogo } from "@/components/brand-logo";
+import { SmartImage } from "@/components/smart-image";
 import { Button } from "@/components/ui";
 import { authService } from "@/lib/api";
+import { SEED_IMAGES } from "@/lib/image-fallbacks";
 import { getDashboardPath, getStoredUser, getToken } from "@/lib/auth";
 
 export default function LoginPage() {
@@ -45,7 +47,7 @@ export default function LoginPage() {
     <main className="grid min-h-screen place-items-center px-5 py-10">
       <div className="grid w-full max-w-5xl overflow-hidden rounded-xl2 bg-white shadow-soft ring-1 ring-slate-100 lg:grid-cols-[0.95fr_1.05fr]">
         <div className="hidden bg-ink p-8 text-white lg:block">
-          <img src="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1000&q=80" alt="Online learning" className="h-72 w-full rounded-xl object-cover" />
+          <SmartImage src={SEED_IMAGES.learningHero} fallbackSrc={SEED_IMAGES.learningHero} alt="Online learning" className="h-72 w-full rounded-xl object-cover" />
           <h1 className="mt-8 text-3xl font-bold">Welcome back to EduVerse</h1>
           <p className="mt-3 text-sm leading-6 text-slate-300">Continue learning, manage enrollments, and keep your education flow moving from one clean workspace.</p>
         </div>

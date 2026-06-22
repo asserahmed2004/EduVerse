@@ -2,6 +2,7 @@ import { ArrowRight, BookOpen, Loader2 } from "lucide-react";
 import Link from "next/link";
 import type { Course } from "@/lib/types";
 import { cn, formatCurrency } from "@/lib/utils";
+import { CourseImage } from "./smart-image";
 
 export function Button({
   children,
@@ -109,13 +110,7 @@ export function CourseCard({ course, compact = false }: { course: Course; compac
   return (
     <Link href={`/courses/${course.id}`} className="group block overflow-hidden rounded-xl2 bg-white shadow-soft ring-1 ring-slate-100 transition duration-200 hover:-translate-y-1 hover:shadow-xl">
       <div className={cn("relative overflow-hidden bg-slate-100", compact ? "h-40" : "h-52")}>
-        {course.imageUrl ? (
-          <img src={course.imageUrl} alt={course.name} className="size-full object-cover transition duration-500 group-hover:scale-105" />
-        ) : (
-          <div className="grid size-full place-items-center bg-teal-50 text-teal-600">
-            <BookOpen size={34} />
-          </div>
-        )}
+        <CourseImage course={course} alt={course.name} className="size-full object-cover transition duration-500 group-hover:scale-105" />
         <div className="absolute left-4 top-4">
           <Badge tone="amber">{course.category ?? course.categories?.[0]?.name ?? course.level ?? "Course"}</Badge>
         </div>

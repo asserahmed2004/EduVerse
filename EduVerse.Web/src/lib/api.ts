@@ -1,5 +1,6 @@
 import axios from "axios";
 import { clearAuth, getCurrentUserId, getRoleFromToken, getToken, getUserIdFromToken, inferRole, isAuthenticatedStudent, setStoredUser, setToken } from "./auth";
+import { getCourseFallbackImage, isMissingImageReference, resolveSemanticImage, SEED_IMAGES } from "./image-fallbacks";
 import type {
   ActivityLog,
   AssignmentProgress,
@@ -263,10 +264,19 @@ api.interceptors.response.use(
   }
 );
 
-function normalizeImageUrl(value?: string) {
-  if (!value) return undefined;
-  if (value.startsWith("http")) return value;
-  return `${API_BASE_URL}/Cloud/Get/courses/${encodeURIComponent(value)}`;
+function normalizeImageUrl(
+  value: string | undefined,
+  course: Pick<Course, "name" | "title" | "tags" | "category" | "categories">
+    | Pick<CourseAdminDetails, "name" | "title" | "category">
+) {
+  const semanticImage = resolveSemanticImage(value);
+  if (semanticImage) return semanticImage;
+  if (isMissingImageReference(value)) return getCourseFallbackImage(course);
+  const trimmed = value!.trim();
+  if (trimmed.startsWith("http")) return trimmed;
+  if (trimmed.startsWith("/images/")) return trimmed;
+  if (trimmed.startsWith("/")) return `${API_BASE_URL}${trimmed}`;
+  return `${API_BASE_URL}/Cloud/Get/courses/${encodeURIComponent(trimmed)}`;
 }
 
 function normalizeCertificateUrl(value?: string) {
@@ -310,18 +320,38 @@ function normalizeExternalUrl(value?: string) {
 }
 
 function normalizeProfilePictureUrl(value?: string) {
-  if (!value) return undefined;
-  if (value.startsWith("http")) return value;
-  if (value.startsWith("/")) return `${API_BASE_URL}${value}`;
-  return `${API_BASE_URL}/Cloud/Get/ProfilePicture/${encodeURIComponent(value)}`;
+  const semanticImage = resolveSemanticImage(value);
+  if (semanticImage) return semanticImage;
+  if (isMissingImageReference(value)) return SEED_IMAGES.profile;
+  const trimmed = value!.trim();
+  if (trimmed.startsWith("http")) return trimmed;
+  if (trimmed.startsWith("/images/")) return trimmed;
+  if (trimmed.startsWith("/")) return `${API_BASE_URL}${trimmed}`;
+  return `${API_BASE_URL}/Cloud/Get/ProfilePicture/${encodeURIComponent(trimmed)}`;
+}
+
+function normalizeOrganizationImageUrl(value?: string) {
+  const semanticImage = resolveSemanticImage(value);
+  if (semanticImage) return semanticImage;
+  if (isMissingImageReference(value)) return SEED_IMAGES.organization;
+  const trimmed = value!.trim();
+  if (trimmed.startsWith("http")) return trimmed;
+  if (trimmed.startsWith("/images/")) return trimmed;
+  if (trimmed.startsWith("/")) return `${API_BASE_URL}${trimmed}`;
+  return `${API_BASE_URL}/Cloud/Get/organizations/${encodeURIComponent(trimmed)}`;
 }
 
 function normalizeCourse(course: any): Course {
   const value = unwrapData(course) ?? course ?? {};
+  const name = value.name ?? value.Name ?? value.courseName ?? value.CourseName ?? "Course";
+  const title = value.title ?? value.Title ?? name;
+  const categories = value.categories ?? value.Categories ?? [];
+  const category = value.category ?? value.Category ?? value.categories?.[0]?.name ?? value.Categories?.[0]?.Name;
+  const tags = value.tags ?? value.Tags;
   return {
     id: value.id ?? value.Id ?? value.courseId ?? value.CourseId ?? "",
-    name: value.name ?? value.Name ?? value.courseName ?? value.CourseName ?? "Course",
-    title: value.title ?? value.Title ?? value.name ?? value.Name ?? value.courseName ?? value.CourseName ?? "Course",
+    name,
+    title,
     description: value.description ?? value.Description ?? "",
     price: value.price ?? value.Price ?? 0,
     duration: value.duration ?? value.Duration ?? 0,
@@ -331,9 +361,9 @@ function normalizeCourse(course: any): Course {
     organizationId: value.organizationId ?? value.OrganizationId,
     organizationName: value.organizationName ?? value.OrganizationName ?? "EduVerseOrganization",
     instructorId: value.instructorId ?? value.InstructorId,
-    imageUrl: normalizeImageUrl(value.imageUrl ?? value.ImageUrl),
-    categories: value.categories ?? value.Categories ?? [],
-    category: value.category ?? value.Category ?? value.categories?.[0]?.name ?? value.Categories?.[0]?.Name,
+    imageUrl: normalizeImageUrl(value.imageUrl ?? value.ImageUrl, { name, title, tags, category, categories }),
+    categories,
+    category,
     instructorName: value.instructorName ?? value.InstructorName,
     organizationOwnerName: value.organizationOwnerName ?? value.OrganizationOwnerName ?? value.organizationName ?? value.OrganizationName ?? "EduVerseOrganization",
     organizationOwnerEmail: value.organizationOwnerEmail ?? value.OrganizationOwnerEmail,
@@ -347,7 +377,7 @@ function normalizeCourse(course: any): Course {
     restoredById: value.restoredById ?? value.RestoredById,
     restoredByName: value.restoredByName ?? value.RestoredByName,
     level: value.level ?? value.Level,
-    tags: value.tags ?? value.Tags,
+    tags,
     ratingCount: value.ratingCount ?? value.RatingCount ?? 0,
     recommendationScore: value.recommendationScore ?? value.RecommendationScore,
     progressPercent: value.progressPercent ?? value.ProgressPercent
@@ -477,6 +507,7 @@ function normalizeOrganizationOverview(item: any): OrganizationOverview {
     phoneNumber: item.phoneNumber ?? item.PhoneNumber,
     description: item.description ?? item.Description,
     websiteUrl: item.websiteUrl ?? item.WebsiteUrl,
+    logoUrl: normalizeOrganizationImageUrl(item.logoUrl ?? item.LogoUrl),
     status: item.status ?? item.Status,
     coursesCount: item.coursesCount ?? item.CoursesCount ?? 0,
     studentsCount: item.studentsCount ?? item.StudentsCount ?? 0,
@@ -521,14 +552,16 @@ function normalizeOrganizationDetails(item: any): OrganizationDetails {
       fullName: user.fullName ?? user.FullName ?? "",
       userName: user.userName ?? user.UserName ?? "",
       email: user.email ?? user.Email ?? "",
-      role: user.role ?? user.Role ?? ""
+      role: user.role ?? user.Role ?? "",
+      profilePicture: normalizeProfilePictureUrl(user.profilePicture ?? user.ProfilePicture)
     })),
     instructors: (item.instructors ?? item.Instructors ?? []).map((user: any) => ({
       userId: user.userId ?? user.UserId ?? "",
       fullName: user.fullName ?? user.FullName ?? "",
       userName: user.userName ?? user.UserName ?? "",
       email: user.email ?? user.Email ?? "",
-      role: user.role ?? user.Role ?? ""
+      role: user.role ?? user.Role ?? "",
+      profilePicture: normalizeProfilePictureUrl(user.profilePicture ?? user.ProfilePicture)
     })),
     courses: (item.courses ?? item.Courses ?? []).map((course: any) => ({
       courseId: course.courseId ?? course.CourseId ?? "",
@@ -546,12 +579,15 @@ function normalizeOrganizationDetails(item: any): OrganizationDetails {
 
 function normalizeCourseAdminDetails(data: any): CourseAdminDetails {
   const value = unwrapData(data);
+  const name = value.name ?? value.Name ?? "";
+  const title = value.title ?? value.Title ?? "";
+  const category = value.category ?? value.Category;
   return {
     courseId: value.courseId ?? value.CourseId ?? "",
-    name: value.name ?? value.Name ?? "",
-    title: value.title ?? value.Title ?? "",
+    name,
+    title,
     description: value.description ?? value.Description ?? "",
-    category: value.category ?? value.Category,
+    category,
     organizationOwner: value.organizationOwner ?? value.OrganizationOwner ?? value.organizationName ?? value.OrganizationName ?? "EduVerseOrganization",
     organizationOwnerEmail: value.organizationOwnerEmail ?? value.OrganizationOwnerEmail,
     organizationId: value.organizationId ?? value.OrganizationId,
@@ -559,7 +595,7 @@ function normalizeCourseAdminDetails(data: any): CourseAdminDetails {
     instructorId: value.instructorId ?? value.InstructorId,
     instructorName: value.instructorName ?? value.InstructorName,
     price: value.price ?? value.Price ?? 0,
-    imageUrl: normalizeImageUrl(value.imageUrl ?? value.ImageUrl),
+    imageUrl: normalizeImageUrl(value.imageUrl ?? value.ImageUrl, { name, title, category }),
     studentsCount: value.studentsCount ?? value.StudentsCount ?? 0,
     sessionsCount: value.sessionsCount ?? value.SessionsCount ?? 0,
     averageRating: value.averageRating ?? value.AverageRating ?? 0,
@@ -880,12 +916,15 @@ function normalizeInstructorSession(item: any): InstructorSession {
 }
 
 function normalizeInstructorCourse(item: any): InstructorCourse {
+  const name = item.name ?? item.Name ?? "";
+  const title = item.title ?? item.Title ?? name;
   return {
     courseId: item.courseId ?? item.CourseId ?? "",
-    name: item.name ?? item.Name ?? "",
-    title: item.title ?? item.Title ?? item.name ?? item.Name ?? "",
+    name,
+    title,
     organizationId: item.organizationId ?? item.OrganizationId ?? "",
     organizationName: item.organizationName ?? item.OrganizationName ?? "EduVerseOrganization",
+    imageUrl: normalizeImageUrl(item.imageUrl ?? item.ImageUrl, { name, title }),
     studentsCount: item.studentsCount ?? item.StudentsCount ?? 0,
     sessionsCount: item.sessionsCount ?? item.SessionsCount ?? 0,
     assignmentsCount: item.assignmentsCount ?? item.AssignmentsCount ?? 0

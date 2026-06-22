@@ -3,6 +3,8 @@
 import { ArrowRight, BookOpen, CheckCircle2, GraduationCap, ShieldCheck, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { BrandLogo } from "@/components/brand-logo";
+import { SmartImage } from "@/components/smart-image";
+import { SEED_IMAGES } from "@/lib/image-fallbacks";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { TrendingCoursesSection } from "@/components/trending-courses-section";
 import { LinkButton, StatCard } from "@/components/ui";
@@ -72,8 +74,9 @@ export default function LandingPage() {
 
         <div className="relative">
           <div className="overflow-hidden rounded-xl2 bg-white shadow-soft ring-1 ring-slate-100">
-            <img
-              src="https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1400&q=80"
+            <SmartImage
+              src={SEED_IMAGES.learningHero}
+              fallbackSrc={SEED_IMAGES.learningHero}
               alt="Students learning together"
               className="h-[390px] w-full object-cover"
             />

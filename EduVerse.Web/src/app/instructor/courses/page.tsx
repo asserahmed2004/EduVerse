@@ -5,6 +5,7 @@ import { FormEvent, type InputHTMLAttributes, type SelectHTMLAttributes, useEffe
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
 import { useToast } from "@/components/toast-provider";
+import { CourseImage } from "@/components/smart-image";
 import { Badge, Button, EmptyState, LoadingState, PageHeader, StatCard } from "@/components/ui";
 import { courseService, getApiErrorMessage, organizationService } from "@/lib/api";
 import { getStoredUser } from "@/lib/auth";
@@ -281,7 +282,7 @@ export default function InstructorCoursesPage() {
                     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                       <div className="flex gap-4">
                         <div className="h-20 w-24 shrink-0 overflow-hidden rounded-xl bg-slate-100">
-                          {course.imageUrl ? <img src={course.imageUrl} alt={course.name} className="size-full object-cover" /> : null}
+                          <CourseImage course={course} alt={course.name} className="size-full object-cover" />
                         </div>
                         <div>
                           <Badge>{course.name}</Badge>

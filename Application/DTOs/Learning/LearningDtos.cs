@@ -147,6 +147,7 @@ namespace Application.DTOs.Learning
         public string Title { get; set; } = string.Empty;
         public Guid OrganizationId { get; set; }
         public string OrganizationName { get; set; } = string.Empty;
+        public string? ImageUrl { get; set; }
         public int StudentsCount { get; set; }
         public int SessionsCount { get; set; }
         public int AssignmentsCount { get; set; }

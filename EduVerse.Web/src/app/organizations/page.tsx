@@ -5,9 +5,11 @@ import { Building2, GraduationCap, Plus, Star, Wallet } from "lucide-react";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
+import { SmartImage } from "@/components/smart-image";
 import { useToast } from "@/components/toast-provider";
 import { Badge, Button, EmptyState, LoadingState, PageHeader, StatCard } from "@/components/ui";
 import { getApiErrorMessage, organizationService } from "@/lib/api";
+import { SEED_IMAGES } from "@/lib/image-fallbacks";
 import type { OrganizationOverview } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils";
 
@@ -125,8 +127,18 @@ export default function OrganizationsPage() {
                     return (
                       <tr key={id} className="border-b border-slate-100 last:border-0 dark:border-white/10">
                         <td className="px-4 py-4">
-                          <p className="text-sm font-bold text-ink dark:text-white">{organization.organizationName ?? organization.organizationAdminName}</p>
-                          <p className="mt-1 text-xs text-muted">{organization.websiteUrl || "No website"}</p>
+                          <div className="flex items-center gap-3">
+                            <SmartImage
+                              src={organization.logoUrl}
+                              fallbackSrc={SEED_IMAGES.organization}
+                              alt=""
+                              className="size-11 rounded-xl object-cover"
+                            />
+                            <div>
+                              <p className="text-sm font-bold text-ink dark:text-white">{organization.organizationName ?? organization.organizationAdminName}</p>
+                              <p className="mt-1 text-xs text-muted">{organization.websiteUrl || "No website"}</p>
+                            </div>
+                          </div>
                         </td>
                         <td className="px-4 py-4 text-sm text-muted">{organization.email || "Not available"}</td>
                         <td className="px-4 py-4 text-sm text-muted">{organization.phoneNumber || "Not available"}</td>
