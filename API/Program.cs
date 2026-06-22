@@ -77,7 +77,7 @@ namespace API
             });
 
             builder.Services.AddInfraStructureServices(builder.Configuration);
-            builder.Services.AddApplicationServices();
+            builder.Services.AddApplicationServices(builder.Configuration);
 
             var app = builder.Build();
 

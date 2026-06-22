@@ -52,7 +52,7 @@ namespace Application.Services.Interfaces
         Task<IEnumerable<GetPayment>> GetUserPayments(string userId);
         Task<IEnumerable<GetPayment>> GetCoursePayments(Guid courseId);
         Task<GetPayment> GetPayment(Guid courseId, string userId);
-        Task<ServiceResponse> UpdatePaymentFromCallback(JsonElement callbackData);
+        Task<ServiceResponse> UpdatePaymentFromCallback(JsonElement callbackData, string? hmac);
         Task<IEnumerable<NotificationDto>> GetMyNotifications(string userId);
         Task<ServiceResponse> MarkNotificationAsRead(Guid id, string userId);
         Task<ServiceResponse> MarkAttendance(Guid sessionId, string userId, string attendanceCode);

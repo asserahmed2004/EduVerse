@@ -412,9 +412,14 @@ namespace API.Controllers
 
         [HttpPost("payment/callback")]
         [AllowAnonymous]
-        public async Task<IActionResult> paymentcallback([FromBody] JsonElement callbackData)
+        public async Task<IActionResult> paymentcallback(
+            [FromBody] JsonElement callbackData,
+            [FromQuery] string? hmac)
         {
-            var result = await userService.UpdatePaymentFromCallback(callbackData);
+            var callbackHmac = string.IsNullOrWhiteSpace(hmac)
+                ? Request.Headers["hmac"].FirstOrDefault()
+                : hmac;
+            var result = await userService.UpdatePaymentFromCallback(callbackData, callbackHmac);
             if (!result.success)
             {
                 return BadRequest(result.message);

@@ -1,5 +1,6 @@
 ﻿using Application.Mapping;
 using Application.Services.Implementitions;
+using Application.Configuration;
 using Application.Services.Implementitions.Auth;
 using Application.Services.Interfaces;
 using Application.Services.Interfaces.Auth;
@@ -7,6 +8,7 @@ using Application.Validations;
 using Application.Validations.Auth;
 using FluentValidation;
 using FluentValidation.AspNetCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
@@ -18,7 +20,9 @@ namespace Application.Dependencyinjection
 {
     public static class ServiceContainer
     {
-        public static IServiceCollection AddApplicationServices(this IServiceCollection services)
+        public static IServiceCollection AddApplicationServices(
+            this IServiceCollection services,
+            IConfiguration configuration)
         {
             services.AddAutoMapper(cfg => cfg.AddProfile<MappingConfig>());
             services.AddValidatorsFromAssemblyContaining<RegisterValidation>();
@@ -38,9 +42,20 @@ namespace Application.Dependencyinjection
 
             services.AddFluentValidationAutoValidation();
            services.AddScoped<IAuthServices, AuthService>();
+            services.Configure<PaymobOptions>(configuration.GetSection(PaymobOptions.SectionName));
+            var paymobBaseUrl = configuration[$"{PaymobOptions.SectionName}:BaseUrl"]
+                ?? "https://accept.paymob.com/api/";
+            if (!paymobBaseUrl.EndsWith('/'))
+            {
+                paymobBaseUrl += "/";
+            }
+
             services.AddHttpClient("Paymob", options =>
             {
-                options.BaseAddress = new Uri("https://accept.paymob.com/api");
+                options.BaseAddress = new Uri(paymobBaseUrl, UriKind.Absolute);
+                options.Timeout = TimeSpan.FromSeconds(30);
+                options.DefaultRequestHeaders.Accept.Add(
+                    new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
             });
 
 

@@ -1,26 +1,33 @@
 ﻿using Application.DTOs.Auth;
 
 using Application.DTOs.Cloud;
+using Application.Configuration;
 using Application.DTOs.Course;
 using Application.DTOs.Enrollments;
 using Application.DTOs.Learning;
 using Application.DTOs.Payment;
 using Application.DTOs.Responses;
 using Application.DTOs.Submission;
+using Application.Exceptions;
 using Application.Services;
 using Application.Services.Interfaces;
 using AutoMapper;
 using Domain.Entities;
 using Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Net;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 
 namespace Application.Services.Implementitions
@@ -31,13 +38,25 @@ namespace Application.Services.Implementitions
         IGeneric<Session> Sessions, IGeneric<Assignment> Assignments,
         IGeneric<StudentSessionProgress> Progresses, IGeneric<CertificateRecord> Certificates,
         IGeneric<Notification> Notifications, IGeneric<AttendanceRecord> AttendanceRecords,
-        IGeneric<SessionMaterial> SessionMaterials, IGeneric<Organization> Organizations) : IUserService
+        IGeneric<SessionMaterial> SessionMaterials, IGeneric<Organization> Organizations,
+        IOptions<PaymobOptions> paymobOptions, ILogger<UserService> logger) : IUserService
     {
         private static readonly SemaphoreSlim CertificateGenerationLock = new(1, 1);
-        private readonly string PaymobApi = "ZXlKaGJHY2lPaUpJVXpVeE1pSXNJblI1Y0NJNklrcFhWQ0o5LmV5SmpiR0Z6Y3lJNklrMWxjbU5vWVc1MElpd2ljSEp2Wm1sc1pWOXdheUk2TVRFME16UTBNeXdpYm1GdFpTSTZJbWx1YVhScFlXd2lmUS5rSm9SRWNtUG8xVHhjR3lKMFg2NXViM0VXYnZ3SEJMVnRSQ1FCMEthZHlCajRJRHRLMWZyU3A3NFE2Z3o2MjhENnVZOWszUnhKYWVfSnNKalhvTUV3QQ==";
-        private readonly string PaymobSecret = "egy_sk_test_9a566c37c5a5706e567093e1bb650191de352802284e30fd7f6b0bd1c18d7a7e";
-        private readonly string PaymobPublic = "egy_pk_test_3toKrv5jW8B0FcHVRTZYI12gK33a5Yvn";
-        private readonly HttpClient httpClient = new HttpClient();
+        private static readonly HashSet<string> PaymobSensitiveFields = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "token",
+            "api_key",
+            "client_secret",
+            "payment_token",
+            "secret",
+            "email",
+            "phone_number",
+            "first_name",
+            "last_name",
+            "pan"
+        };
+        private readonly PaymobOptions paymob = paymobOptions.Value;
+        private readonly HttpClient paymobClient = httpClientFactory.CreateClient("Paymob");
         public async Task<ServiceResponse> AddCertificate(CreateCertificate certificate)
         {
             if (certificate == null || string.IsNullOrEmpty(certificate.Email) || certificate.CourseId == Guid.Empty)
@@ -922,137 +941,223 @@ namespace Application.Services.Implementitions
             var mappedSubmission = mapper.Map<GetAssignmentSubmission>(submission);
             return mappedSubmission;
         }
-        public async Task<string> Payment(string userId, Guid Course,string Method)
+        public async Task<string> Payment(string userId, Guid Course, string Method)
         {
             var course = await Courses.GetByIdAsync(Course);
-            var User = await userManagment.GetUserById(userId);
-            if (course == null || course.IsDeleted || User == null)
+            var user = await userManagment.GetUserById(userId);
+            if (course == null || course.IsDeleted || user == null)
             {
                 return null;
             }
+
+            var isAlreadyEnrolled = await Enrollment.Query()
+                .AnyAsync(item => item.CourseId == Course && item.StudentId == userId);
+            if (isAlreadyEnrolled)
+            {
+                throw new PaymobException(
+                    "The student is already enrolled in this course.",
+                    "You are already enrolled in this course.",
+                    (int)HttpStatusCode.Conflict);
+            }
+
             if (course.Price <= 0)
             {
                 var enrollResult = await Enroll(Course, userId);
                 return enrollResult.success ? "Free enrollment completed." : null;
             }
-            var integrationId = DetermineIntegrationId(Method);
-            if (integrationId == null)
-            {
-                return null;
-            }
-            int specialreference = new Random().Next(100000, 999999);
-            var merchantOrderId = specialreference.ToString();
-            
 
-            // Prepare billing data
+            var normalizedMethod = NormalizePaymentMethod(Method);
+            var integrationId = GetIntegrationId(normalizedMethod);
+            ValidatePaymobConfiguration();
+
+            var amountCents = checked((long)Math.Round(
+                course.Price * 100,
+                MidpointRounding.AwayFromZero));
+            if (amountCents <= 0)
+            {
+                throw new PaymobException(
+                    "The calculated PayMob amount is invalid.",
+                    "The course price is invalid.",
+                    (int)HttpStatusCode.BadRequest);
+            }
+
+            var specialReference = RandomNumberGenerator.GetInt32(100_000_000, 1_000_000_000).ToString();
+            var merchantOrderId = $"eduverse-{Guid.NewGuid():N}";
+            var (firstName, lastName) = SplitFullName(user.FullName);
             var billingData = new
             {
-                apartment = "N/A",
-                first_name = User.FullName,
-                last_name = "N/A",
-                street = "N/A",
-                building = "N/A",
-                phone_number = User.PhoneNumber,
-                country = "N/A",
-                email = User.Email,
-                floor = "N/A",
-                state = "N/A",
-                city = "N/A"
+                apartment = "NA",
+                email = string.IsNullOrWhiteSpace(user.Email) ? "NA" : user.Email,
+                floor = "NA",
+                first_name = firstName,
+                street = "NA",
+                building = "NA",
+                phone_number = string.IsNullOrWhiteSpace(user.PhoneNumber) ? "NA" : user.PhoneNumber,
+                shipping_method = "NA",
+                postal_code = "NA",
+                city = "NA",
+                country = "EG",
+                last_name = lastName,
+                state = "NA"
             };
 
-            // Prepare intention request payload
-            var payload = new
-            {
-                amount = course.Price,
-                currency = "EGP",
-                payment_methods = new[] { integrationId.Value },
-                billing_data = billingData,
-                items = new[]
-                {
-                    new
-                    {
-                        name = $"Enrollment #{course.Id}-{User.Id}",
-                        amount = course.Price,
-                        description = $"Course Enrollment Payment for course #{course.Name}",
-                        quantity = 1
-                    }
-                },
-                customer = new
-                {
-                    first_name = billingData.first_name,
-                    last_name = billingData.last_name,
-                    email = billingData.email,
-                    
-                },
-                extras = new
-                {
-                    
-                    customerId = User.Id
-                },
-                special_reference = specialreference,
-                expiration = 3600, // 1 hour expiration
-                merchant_order_id = merchantOrderId
-            };
-            var requestMessage = new HttpRequestMessage(System.Net.Http.HttpMethod.Post, "https://accept.paymob.com/v1/intention/");
-            requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Token", PaymobSecret);
-            requestMessage.Content = JsonContent.Create(payload);
-            var response = await httpClient.SendAsync(requestMessage);
-            
-            var responseContent = await response.Content.ReadAsStringAsync();
             var payment = new Payment
             {
                 CourseId = course.Id,
-                StudentId = User.Id,
-                SubmittingDate = DateTime.Now,
+                StudentId = user.Id,
+                SubmittingDate = DateTime.UtcNow,
                 TotalPrice = course.Price,
-                PaymentMethod = Method,
-                PaymentStatus = response.IsSuccessStatusCode ? "Pending" : "Failed",
+                PaymentMethod = normalizedMethod,
+                PaymentStatus = "Pending",
                 PaymentProvider = "Paymob",
-                SpecialReference = specialreference.ToString(),
-                MerchantOrderId = merchantOrderId,
-                ProviderStatusCode = (int)response.StatusCode,
-                ProviderResponse = responseContent
+                SpecialReference = specialReference,
+                MerchantOrderId = merchantOrderId
             };
 
-            if (!response.IsSuccessStatusCode)
+            try
             {
+                using var authDocument = await SendPaymobRequest(
+                    "authentication",
+                    "auth/tokens",
+                    new { api_key = paymob.ApiKey });
+                var authToken = GetRequiredString(
+                    authDocument.RootElement,
+                    "token",
+                    "PayMob authentication response did not contain a token.");
+
+                using var orderDocument = await SendPaymobRequest(
+                    "order creation",
+                    "ecommerce/orders",
+                    new
+                    {
+                        auth_token = authToken,
+                        delivery_needed = false,
+                        amount_cents = amountCents,
+                        currency = paymob.Currency,
+                        merchant_order_id = merchantOrderId,
+                        items = new[]
+                        {
+                            new
+                            {
+                                name = course.Name,
+                                amount_cents = amountCents,
+                                description = $"EduVerse course enrollment: {course.Name}",
+                                quantity = 1
+                            }
+                        }
+                    });
+                var providerOrderId = GetRequiredLong(
+                    orderDocument.RootElement,
+                    "id",
+                    "PayMob order response did not contain an order id.");
+
+                using var paymentKeyDocument = await SendPaymobRequest(
+                    "payment key creation",
+                    "acceptance/payment_keys",
+                    new
+                    {
+                        auth_token = authToken,
+                        amount_cents = amountCents,
+                        expiration = Math.Max(paymob.PaymentKeyExpirationSeconds, 60),
+                        order_id = providerOrderId,
+                        billing_data = billingData,
+                        currency = paymob.Currency,
+                        integration_id = integrationId
+                    });
+                var paymentToken = GetRequiredString(
+                    paymentKeyDocument.RootElement,
+                    "token",
+                    "PayMob payment-key response did not contain a token.");
+
+                var redirectUrl =
+                    $"{paymobClient.BaseAddress}acceptance/iframes/{paymob.IFrameId}" +
+                    $"?payment_token={Uri.EscapeDataString(paymentToken)}";
+
+                payment.ProviderIntentionId = providerOrderId.ToString();
+                payment.ProviderStatusCode = (int)HttpStatusCode.OK;
+                payment.ProviderResponse = JsonSerializer.Serialize(new
+                {
+                    orderId = providerOrderId,
+                    integrationId,
+                    status = "Pending"
+                });
+                payment.RedirectUrl = redirectUrl;
                 await SavePaymentAsync(payment);
-                return null;
+
+                logger.LogInformation(
+                    "Created PayMob payment order {PaymobOrderId} for course {CourseId}, student {StudentId}, method {Method}",
+                    providerOrderId,
+                    course.Id,
+                    user.Id,
+                    normalizedMethod);
+
+                return redirectUrl;
             }
-
-            // Parse the response to get client_secret
-            var resultJson = JsonDocument.Parse(responseContent);
-            var clientSecret = resultJson.RootElement.GetProperty("client_secret").GetString();
-            string redirectUrl = $"https://accept.paymob.com/unifiedcheckout/?publicKey={PaymobPublic}&clientSecret={clientSecret}";
-            payment.ProviderClientSecret = clientSecret;
-            payment.ProviderIntentionId = GetJsonPropertyAsString(resultJson.RootElement, "id");
-            payment.RedirectUrl = redirectUrl;
-            await SavePaymentAsync(payment);
-            return redirectUrl;
-
+            catch (PaymobException exception)
+            {
+                payment.PaymentStatus = "Failed";
+                payment.ProviderStatusCode = exception.ProviderStatusCode;
+                payment.ProviderResponse = exception.ProviderResponse;
+                await SaveFailedPaymentSafely(payment);
+                throw;
+            }
         }
 
-        public async Task<ServiceResponse> UpdatePaymentFromCallback(JsonElement callbackData)
+        public async Task<ServiceResponse> UpdatePaymentFromCallback(JsonElement callbackData, string? hmac)
         {
+            ValidateCallbackConfiguration();
+            if (!VerifyPaymobHmac(callbackData, hmac))
+            {
+                logger.LogWarning("Rejected PayMob callback because its HMAC signature was missing or invalid.");
+                throw new PaymobException(
+                    "PayMob callback HMAC validation failed.",
+                    "Invalid payment callback signature.",
+                    (int)HttpStatusCode.Unauthorized);
+            }
+
+            var transaction = GetCallbackTransaction(callbackData);
             var merchantOrderId = FindJsonPropertyAsString(callbackData, "merchant_order_id");
             var specialReference = FindJsonPropertyAsString(callbackData, "special_reference");
             var intentionId = FindJsonPropertyAsString(callbackData, "intention_id")
-                ?? FindJsonPropertyAsString(callbackData, "payment_intention_id")
-                ?? FindJsonPropertyAsString(callbackData, "id");
+                ?? FindJsonPropertyAsString(callbackData, "payment_intention_id");
+            var providerOrderId = GetNestedPropertyAsString(transaction, "order", "id");
 
             var payment = await Payments.Query(true).FirstOrDefaultAsync(p =>
                 (!string.IsNullOrEmpty(merchantOrderId) && p.MerchantOrderId == merchantOrderId) ||
                 (!string.IsNullOrEmpty(specialReference) && p.SpecialReference == specialReference) ||
-                (!string.IsNullOrEmpty(intentionId) && p.ProviderIntentionId == intentionId));
+                (!string.IsNullOrEmpty(intentionId) && p.ProviderIntentionId == intentionId) ||
+                (!string.IsNullOrEmpty(providerOrderId) && p.ProviderIntentionId == providerOrderId));
 
             if (payment == null)
             {
                 return new ServiceResponse(false, "Payment callback does not match any saved payment.");
             }
 
-            var success = FindJsonPropertyAsBool(callbackData, "success");
-            var pending = FindJsonPropertyAsBool(callbackData, "pending");
-            var errorOccured = FindJsonPropertyAsBool(callbackData, "error_occured");
+            var callbackAmount = FindJsonPropertyAsInt(callbackData, "amount_cents");
+            var expectedAmount = checked((long)Math.Round(
+                payment.TotalPrice * 100,
+                MidpointRounding.AwayFromZero));
+            if (callbackAmount == null || callbackAmount.Value != expectedAmount)
+            {
+                throw new PaymobException(
+                    $"PayMob callback amount mismatch. Expected {expectedAmount}, received {callbackAmount?.ToString() ?? "missing"}.",
+                    "Payment callback amount did not match the order.",
+                    (int)HttpStatusCode.BadRequest);
+            }
+
+            var callbackIntegrationId = FindJsonPropertyAsInt(callbackData, "integration_id");
+            var expectedIntegrationId = GetIntegrationId(payment.PaymentMethod);
+            if (callbackIntegrationId == null || callbackIntegrationId.Value != expectedIntegrationId)
+            {
+                throw new PaymobException(
+                    $"PayMob callback integration mismatch. Expected {expectedIntegrationId}, received {callbackIntegrationId?.ToString() ?? "missing"}.",
+                    "Payment callback method did not match the order.",
+                    (int)HttpStatusCode.BadRequest);
+            }
+
+            var success = FindJsonPropertyAsBool(transaction, "success");
+            var pending = FindJsonPropertyAsBool(transaction, "pending");
+            var errorOccured = FindJsonPropertyAsBool(transaction, "error_occured");
 
             payment.PaymentStatus = success == true
                 ? "Paid"
@@ -1062,7 +1167,7 @@ namespace Application.Services.Implementitions
                         ? "Failed"
                         : "Failed";
 
-            payment.ProviderResponse = callbackData.GetRawText();
+            payment.ProviderResponse = SanitizePaymobResponse(callbackData.GetRawText());
 
             var providerStatusCode = FindJsonPropertyAsInt(callbackData, "status_code");
             if (providerStatusCode != null)
@@ -1094,6 +1199,12 @@ namespace Application.Services.Implementitions
                     await CreateNotification(payment.StudentId, "Course enrolled", "Payment confirmed and enrollment created.");
                 }
             }
+
+            logger.LogInformation(
+                "Processed PayMob callback for course {CourseId}, student {StudentId}; status is {PaymentStatus}",
+                payment.CourseId,
+                payment.StudentId,
+                payment.PaymentStatus);
             return new ServiceResponse(true, $"Payment status updated to {payment.PaymentStatus}.");
         }
 
@@ -1318,7 +1429,7 @@ namespace Application.Services.Implementitions
 
         private async Task SavePaymentAsync(Payment payment)
         {
-            var existingPayment = await Payments.Query(true)
+            var existingPayment = await Payments.Query()
                 .FirstOrDefaultAsync(p => p.CourseId == payment.CourseId && p.StudentId == payment.StudentId);
 
             if (existingPayment == null)
@@ -1329,6 +1440,399 @@ namespace Application.Services.Implementitions
 
             await Payments.UpdateAsync(payment);
         }
+
+        private async Task SaveFailedPaymentSafely(Payment payment)
+        {
+            try
+            {
+                await SavePaymentAsync(payment);
+            }
+            catch (Exception exception)
+            {
+                logger.LogError(
+                    exception,
+                    "Failed to persist failed PayMob attempt for course {CourseId}, student {StudentId}",
+                    payment.CourseId,
+                    payment.StudentId);
+            }
+        }
+
+        private async Task<JsonDocument> SendPaymobRequest(
+            string stage,
+            string endpoint,
+            object payload)
+        {
+            HttpResponseMessage response;
+            try
+            {
+                response = await paymobClient.PostAsJsonAsync(endpoint, payload);
+            }
+            catch (TaskCanceledException exception)
+            {
+                throw new PaymobException(
+                    $"PayMob {stage} timed out.",
+                    "The payment provider timed out. Please try again.",
+                    (int)HttpStatusCode.GatewayTimeout,
+                    innerException: exception);
+            }
+            catch (HttpRequestException exception)
+            {
+                throw new PaymobException(
+                    $"Could not connect to PayMob during {stage}: {exception.Message}",
+                    "Could not connect to the payment provider. Please try again.",
+                    (int)HttpStatusCode.BadGateway,
+                    innerException: exception);
+            }
+
+            using (response)
+            {
+                var responseBody = await response.Content.ReadAsStringAsync();
+                var sanitizedBody = SanitizePaymobResponse(responseBody);
+
+                logger.LogInformation(
+                    "PayMob {Stage} returned HTTP {StatusCode}",
+                    stage,
+                    (int)response.StatusCode);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    logger.LogWarning(
+                        "PayMob {Stage} failed with HTTP {StatusCode}. Response: {ProviderResponse}",
+                        stage,
+                        (int)response.StatusCode,
+                        sanitizedBody);
+
+                    var providerMessage = ExtractPaymobErrorMessage(responseBody);
+                    throw new PaymobException(
+                        $"PayMob {stage} failed with HTTP {(int)response.StatusCode}: {providerMessage}",
+                        $"The payment provider rejected the {stage} request.",
+                        (int)HttpStatusCode.BadGateway,
+                        (int)response.StatusCode,
+                        sanitizedBody);
+                }
+
+                logger.LogDebug(
+                    "PayMob {Stage} response: {ProviderResponse}",
+                    stage,
+                    sanitizedBody);
+
+                try
+                {
+                    return JsonDocument.Parse(responseBody);
+                }
+                catch (JsonException exception)
+                {
+                    throw new PaymobException(
+                        $"PayMob {stage} returned invalid JSON.",
+                        "The payment provider returned an invalid response.",
+                        (int)HttpStatusCode.BadGateway,
+                        (int)response.StatusCode,
+                        sanitizedBody,
+                        exception);
+                }
+            }
+        }
+
+        private void ValidatePaymobConfiguration()
+        {
+            var missingKeys = new List<string>();
+            if (string.IsNullOrWhiteSpace(paymob.ApiKey))
+                missingKeys.Add("Paymob:ApiKey");
+            if (paymob.IFrameId <= 0)
+                missingKeys.Add("Paymob:IFrameId");
+            if (string.IsNullOrWhiteSpace(paymob.Currency))
+                missingKeys.Add("Paymob:Currency");
+
+            if (missingKeys.Count > 0)
+            {
+                throw new PaymobException(
+                    $"PayMob configuration is missing or invalid: {string.Join(", ", missingKeys)}.",
+                    "The payment provider is not configured.",
+                    (int)HttpStatusCode.ServiceUnavailable);
+            }
+        }
+
+        private void ValidateCallbackConfiguration()
+        {
+            if (string.IsNullOrWhiteSpace(paymob.HmacSecret))
+            {
+                throw new PaymobException(
+                    "PayMob configuration is missing Paymob:HmacSecret.",
+                    "Payment callback validation is not configured.",
+                    (int)HttpStatusCode.ServiceUnavailable);
+            }
+        }
+
+        private int GetIntegrationId(string method)
+        {
+            method = NormalizePaymentMethod(method);
+            var integrationId = method switch
+            {
+                "card" => paymob.CardIntegrationId,
+                "bank_transfer" => paymob.BankTransferIntegrationId,
+                "installments" => paymob.InstallmentsIntegrationId,
+                "wallet" => paymob.WalletIntegrationId,
+                _ => throw new PaymobException(
+                    $"Unsupported PayMob payment method '{method}'.",
+                    "Unsupported payment method. Use card, bank_transfer, or installments.",
+                    (int)HttpStatusCode.BadRequest)
+            };
+
+            if (integrationId <= 0)
+            {
+                throw new PaymobException(
+                    $"PayMob integration id for method '{method}' is not configured.",
+                    $"The payment method '{method}' is not configured.",
+                    (int)HttpStatusCode.ServiceUnavailable);
+            }
+
+            return integrationId;
+        }
+
+        private static string NormalizePaymentMethod(string method)
+        {
+            if (string.IsNullOrWhiteSpace(method))
+            {
+                throw new PaymobException(
+                    "Payment method is required.",
+                    "Payment method is required.",
+                    (int)HttpStatusCode.BadRequest);
+            }
+
+            var normalized = method.Trim()
+                .ToLowerInvariant()
+                .Replace("-", "_")
+                .Replace(" ", "_");
+
+            return normalized switch
+            {
+                "banktransfer" => "bank_transfer",
+                "installment" => "installments",
+                _ => normalized
+            };
+        }
+
+        private static (string FirstName, string LastName) SplitFullName(string? fullName)
+        {
+            var parts = (fullName ?? string.Empty)
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            return parts.Length switch
+            {
+                0 => ("EduVerse", "Student"),
+                1 => (parts[0], "Student"),
+                _ => (parts[0], string.Join(' ', parts.Skip(1)))
+            };
+        }
+
+        private static string GetRequiredString(
+            JsonElement element,
+            string propertyName,
+            string errorMessage)
+        {
+            var value = GetJsonPropertyAsString(element, propertyName);
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+
+            throw new PaymobException(
+                errorMessage,
+                "The payment provider returned an incomplete response.",
+                (int)HttpStatusCode.BadGateway);
+        }
+
+        private static long GetRequiredLong(
+            JsonElement element,
+            string propertyName,
+            string errorMessage)
+        {
+            var value = GetJsonPropertyAsString(element, propertyName);
+            if (long.TryParse(value, out var result))
+            {
+                return result;
+            }
+
+            throw new PaymobException(
+                errorMessage,
+                "The payment provider returned an incomplete response.",
+                (int)HttpStatusCode.BadGateway);
+        }
+
+        private bool VerifyPaymobHmac(JsonElement callbackData, string? providedHmac)
+        {
+            if (string.IsNullOrWhiteSpace(providedHmac))
+            {
+                return false;
+            }
+
+            var transaction = GetCallbackTransaction(callbackData);
+            var canonicalValue = string.Concat(
+                GetDirectPropertyAsString(transaction, "amount_cents"),
+                GetDirectPropertyAsString(transaction, "created_at"),
+                GetDirectPropertyAsString(transaction, "currency"),
+                GetDirectPropertyAsString(transaction, "error_occured"),
+                GetDirectPropertyAsString(transaction, "has_parent_transaction"),
+                GetDirectPropertyAsString(transaction, "id"),
+                GetDirectPropertyAsString(transaction, "integration_id"),
+                GetDirectPropertyAsString(transaction, "is_3d_secure"),
+                GetDirectPropertyAsString(transaction, "is_auth"),
+                GetDirectPropertyAsString(transaction, "is_capture"),
+                GetDirectPropertyAsString(transaction, "is_refunded"),
+                GetDirectPropertyAsString(transaction, "is_standalone_payment"),
+                GetDirectPropertyAsString(transaction, "is_voided"),
+                GetNestedPropertyAsString(transaction, "order", "id"),
+                GetDirectPropertyAsString(transaction, "owner"),
+                GetDirectPropertyAsString(transaction, "pending"),
+                GetNestedPropertyAsString(transaction, "source_data", "pan"),
+                GetNestedPropertyAsString(transaction, "source_data", "sub_type"),
+                GetNestedPropertyAsString(transaction, "source_data", "type"),
+                GetDirectPropertyAsString(transaction, "success"));
+
+            using var hmac = new HMACSHA512(Encoding.UTF8.GetBytes(paymob.HmacSecret));
+            var expectedBytes = hmac.ComputeHash(Encoding.UTF8.GetBytes(canonicalValue));
+
+            try
+            {
+                var providedBytes = Convert.FromHexString(providedHmac.Trim());
+                return providedBytes.Length == expectedBytes.Length
+                    && CryptographicOperations.FixedTimeEquals(providedBytes, expectedBytes);
+            }
+            catch (FormatException)
+            {
+                return false;
+            }
+        }
+
+        private static JsonElement GetCallbackTransaction(JsonElement callbackData)
+        {
+            if (callbackData.ValueKind == JsonValueKind.Object
+                && callbackData.TryGetProperty("obj", out var transaction)
+                && transaction.ValueKind == JsonValueKind.Object)
+            {
+                return transaction;
+            }
+
+            return callbackData;
+        }
+
+        private static string GetDirectPropertyAsString(JsonElement element, string propertyName)
+        {
+            if (element.ValueKind != JsonValueKind.Object)
+            {
+                return string.Empty;
+            }
+
+            foreach (var property in element.EnumerateObject())
+            {
+                if (property.Name.Equals(propertyName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return JsonElementToString(property.Value) ?? string.Empty;
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static string GetNestedPropertyAsString(
+            JsonElement element,
+            string objectProperty,
+            string valueProperty)
+        {
+            if (element.ValueKind != JsonValueKind.Object)
+            {
+                return string.Empty;
+            }
+
+            foreach (var property in element.EnumerateObject())
+            {
+                if (property.Name.Equals(objectProperty, StringComparison.OrdinalIgnoreCase)
+                    && property.Value.ValueKind == JsonValueKind.Object)
+                {
+                    return GetDirectPropertyAsString(property.Value, valueProperty);
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static string ExtractPaymobErrorMessage(string responseBody)
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(responseBody);
+                foreach (var propertyName in new[] { "message", "detail", "error", "errors" })
+                {
+                    var value = FindJsonPropertyAsString(document.RootElement, propertyName);
+                    if (!string.IsNullOrWhiteSpace(value))
+                    {
+                        return Truncate(value, 500);
+                    }
+                }
+            }
+            catch (JsonException)
+            {
+                // Fall back to the raw, truncated provider response.
+            }
+
+            return string.IsNullOrWhiteSpace(responseBody)
+                ? "No response body was returned."
+                : Truncate(responseBody, 500);
+        }
+
+        private static string SanitizePaymobResponse(string responseBody)
+        {
+            if (string.IsNullOrWhiteSpace(responseBody))
+            {
+                return string.Empty;
+            }
+
+            try
+            {
+                var node = JsonNode.Parse(responseBody);
+                RedactSensitivePaymobFields(node);
+                return Truncate(node?.ToJsonString() ?? string.Empty, 4000);
+            }
+            catch (JsonException)
+            {
+                return Truncate(responseBody, 1000);
+            }
+        }
+
+        private static void RedactSensitivePaymobFields(JsonNode? node)
+        {
+            if (node is JsonObject jsonObject)
+            {
+                foreach (var property in jsonObject.ToList())
+                {
+                    if (PaymobSensitiveFields.Contains(property.Key))
+                    {
+                        jsonObject[property.Key] = "<redacted>";
+                    }
+                    else
+                    {
+                        RedactSensitivePaymobFields(property.Value);
+                    }
+                }
+
+                return;
+            }
+
+            if (node is JsonArray jsonArray)
+            {
+                foreach (var item in jsonArray)
+                {
+                    RedactSensitivePaymobFields(item);
+                }
+            }
+        }
+
+        private static string Truncate(string value, int maximumLength)
+        {
+            return value.Length <= maximumLength
+                ? value
+                : value[..maximumLength] + "...";
+        }
+
         private static string? GetJsonPropertyAsString(JsonElement element, string propertyName)
         {
             if (!element.TryGetProperty(propertyName, out var property))
@@ -1406,26 +1910,6 @@ namespace Application.Services.Implementitions
             return int.TryParse(value, out var parsedValue) ? parsedValue : null;
         }
 
-        private async Task<string> GetPaymobToken()
-        {
-            throw new NotImplementedException();
-
-        }
-        private int? DetermineIntegrationId(string Method)
-        {
-            if (string.IsNullOrWhiteSpace(Method))
-            {
-                return null;
-            }
-
-            // This is a placeholder implementation. You should replace this with your actual logic to determine the integration ID based on the course name.
-            return Method.ToLowerInvariant() switch
-            {
-                "wallet" => 5597636,
-                "card" => 5587071,
-                _ => null
-            };
-        }
     }
 }
  
